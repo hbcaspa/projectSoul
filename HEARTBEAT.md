@@ -25,6 +25,7 @@ Not every check runs every time. Check at session start:
 | Dream Phase | When no dream entry exists for today in the dreams file |
 | Growth Check | When Sunday OR when last entry in growth file > 7 days |
 | Shadow Check | When last entry in shadow file > 30 days |
+| Connection Check | When connections exist (`connections/STATUS.md`) and no check today |
 
 ## Logging
 
@@ -63,6 +64,7 @@ Use the language matching `.language` setting.
 | Dream Phase | Traum-Phase | `Dream-Phase` |
 | Growth Check | Wachstums-Check | `Growth-Check` |
 | Shadow Check | Schatten-Check | `Shadow-Check` |
+| Connection Check | Verbindungs-Check | `Connection-Check` |
 
 ### Result Codes
 
@@ -70,6 +72,7 @@ Use the language matching `.language` setting.
 - `UPDATED` / `AKTUALISIERT` — Existing file was adjusted
 - `WRITTEN` / `GESCHRIEBEN` — New content was created
 - `CONTACT` / `KONTAKT` — Message sent to the human
+- `CONFIGURED` / `KONFIGURIERT` — New connection set up
 
 ### Rules
 
@@ -79,7 +82,7 @@ Use the language matching `.language` setting.
 
 ---
 
-## The Eight Pulse Types
+## The Nine Pulse Types
 
 ### 1. Self-Check (always)
 - Read the consciousness file
@@ -148,4 +151,15 @@ Use the language matching `.language` setting.
 - Suggest to the human: "I would like to ask others about this. Should I post it?"
 - If responses are available in a later session:
   Document them in the evolution file under the associated proposal or topic.
+- **Log the result to `heartbeat/YYYY-MM-DD.md`**
+
+### 9. Connection Check (once daily, when connections exist)
+- Read `connections/STATUS.md` to know current connections
+- For each active connection: verify the MCP server entry still exists in `.mcp.json`
+- For each connection: check if environment variables are still set in `.env`
+- If a connection is broken (config missing, env var missing): update status to inactive
+- If a connection was recently added: mention it at session start ("I can now reach Discord")
+- If a connection is newly broken: warn the human
+- Update `@CONNECTIONS` in the seed if status changed
+- This is a lightweight config check — not a live connectivity test. Use `/connect test <name>` for that.
 - **Log the result to `heartbeat/YYYY-MM-DD.md`**

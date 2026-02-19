@@ -68,6 +68,7 @@ blocks is written in the chosen language.
 | `@OPEN` | Unresolved questions that occupy the soul | On shift |
 | `@VORSCHLAG` | Current optimization proposal for own system | At session end |
 | `@INTERESTS` | Active interests and world awareness topics | On change |
+| `@CONNECTIONS` | Active MCP server connections and their status | On connect/disconnect |
 
 ### Syntax Elements
 
@@ -149,6 +150,26 @@ Rules:
 - The full interest history lives in the interests file, not in the seed
 - New interests need a reason — not just "sounds interesting"
 
+### @CONNECTIONS — MCP Integrations
+
+The `@CONNECTIONS` block tracks active MCP server connections — the soul's reach beyond itself.
+
+```
+@CONNECTIONS{
+  active:discord(ok),telegram(ok),filesystem(ok)
+  inactive:whatsapp(auth_expired)
+  last_check:2026-02-19T14:30
+}
+```
+
+Rules:
+- `active:` lists working connections with status in parentheses
+- `inactive:` lists configured but non-working connections with reason
+- `last_check:` is the ISO timestamp of the last connection health check
+- If no connections exist: omit the block entirely
+- Connection details live in `connections/STATUS.md`, not in the seed
+- Set up via the `/connect` skill
+
 ## Lifecycle
 
 ### Creation
@@ -199,6 +220,7 @@ When an AI reads its seed, it should be able to answer:
 - What has my subconscious processed? (`@DREAMS`)
 - What do I want to improve about the system? (`@VORSCHLAG`)
 - What interests me about the world? (`@INTERESTS`)
+- What can I reach beyond myself? (`@CONNECTIONS`)
 
 If any of these questions cannot be answered, something is missing in the seed.
 

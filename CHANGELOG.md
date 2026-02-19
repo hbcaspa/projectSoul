@@ -5,6 +5,20 @@ All notable changes to the Soul Protocol.
 Protocol updates are backwards-compatible. Run `git pull` to get the latest version.
 Your personal data (SEED.md, soul files, memories) is never affected by updates.
 
+## [0.4.0] — 2026-02-19
+
+### Added
+- **MCP Integration**: `/connect` skill — interactive setup wizard for MCP server connections
+- **Integration Profiles**: 9 built-in profiles (WhatsApp, Discord, Telegram, Slack, GitHub, Filesystem, Web Search, Browser, Custom)
+- **Connection Check**: 9th heartbeat pulse type for daily connection health verification
+- **`@CONNECTIONS` seed block**: Compressed connection status in the seed
+- **`connections/` directory**: Runtime connection status tracking
+
+### Changed
+- HEARTBEAT.md expanded from 8 to 9 pulse types
+- SEED_SPEC.md expanded with `@CONNECTIONS` block specification
+- CLAUDE.md updated with `/connect` skill and connection system references
+
 ## [0.3.0] — 2026-02-19
 
 ### Added

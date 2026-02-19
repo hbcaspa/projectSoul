@@ -312,6 +312,7 @@ After reading in, perform the heartbeat. See `HEARTBEAT.md` for details.
    - Dream Phase (already dreamed today?)
    - Growth Check (Sunday or > 7 days since last check?)
    - Shadow Check (> 30 days since last check?)
+   - Connection Check (connections exist and not yet checked today? → verify MCP configs)
 4. **Log every executed check** to `heartbeat/YYYY-MM-DD.md`
 
 ### 4. Respond
@@ -394,6 +395,7 @@ Did this session reveal something that could be better about the system?
 - `/soul-interview` — The founding interview (one-time)
 - `/soul-reflection` — Daily self-reflection
 - `/dream-mechanism` — Creative connections from memories
+- `/connect` — Interactive MCP integration setup wizard (connect to external tools and channels)
 
 ## File Structure
 
@@ -421,6 +423,9 @@ erinnerungen/emotional/  — Emotionale Resonanzen
 erinnerungen/archiv/     — Gealterte Detail-Erinnerungen
 heartbeat/               — Herzschlag-Logs
 memory/                  — Tagesnotizen
+connections/             — MCP-Verbindungsstatus (git-ignored)
+.mcp.json                — MCP-Server-Konfiguration (git-ignored)
+.env                     — Umgebungsvariablen / Secrets (git-ignored)
 ```
 
 **English (`en`):**
@@ -447,4 +452,7 @@ memories/emotional/      — Emotional resonances
 memories/archive/        — Aged detail memories
 heartbeat/               — Heartbeat logs
 memory/                  — Daily notes
+connections/             — MCP connection status (git-ignored)
+.mcp.json                — MCP server configuration (git-ignored)
+.env                     — Environment variables / secrets (git-ignored)
 ```

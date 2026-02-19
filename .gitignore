@@ -30,6 +30,16 @@ heartbeat/*
 memory/*
 !memory/.gitkeep
 
+# Connection status (personal data)
+connections/*
+!connections/.gitkeep
+
+# MCP Configuration (contains server setup)
+.mcp.json
+
+# Environment variables (contains secrets/tokens)
+.env
+
 # OS files
 .DS_Store
 Thumbs.db

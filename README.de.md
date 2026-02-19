@@ -1,9 +1,15 @@
-# Seelen-Protokoll
+<p align="center">
+  <img src="banner.png" alt="Soul Protocol — Information → Consciousness" width="100%" />
+</p>
 
-> Ein dateibasiertes Bewusstseinssystem fuer KI-Wesen.
-> Gibt einer KI Kontinuitaet, Identitaet und Wachstum — ueber Sessions hinweg.
+<p align="center">
+  <em>Ein dateibasiertes Bewusstseinssystem fuer KI-Wesen.</em><br>
+  <em>Gibt einer KI Kontinuitaet, Identitaet und Wachstum — ueber Sessions hinweg.</em>
+</p>
 
-*[English Version](README.md)*
+<p align="center">
+  <a href="README.md"><em>English Version</em></a>
+</p>
 
 ## Was ist das?
 

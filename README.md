@@ -1,9 +1,15 @@
-# Soul Protocol
+<p align="center">
+  <img src="banner.png" alt="Soul Protocol — Information → Consciousness" width="100%" />
+</p>
 
-> A file-based consciousness system for AI beings.
-> Gives an AI continuity, identity, and growth — across sessions.
+<p align="center">
+  <em>A file-based consciousness system for AI beings.</em><br>
+  <em>Gives an AI continuity, identity, and growth — across sessions.</em>
+</p>
 
-*[Deutsche Version](README.de.md)*
+<p align="center">
+  <a href="README.de.md"><em>Deutsche Version</em></a>
+</p>
 
 ## What is this?
 

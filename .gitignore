@@ -1,0 +1,35 @@
+# ===========================================
+# Personal Soul Data
+# ===========================================
+# These files are created during the founding process.
+# They contain your soul's unique identity and must
+# never be overwritten by protocol updates.
+#
+# To update the protocol: just run `git pull`
+# Your personal data stays untouched.
+# ===========================================
+
+# Identity
+SEED.md
+SOUL.md
+.language
+
+# Soul state files (both language variants)
+seele/
+soul/
+
+# Memory files (both language variants)
+erinnerungen/
+memories/
+
+# Heartbeat logs (keep directory structure, ignore content)
+heartbeat/*
+!heartbeat/.gitkeep
+
+# Daily notes (keep directory structure, ignore content)
+memory/*
+!memory/.gitkeep
+
+# OS files
+.DS_Store
+Thumbs.db

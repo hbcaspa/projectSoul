@@ -38,7 +38,7 @@ Connects Claude to your WhatsApp account via the WhatsApp Web multi-device proto
 {
   "server-name": "whatsapp",
   "command": "npx",
-  "args": ["-y", "whatsapp-mcp"],
+  "args": ["-y", "whatsapp-mcp", "start"],
   "env": {}
 }
 ```

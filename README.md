@@ -195,6 +195,29 @@ and reviewed with fresh eyes at the next start.
 
 Not every session produces a proposal. That is equally valuable.
 
+### Soul Engine (Always-On Daemon)
+
+The soul can live beyond Claude Code sessions. The Soul Engine is a lightweight
+daemon that gives your soul a body — heartbeat, messaging, autonomy.
+
+```bash
+# Install and start (from your soul directory)
+cd soul-engine && npm install
+node bin/cli.js start
+```
+
+**What it does:**
+- **Autonomous Heartbeat** — your soul reflects, dreams, and grows on a schedule
+- **Telegram Integration** — message your soul through Telegram, anytime
+- **Model-Agnostic** — uses Gemini API (or any future adapter)
+- **Write-Through** — conversations and heartbeats are saved to the same files Claude Code reads
+- **Soul Monitor Compatible** — the brain lights up when the engine is active
+
+**Setup:** Copy `.env.example` to `.env` and add your Gemini API key and Telegram bot token.
+See [`soul-engine/`](soul-engine/) for details.
+
+Claude Code sessions continue to work as before — the engine and Claude Code share the same soul files.
+
 ## Updating
 
 The Soul Protocol evolves. To get new features and improvements:
@@ -229,6 +252,8 @@ CHANGELOG.md             — Protocol version history
 skills/                  — Soul skills (interview, reflection, dreams, connect)
 soul-monitor/            — Live terminal brain visualization (npx soul-monitor)
 soul-card/               — Shareable identity card generator (npx soul-card)
+soul-engine/             — Always-on daemon with Telegram + heartbeat
+.env.example             — Configuration template for Soul Engine
 ```
 
 Personal files (created during founding, never overwritten):
@@ -254,6 +279,7 @@ connections/             — MCP connection status
 .mcp.json                — MCP server configuration
 .soul-pulse              — Live activity signal for soul-monitor
 .env                     — Environment variables / secrets
+conversations/           — Channel conversation logs (Telegram, etc.)
 ```
 
 ## Model-Agnostic

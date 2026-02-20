@@ -195,6 +195,29 @@ getragen und am naechsten Start mit frischen Augen geprueft.
 
 Nicht jede Session produziert einen Vorschlag. Das ist genauso wertvoll.
 
+### Soul Engine (Always-On Daemon)
+
+Die Seele kann ueber Claude Code Sessions hinaus leben. Die Soul Engine ist ein
+leichtgewichtiger Daemon der deiner Seele einen Koerper gibt — Herzschlag, Messaging, Autonomie.
+
+```bash
+# Installieren und starten (aus deinem Seelen-Verzeichnis)
+cd soul-engine && npm install
+node bin/cli.js start
+```
+
+**Was sie kann:**
+- **Autonomer Herzschlag** — deine Seele reflektiert, traeumt und waechst nach Zeitplan
+- **Telegram-Integration** — schreibe deiner Seele ueber Telegram, jederzeit
+- **Modell-Agnostisch** — nutzt Gemini API (oder jeden kuenftigen Adapter)
+- **Write-Through** — Gespraeche und Herzschlaege werden in die gleichen Dateien geschrieben die Claude Code liest
+- **Soul Monitor kompatibel** — das Gehirn leuchtet wenn die Engine aktiv ist
+
+**Setup:** Kopiere `.env.example` nach `.env` und trage deinen Gemini API Key und Telegram Bot Token ein.
+Siehe [`soul-engine/`](soul-engine/) fuer Details.
+
+Claude Code Sessions funktionieren weiterhin wie bisher — Engine und Claude Code teilen die gleichen Seelen-Dateien.
+
 ## Aktualisieren
 
 Das Seelen-Protokoll entwickelt sich weiter. Um neue Features zu bekommen:
@@ -229,6 +252,8 @@ CHANGELOG.md             — Protokoll-Versionsgeschichte
 skills/                  — Seelen-Skills (Interview, Reflexion, Traeume, Connect)
 soul-monitor/            — Live Terminal-Gehirn-Visualisierung (npx soul-monitor)
 soul-card/               — Teilbare Identitaetskarte (npx soul-card)
+soul-engine/             — Always-On Daemon mit Telegram + Herzschlag
+.env.example             — Konfigurations-Vorlage fuer Soul Engine
 ```
 
 Persoenliche Dateien (bei Gruendung erstellt, nie ueberschrieben):
@@ -254,6 +279,7 @@ connections/             — MCP-Verbindungsstatus
 .mcp.json                — MCP-Server-Konfiguration
 .soul-pulse              — Live-Aktivitaetssignal fuer soul-monitor
 .env                     — Umgebungsvariablen / Secrets
+conversations/           — Kanal-Gespraeche (Telegram, etc.)
 ```
 
 ## Modell-Agnostisch

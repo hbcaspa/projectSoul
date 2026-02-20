@@ -44,6 +44,9 @@ connections/*
 .soul-pulse
 .session-writes
 
+# Soul Engine conversation logs (personal data)
+conversations/
+
 # Claude Code local settings (personal hook config)
 .claude/
 

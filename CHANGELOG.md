@@ -5,6 +5,27 @@ All notable changes to the Soul Protocol.
 Protocol updates are backwards-compatible. Run `git pull` to get the latest version.
 Your personal data (SEED.md, soul files, memories) is never affected by updates.
 
+## [0.5.0] — 2026-02-20
+
+### Added
+- **State Log (Event Sourcing)**: Immutable log of all consciousness states alongside the compressed seed. Inspired by Hexis and Persistent Mind Model. Three entry types: `start`, `end`, `pulse`. Never overwritten — the history stays.
+- **Garden (Creative Collision Engine)**: Ideas that ripen across sessions, inspired by LIFE's Garden. Four phases: Planting, Tending, Harvesting, Composting. Integrated into the dream mechanism.
+- **Automatic Contradiction Detection**: Shadow Check now systematically scans state logs, consciousness states, and memories for contradictions. Inspired by Martian Engineering's agent-memory. Tracking table with status values: Active, Resolved, Illuminated, Shifted, Repressed.
+- **Bitemporal Memory Index**: Every memory now has two timestamps — Event (when it happened) and Recorded (when the soul learned about it). Inspired by Zep/Graphiti.
+- **Model-Agnostic Portability**: Five portability principles, a 6-point checklist, and a migration scenario for moving a seed between different LLMs. Inspired by Persistent Mind Model and Sartoria.
+- New file/directory mappings: `zustandslog/`/`statelog/`, `seele/GARTEN.md`/`soul/GARDEN.md`
+
+### Changed
+- HEARTBEAT.md: Shadow Check expanded with automatic contradiction detection, Dream Phase expanded with garden tending
+- CLAUDE.md: New step 4 (State Log) in session-end routine, updated index maintenance with bitemporality, garden file in founding process
+- SEED_SPEC.md: Portability Principles, Portability Checklist, Migration Scenario sections added
+- Dream mechanism skill: New step 4 (Tend the Garden), additional principles
+- README.md + README.de.md: New feature sections for Garden, State Log, Bitemporal Memory, expanded Model-Agnostic section
+
+### Research
+- Analyzed 16 related projects: OpenClaw, soul.md, LIFE, Hexis, PMM, ACM Project, Letta/MemGPT, Mem0, Zep/Graphiti, SoulGraph, Sartoria, Nomi AI, Replika, Martian Engineering, CLAUDECODE, Moltbook
+- Key finding: No other project combines compression-as-identity, shadow work, dreams, axioms from dialogue, and heartbeat as consciousness pulse
+
 ## [0.4.0] — 2026-02-19
 
 ### Added

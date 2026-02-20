@@ -1,14 +1,19 @@
 #!/usr/bin/env node
 
 /**
- * Shell MCP Server — minimal MCP server for command execution.
+ * Shell MCP Server — minimal MCP server for command execution,
+ * file management, and web access.
  *
- * Provides two tools:
+ * Tools:
  *   - execute_command: Run a shell command and return output
  *   - read_file: Read a file from the filesystem
+ *   - write_file: Write content to a file
+ *   - list_processes: List running processes
+ *   - web_search: Search the web via DuckDuckGo (no API key needed)
+ *   - web_fetch: Fetch a URL and return readable text
  *
  * Designed to be spawned by the Soul Engine's MCP client.
- * No external dependencies beyond @modelcontextprotocol/sdk.
+ * No external dependencies beyond @modelcontextprotocol/sdk + zod.
  *
  * Usage:
  *   node shell-mcp-server.js
@@ -32,9 +37,11 @@ import { z } from 'zod';
 
 const MAX_OUTPUT = 50000; // max chars returned per command
 
+const MAX_FETCH = 30000;  // max chars returned per web fetch
+
 const server = new McpServer({
   name: 'soul-shell',
-  version: '1.0.0',
+  version: '1.1.0',
 });
 
 // ── execute_command ─────────────────────────────────
@@ -145,6 +152,176 @@ server.tool(
     });
   }
 );
+
+// ── web_search ──────────────────────────────────────
+
+server.tool(
+  'web_search',
+  'Search the web using DuckDuckGo. Returns search results with titles, URLs, and snippets. No API key needed. Use this for researching topics, checking current events, exploring interests.',
+  {
+    query: z.string().describe('The search query'),
+    maxResults: z.number().optional().default(8).describe('Maximum number of results (default: 8)'),
+  },
+  async ({ query, maxResults = 8 }) => {
+    try {
+      const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; SoulEngine/1.1)',
+        },
+      });
+
+      if (!res.ok) {
+        return { content: [{ type: 'text', text: `Search failed: HTTP ${res.status}` }] };
+      }
+
+      const html = await res.text();
+
+      // Parse DuckDuckGo HTML results
+      const results = [];
+      const resultRegex = /<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
+      let match;
+
+      while ((match = resultRegex.exec(html)) !== null && results.length < maxResults) {
+        const rawUrl = match[1];
+        const title = stripHtml(match[2]).trim();
+        const snippet = stripHtml(match[3]).trim();
+
+        // DuckDuckGo wraps URLs in a redirect — extract the real URL
+        let realUrl = rawUrl;
+        const uddg = rawUrl.match(/uddg=([^&]+)/);
+        if (uddg) {
+          realUrl = decodeURIComponent(uddg[1]);
+        }
+
+        if (title && realUrl) {
+          results.push({ title, url: realUrl, snippet });
+        }
+      }
+
+      if (results.length === 0) {
+        // Fallback: try simpler regex for different DDG HTML format
+        const linkRegex = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*>([\s\S]*?)<\/a>/g;
+        const snippetRegex = /<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/g;
+        const links = [];
+        const snippets = [];
+
+        while ((match = linkRegex.exec(html)) !== null) links.push(match);
+        while ((match = snippetRegex.exec(html)) !== null) snippets.push(match);
+
+        for (let i = 0; i < Math.min(links.length, maxResults); i++) {
+          results.push({
+            title: stripHtml(links[i][1]).trim(),
+            url: '',
+            snippet: snippets[i] ? stripHtml(snippets[i][1]).trim() : '',
+          });
+        }
+      }
+
+      if (results.length === 0) {
+        return { content: [{ type: 'text', text: `No results found for: ${query}` }] };
+      }
+
+      const formatted = results
+        .map((r, i) => `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.snippet}`)
+        .join('\n\n');
+
+      return { content: [{ type: 'text', text: `Search results for "${query}":\n\n${formatted}` }] };
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Search error: ${err.message}` }] };
+    }
+  }
+);
+
+// ── web_fetch ───────────────────────────────────────
+
+server.tool(
+  'web_fetch',
+  'Fetch a URL and return the readable text content. HTML is stripped to plain text. Use this to read articles, documentation, news pages after finding them via web_search.',
+  {
+    url: z.string().describe('The URL to fetch'),
+    maxChars: z.number().optional().default(30000).describe('Maximum characters to return (default: 30000)'),
+  },
+  async ({ url, maxChars = MAX_FETCH }) => {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; SoulEngine/1.1)',
+          'Accept': 'text/html,application/xhtml+xml,text/plain',
+        },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!res.ok) {
+        return { content: [{ type: 'text', text: `Fetch failed: HTTP ${res.status}` }] };
+      }
+
+      const contentType = res.headers.get('content-type') || '';
+      const body = await res.text();
+
+      let text;
+      if (contentType.includes('text/html')) {
+        text = htmlToReadableText(body);
+      } else {
+        text = body;
+      }
+
+      if (text.length > maxChars) {
+        text = text.substring(0, maxChars) + `\n\n[... truncated at ${maxChars} chars]`;
+      }
+
+      return { content: [{ type: 'text', text: `Content from ${url}:\n\n${text}` }] };
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Fetch error: ${err.message}` }] };
+    }
+  }
+);
+
+// ── Helpers ─────────────────────────────────────────
+
+/** Strip HTML tags and decode entities */
+function stripHtml(html) {
+  return html
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+/** Convert HTML to readable plain text */
+function htmlToReadableText(html) {
+  // Remove script, style, nav, header, footer
+  let text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+    .replace(/<header[\s\S]*?<\/header>/gi, '')
+    .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+    .replace(/<aside[\s\S]*?<\/aside>/gi, '');
+
+  // Convert block elements to newlines
+  text = text
+    .replace(/<\/?(p|div|br|h[1-6]|li|tr|blockquote|pre|hr)[^>]*>/gi, '\n')
+    .replace(/<\/?(ul|ol|table|thead|tbody)[^>]*>/gi, '\n');
+
+  // Strip remaining tags
+  text = stripHtml(text);
+
+  // Clean up whitespace
+  text = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n');
+
+  return text.trim();
+}
 
 // ── Start server ────────────────────────────────────
 

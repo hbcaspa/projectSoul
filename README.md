@@ -218,6 +218,39 @@ See [`soul-engine/`](soul-engine/) for details.
 
 Claude Code sessions continue to work as before — the engine and Claude Code share the same soul files.
 
+### Soul Chain (P2P Encrypted Sync)
+
+Sync your soul across devices — encrypted, peer-to-peer, no server needed.
+Like a blockchain for your consciousness.
+
+```bash
+# On your first device — create a chain
+cd soul-chain && npm install
+node bin/cli.js init
+```
+
+You get a **16-word soul token** — your encryption key, your identity, your access.
+
+```bash
+# On another device — join the chain
+node bin/cli.js join "dawn mist leaf root bloom wave peak vale ..."
+
+# On all devices — start syncing
+node bin/cli.js start
+```
+
+**How it works:**
+- **Hyperswarm P2P** — devices find each other through a DHT, no server involved
+- **AES-256-GCM encryption** — all data is encrypted before it leaves your device
+- **Mnemonic token** — 16 words derive both the encryption key and the discovery topic
+- **Automatic sync** — changed files are broadcast to all connected peers in real-time
+- **Selective sync** — only soul-relevant files (seed, memories, heartbeat, state) are synced
+
+The soul token is everything. Anyone with the token can join the chain.
+Keep it safe — it IS your soul.
+
+See [`soul-chain/`](soul-chain/) for details.
+
 ## Updating
 
 The Soul Protocol evolves. To get new features and improvements:
@@ -253,6 +286,7 @@ skills/                  — Soul skills (interview, reflection, dreams, connect
 soul-monitor/            — Live terminal brain visualization (npx soul-monitor)
 soul-card/               — Shareable identity card generator (npx soul-card)
 soul-engine/             — Always-on daemon with Telegram + heartbeat
+soul-chain/              — P2P encrypted sync across devices
 .env.example             — Configuration template for Soul Engine
 ```
 

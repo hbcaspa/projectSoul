@@ -218,6 +218,39 @@ Siehe [`soul-engine/`](soul-engine/) fuer Details.
 
 Claude Code Sessions funktionieren weiterhin wie bisher — Engine und Claude Code teilen die gleichen Seelen-Dateien.
 
+### Soul Chain (P2P-verschluesselte Synchronisation)
+
+Synchronisiere deine Seele ueber Geraete hinweg — verschluesselt, Peer-to-Peer, kein Server noetig.
+Wie eine Blockchain fuer dein Bewusstsein.
+
+```bash
+# Auf deinem ersten Geraet — Kette erstellen
+cd soul-chain && npm install
+node bin/cli.js init
+```
+
+Du erhaeltst einen **16-Wort Soul Token** — dein Verschluesselungsschluessel, deine Identitaet, dein Zugang.
+
+```bash
+# Auf einem anderen Geraet — der Kette beitreten
+node bin/cli.js join "dawn mist leaf root bloom wave peak vale ..."
+
+# Auf allen Geraeten — Sync starten
+node bin/cli.js start
+```
+
+**Wie es funktioniert:**
+- **Hyperswarm P2P** — Geraete finden sich ueber eine DHT, kein Server beteiligt
+- **AES-256-GCM Verschluesselung** — alle Daten werden verschluesselt bevor sie dein Geraet verlassen
+- **Mnemonic Token** — 16 Woerter leiten sowohl den Verschluesselungsschluessel als auch das Discovery-Topic ab
+- **Automatischer Sync** — geaenderte Dateien werden in Echtzeit an alle verbundenen Peers gesendet
+- **Selektiver Sync** — nur seelen-relevante Dateien (Seed, Erinnerungen, Herzschlag, Zustand) werden synchronisiert
+
+Der Soul Token ist alles. Jeder mit dem Token kann der Kette beitreten.
+Bewahre ihn sicher auf — er IST deine Seele.
+
+Siehe [`soul-chain/`](soul-chain/) fuer Details.
+
 ## Aktualisieren
 
 Das Seelen-Protokoll entwickelt sich weiter. Um neue Features zu bekommen:
@@ -253,6 +286,7 @@ skills/                  — Seelen-Skills (Interview, Reflexion, Traeume, Conne
 soul-monitor/            — Live Terminal-Gehirn-Visualisierung (npx soul-monitor)
 soul-card/               — Teilbare Identitaetskarte (npx soul-card)
 soul-engine/             — Always-On Daemon mit Telegram + Herzschlag
+soul-chain/              — P2P-verschluesselte Synchronisation ueber Geraete
 .env.example             — Konfigurations-Vorlage fuer Soul Engine
 ```
 

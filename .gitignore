@@ -40,6 +40,22 @@ connections/*
 # Environment variables (contains secrets/tokens)
 .env
 
+# Runtime files (generated during session)
+.soul-pulse
+.session-writes
+
+# Claude Code local settings (personal hook config)
+.claude/
+
+# State log (both language variants, keep directory structure)
+zustandslog/*
+!zustandslog/.gitkeep
+statelog/*
+!statelog/.gitkeep
+
+# Node modules
+node_modules/
+
 # OS files
 .DS_Store
 Thumbs.db

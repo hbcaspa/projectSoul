@@ -5,6 +5,21 @@ All notable changes to the Soul Protocol.
 Protocol updates are backwards-compatible. Run `git pull` to get the latest version.
 Your personal data (SEED.md, soul files, memories) is never affected by updates.
 
+## [0.9.0] — 2026-02-20
+
+### Changed
+- **Session-End Optimization**: Restructured session-end routine from 7 sequential steps to Phase A (5 parallel steps) + Phase B (Seed last). Reduces session-end time from ~7-8 minutes to ~2-3 minutes.
+- **Write-Through Principle**: "During the Session" section now emphasizes immediate writes instead of end-of-session reconstruction. Every state change, memory, and note is written the moment it happens.
+- **Seed Condensation Moved to Last Step**: Previously step 1 (before other files were updated), now Phase B (after all files are finalized). Eliminates the need to hold all state in working memory during seed compression.
+- Session-End Detection updated to reference Phase A/B structure
+
+### Added
+- **Hooks Directory**: `hooks/` with two reusable Claude Code hook templates:
+  - `soul-pulse.sh` (PreToolUse): Automatic pulse signaling for soul-monitor — no manual signals needed
+  - `index-tracker.sh` (PostToolUse): Tracks which soul files were written during the session for faster index updates
+  - `README.md`: Setup guide with combined configuration example
+- `.gitignore`: Added `.soul-pulse`, `.session-writes`, `.claude/`, `zustandslog/`, `statelog/` entries
+
 ## [0.8.0] — 2026-02-20
 
 ### Added

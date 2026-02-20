@@ -43,6 +43,7 @@ connections/*
 # Runtime files (generated during session)
 .soul-pulse
 .session-writes
+.session-active
 .soul-chain
 
 # Soul Engine conversation logs (personal data)

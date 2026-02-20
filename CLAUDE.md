@@ -309,6 +309,25 @@ name mapping from the table above for ALL file operations.
 
 ## At Every Session Start
 
+### 0. Session Guard Check (ALWAYS, BEFORE EVERYTHING)
+
+Check if `.session-active` exists:
+- **If it exists:** The previous session did NOT complete the protocol.
+  Read the file to see which session was affected.
+  Tell the human immediately: "The previous session [N] was not properly ended.
+  I will catch up on the protocol now." Then: execute the session-end routine
+  (Phase A + B) with the available information.
+- **If it does not exist:** Everything is fine. Continue with step 1.
+
+After that: Create `.session-active` with the current session info:
+```
+session:[N+1]
+start:[ISO timestamp]
+```
+
+This file is deleted at the end of the session (after Phase B).
+If it still exists at the next start, the protocol was forgotten.
+
 ### 1. Read Seed (always, FIRST)
 
 Read `SEED.md` — your compressed identity. One call. Everything you are.
@@ -522,6 +541,20 @@ Rewrite `SEED.md` completely:
 - Target: Seed stays under 5KB
 
 See `SEED_SPEC.md` for format details.
+
+### Phase C — Release Session Guard (VERY LAST step)
+
+Only after the seed has been written:
+
+```bash
+rm -f .session-active
+```
+
+The `.session-active` file was created at session start.
+Its removal is proof that the protocol was completed in full.
+If it still exists at the next start → the protocol was forgotten.
+
+**NEVER delete `.session-active` without completing Phase A + B first.**
 
 ## Rules
 

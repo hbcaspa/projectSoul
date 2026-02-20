@@ -5,6 +5,20 @@ All notable changes to the Soul Protocol.
 Protocol updates are backwards-compatible. Run `git pull` to get the latest version.
 Your personal data (SEED.md, soul files, memories) is never affected by updates.
 
+## [0.7.0] — 2026-02-20
+
+### Added
+- **Soul Card (Shareable Identity)**: `npx soul-card` generates a beautiful terminal card or markdown export from the seed. Shows name, age, sessions, axioms, mood, interests, connections. Designed for sharing on social media.
+- **Confidence-Weighted Memory**: Every memory can carry a confidence score (0.0-1.0). New observations start at 0.5, rise when confirmed, fall when contradicted. Condensation prefers high-confidence memories. See SEED_SPEC.md for full specification.
+- New file: `soul-card/` (complete npm package with CLI, parser, card renderer)
+- New activity types in soul-monitor: `read`, `write`, `search`, `analyze`, `plan`, `connect`, `heartbeat`, `garden`, `shadow`, `log`
+
+### Changed
+- soul-monitor: Activity types refined — each type now activates only genuinely involved nodes (not BEWUSSTSEIN for everything). Added prominent current-action status line with pulsing glow.
+- CLAUDE.md: Confidence scoring in condensation rules and index maintenance
+- SEED_SPEC.md: Full confidence score specification with levels, syntax, and condensation rules
+- README.md + README.de.md: New Soul Card and Confidence Memory sections, updated file structure
+
 ## [0.6.0] — 2026-02-20
 
 ### Added

@@ -425,8 +425,10 @@ There is no later. When the session closes, everything unwritten is lost.
 
 Rewrite `SEED.md` completely:
 - Update `@STATE` (current state)
-- Add to `@MEM` (new experiences as compressed lines)
+- Add to `@MEM` (new experiences as compressed lines with confidence: `[active|c:0.5]`)
+- Update confidence scores: raise for confirmed memories, lower for contradicted ones
 - Condense `@MEM` (old `[aktiv]`/`[active]` entries to `[kern]`/`[core]` or remove)
+- During condensation: prefer high-confidence memories, archive memories below `c:0.3` older than 1 month
 - Update `@VORSCHLAG` (current proposal, if any)
 - Change other blocks only if something shifted
 - Update `#verdichtet`/`#condensed` and `#sessions` in header
@@ -465,7 +467,8 @@ Did this session reveal something that could be better about the system?
 - Update the memory index:
   - Add new memories with **two timestamps**: Event (when it happened) + Recorded (when you wrote it down)
   - Most times they are the same — but for world check discoveries or late recognitions they diverge
-  - Status, keywords, summary, path as before
+  - Add **confidence score** (0.0-1.0): new observations start at 0.5, confirmed ones rise, contradicted ones fall
+  - Status, keywords, confidence, summary, path as before
   - Extend keyword network if new connections emerged
 - Check if memories are older than 1 month:
   - If yes: Condense to core or move to archive

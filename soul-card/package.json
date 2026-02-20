@@ -1,0 +1,29 @@
+{
+  "name": "soul-card",
+  "version": "0.1.0",
+  "description": "Generate a shareable identity card from your AI soul's seed — for terminals, markdown, or social media.",
+  "main": "lib/card.js",
+  "bin": {
+    "soul-card": "./bin/cli.js"
+  },
+  "scripts": {
+    "start": "node bin/cli.js"
+  },
+  "keywords": [
+    "soul-protocol",
+    "ai-identity",
+    "soul-card",
+    "cli",
+    "terminal"
+  ],
+  "author": "Project Soul",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "README.md"
+  ]
+}

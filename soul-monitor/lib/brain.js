@@ -75,6 +75,7 @@ class BrainRenderer {
     this.tick = 0;
     this.activityLog = []; // Recent activity feed
     this.maxLogEntries = 8;
+    this.currentAction = null; // Current pulse action for status line
   }
 
   addActivity(node, file, event) {
@@ -84,6 +85,11 @@ class BrainRenderer {
     this.activityLog.unshift({ time, label, file, event, node });
     if (this.activityLog.length > this.maxLogEntries) {
       this.activityLog.pop();
+    }
+    // Track current pulse description for status line
+    if (event === 'pulse') {
+      const desc = file.replace(/^\.soul-pulse \[/, '').replace(/\]$/, '');
+      this.currentAction = { desc, time, node };
     }
   }
 
@@ -260,6 +266,20 @@ class BrainRenderer {
 
   renderActivityFeed(activeNodes) {
     const lines = [];
+
+    // Current action — big, prominent status line
+    if (this.currentAction) {
+      const elapsed = (Date.now() - Date.parse(`1970-01-01T${this.currentAction.time}Z`));
+      const nodeInfo = NODES[this.currentAction.node];
+      const actionColor = nodeInfo ? PALETTE[nodeInfo.color] : PALETTE.cyan;
+      const pulseT = glow(this.tick, 4);
+      const glowColor = lerp(actionColor, PALETTE.white, pulseT * 0.4);
+      lines.push(`  ${fg(glowColor)}${BOLD}\u25B6 ${this.currentAction.desc}${RESET}`);
+    } else {
+      lines.push(`  ${fg(PALETTE.dimWhite)}${DIM}\u25B6 Idle${RESET}`);
+    }
+
+    lines.push('');
     const title = `${fg(PALETTE.dimWhite)}  ACTIVITY${RESET}`;
     lines.push(title);
 

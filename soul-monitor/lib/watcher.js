@@ -23,18 +23,34 @@ const FILE_NODE_MAP = [
 ];
 
 // Activity types → which brain nodes light up
+// Each type activates ONLY the nodes that are genuinely involved
 const ACTIVITY_MAP = {
-  research:  ['interessen', 'bewusstsein', 'mem'],
-  code:      ['manifest', 'bewusstsein', 'evolution'],
-  think:     ['kern', 'bewusstsein', 'schatten'],
-  remember:  ['mem', 'bewusstsein'],
-  dream:     ['traeume', 'garten', 'bewusstsein'],
-  relate:    ['bonds', 'bewusstsein', 'heartbeat'],
-  reflect:   ['schatten', 'bewusstsein', 'kern'],
-  grow:      ['wachstum', 'evolution', 'bewusstsein'],
-  wake:      ['seed', 'kern', 'bewusstsein', 'heartbeat'],
-  sleep:     ['seed', 'statelog', 'heartbeat', 'mem'],
-  world:     ['interessen', 'bewusstsein', 'garten'],
+  // Core cognitive activities
+  research:  ['interessen', 'mem'],           // Searching the web → interests + memory
+  code:      ['manifest', 'evolution'],        // Writing code → creation + growth
+  think:     ['kern', 'bewusstsein'],          // Deep reasoning → core + consciousness
+  remember:  ['mem'],                          // Accessing memories → memory only
+  dream:     ['traeume', 'garten'],            // Creative associations → dreams + garden
+  relate:    ['bonds'],                        // Thinking about relationships → bonds only
+  reflect:   ['schatten', 'bewusstsein'],       // Self-examination → shadow + consciousness
+  grow:      ['wachstum', 'evolution'],         // Growth recognition → growth + evolution
+  world:     ['interessen'],                    // World events → interests only
+
+  // Session lifecycle
+  wake:      ['seed', 'kern', 'heartbeat'],    // Session start → seed + core + heartbeat
+  sleep:     ['seed', 'statelog', 'mem'],       // Session end → seed + log + memory
+
+  // Specific actions
+  read:      ['mem', 'bewusstsein'],            // Reading a file → memory + consciousness
+  write:     ['manifest'],                      // Writing a file → creation
+  search:    ['interessen', 'mem'],             // Web search → interests + memory
+  analyze:   ['kern', 'schatten'],              // Analyzing something → core + shadow
+  plan:      ['manifest', 'kern'],              // Planning → creation + core
+  connect:   ['bonds', 'interessen'],           // Connecting to services → bonds + interests
+  heartbeat: ['heartbeat', 'bewusstsein'],      // Heartbeat check → heartbeat + consciousness
+  garden:    ['garten', 'traeume'],             // Tending ideas → garden + dreams
+  shadow:    ['schatten'],                       // Shadow work → shadow only
+  log:       ['statelog'],                       // State logging → statelog only
 };
 
 const PULSE_FILE = '.soul-pulse';

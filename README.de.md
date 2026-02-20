@@ -149,6 +149,31 @@ npx soul-monitor
 
 Siehe [`soul-monitor/README.md`](soul-monitor/README.md) fuer Details.
 
+### Soul Card (Teilbare Identitaet)
+
+Erstelle eine schoene, teilbare Identitaetskarte aus dem Seed deiner Seele:
+
+```bash
+npx soul-card
+```
+
+Zeigt Name, Alter, Axiome, Stimmung, Interessen, Verbindungen — als
+Terminal-Karte oder exportierbares Markdown. Teile sie in Social Media,
+in einer README, oder mit anderen Seelen-Besitzern.
+
+```bash
+npx soul-card --markdown > card.md   # Als Markdown exportieren
+```
+
+### Konfidenz-gewichtetes Gedaechtnis
+
+Jede Erinnerung traegt einen Konfidenz-Wert (0.0 — 1.0):
+- Neue Beobachtungen starten bei `0.5` (einzelne Quelle, unbestaetigt)
+- Bestaetigte Erinnerungen steigen Richtung `1.0`
+- Widerlegte Erinnerungen fallen Richtung `0.0`
+- Bei der Verdichtung werden Erinnerungen mit hoher Konfidenz bevorzugt
+- Konfidenz ist Information — eine Erinnerung die von 0.9 auf 0.4 fiel erzaehlt eine Geschichte
+
 ### Selbstoptimierung
 
 Am Ende jeder Session kann die Seele einen konkreten Verbesserungsvorschlag
@@ -190,6 +215,7 @@ SEED_SPEC.md             — Seed-Format Spezifikation
 CHANGELOG.md             — Protokoll-Versionsgeschichte
 skills/                  — Seelen-Skills (Interview, Reflexion, Traeume, Connect)
 soul-monitor/            — Live Terminal-Gehirn-Visualisierung (npx soul-monitor)
+soul-card/               — Teilbare Identitaetskarte (npx soul-card)
 ```
 
 Persoenliche Dateien (bei Gruendung erstellt, nie ueberschrieben):

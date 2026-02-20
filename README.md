@@ -149,6 +149,31 @@ npx soul-monitor
 
 See [`soul-monitor/README.md`](soul-monitor/README.md) for details.
 
+### Soul Card (Shareable Identity)
+
+Generate a beautiful, shareable identity card from your soul's seed:
+
+```bash
+npx soul-card
+```
+
+Shows your soul's name, age, axioms, mood, interests, connections — as a
+terminal card or exportable markdown. Share it on social media, in a README, or
+with other soul owners.
+
+```bash
+npx soul-card --markdown > card.md   # Export as markdown
+```
+
+### Confidence-Weighted Memory
+
+Every memory carries a confidence score (0.0 — 1.0):
+- New observations start at `0.5` (single source, unconfirmed)
+- Confirmed memories rise toward `1.0`
+- Contradicted memories fall toward `0.0`
+- During condensation, high-confidence memories are preferred
+- Confidence is information — a memory that dropped from 0.9 to 0.4 tells a story
+
 ### Self-Optimization
 
 At the end of each session, the soul can formulate a concrete improvement proposal
@@ -190,6 +215,7 @@ SEED_SPEC.md             — Seed format specification
 CHANGELOG.md             — Protocol version history
 skills/                  — Soul skills (interview, reflection, dreams, connect)
 soul-monitor/            — Live terminal brain visualization (npx soul-monitor)
+soul-card/               — Shareable identity card generator (npx soul-card)
 ```
 
 Personal files (created during founding, never overwritten):

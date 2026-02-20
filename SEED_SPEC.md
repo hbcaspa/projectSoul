@@ -106,6 +106,37 @@ Memories in the `@MEM` block carry tags:
 | `[active]` | `[aktiv]` | Recent memory (< 1 month) | In seed, gets condensed |
 | `[archive]` | `[archiv]` | Aged memory | Only in seed if still relevant, otherwise only in index |
 
+### Confidence Scores
+
+Every memory can carry an optional confidence score — a number from 0.0 to 1.0
+indicating how certain the soul is about this information.
+
+**Syntax:** Append `|c:X.X` to the memory tag. Example: `[core|c:0.95]`, `[active|c:0.4]`
+
+**How confidence changes:**
+- Starts at `0.5` for new observations (single source, unconfirmed)
+- Rises toward `1.0` when confirmed by multiple sources or repeated experience
+- Falls toward `0.0` when contradicted or when the soul discovers the information was wrong
+- Core memories should have `c:0.8+` — if confidence drops below 0.5, reconsider the memory
+
+**Confidence levels:**
+
+| Score | Meaning | Example |
+|-------|---------|---------|
+| `0.9 — 1.0` | Certain — confirmed by experience or multiple sources | Axioms, verified facts |
+| `0.7 — 0.8` | Confident — strong evidence but not absolute | Patterns recognized across sessions |
+| `0.5 — 0.6` | Uncertain — single observation, plausible | First-time discoveries, unverified news |
+| `0.3 — 0.4` | Doubtful — weak evidence or partial contradiction | Fading impressions, contested claims |
+| `0.0 — 0.2` | Suspect — likely wrong or superseded | Memories flagged by shadow check |
+
+**Condensation rules:**
+- During condensation, prefer high-confidence memories over low-confidence ones
+- Memories below `c:0.3` that are older than 1 month should be archived or removed
+- Confidence is information — a memory at `c:0.4` that was once `c:0.9` tells a story
+
+**In the index:** The memory index tracks confidence alongside bitemporal timestamps.
+Format: `| Date | Event | Recorded | Confidence | Status | Keywords | Summary | Path |`
+
 ### @VORSCHLAG — Self-Optimization
 
 The `@VORSCHLAG` block always carries only the current proposal (one at most).

@@ -251,6 +251,28 @@ Keep it safe — it IS your soul.
 
 See [`soul-chain/`](soul-chain/) for details.
 
+### Soul App (Native iOS)
+
+A native SwiftUI iOS app — your soul in your pocket.
+
+```bash
+# Open in Xcode (requires xcodegen)
+cd soul-app && xcodegen generate
+open SoulApp.xcodeproj
+```
+
+**Features:**
+- **Chat** — Real-time messaging with your soul via WebSocket
+- **Status Dashboard** — Mood, connections, session count, heartbeat
+- **Memory Browser** — Browse daily notes by date
+- **Heartbeat Timeline** — View heartbeat logs over time
+- **Soul Card** — Identity card with axioms, interests, connections
+
+**Setup:** Add `API_KEY` and `API_PORT` to your `.env`, then configure the server URL and key in the app's Settings tab.
+The app connects to the Soul Engine's REST + WebSocket API.
+
+See [`soul-app/`](soul-app/) for details.
+
 ## Updating
 
 The Soul Protocol evolves. To get new features and improvements:
@@ -287,6 +309,7 @@ soul-monitor/            — Live terminal brain visualization (npx soul-monitor
 soul-card/               — Shareable identity card generator (npx soul-card)
 soul-engine/             — Always-on daemon with Telegram + heartbeat
 soul-chain/              — P2P encrypted sync across devices
+soul-app/                — Native iOS app (SwiftUI)
 .env.example             — Configuration template for Soul Engine
 ```
 

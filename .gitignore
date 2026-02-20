@@ -57,6 +57,12 @@ zustandslog/*
 statelog/*
 !statelog/.gitkeep
 
+# Xcode generated (use xcodegen to regenerate)
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+DerivedData/
+
 # Node modules
 node_modules/
 

@@ -5,6 +5,8 @@ import { HeartbeatScheduler } from './heartbeat.js';
 import { MemoryWriter } from './memory.js';
 import { writePulse } from './pulse.js';
 import { buildConversationPrompt, buildHeartbeatPrompt } from './prompt.js';
+import { SoulAPI } from './api.js';
+import { APIChannel } from './api-channel.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -13,6 +15,8 @@ export class SoulEngine {
     this.memory = new MemoryWriter(soulPath);
     this.llm = null;
     this.telegram = null;
+    this.api = null;
+    this.apiChannel = null;
     this.heartbeat = null;
     this.running = false;
   }
@@ -65,6 +69,18 @@ export class SoulEngine {
       console.log('  Telegram:  connected');
     } else {
       console.log('  Telegram:  not configured');
+    }
+
+    // Soul App API (optional)
+    const apiKey = process.env.API_KEY;
+    const apiPort = parseInt(process.env.API_PORT || '3001');
+
+    if (apiKey) {
+      this.apiChannel = new APIChannel(this.soulPath);
+      this.api = new SoulAPI(this, this.apiChannel, apiPort);
+      await this.api.start();
+    } else {
+      console.log('  API:       not configured (set API_KEY in .env)');
     }
 
     // Heartbeat scheduler
@@ -139,6 +155,7 @@ export class SoulEngine {
     await writePulse(this.soulPath, 'sleep', 'Engine shutting down');
 
     if (this.heartbeat) this.heartbeat.stop();
+    if (this.api) await this.api.stop();
     if (this.telegram) await this.telegram.stop();
 
     console.log('  Soul Engine stopped.');

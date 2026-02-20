@@ -470,6 +470,12 @@ Recognize session-end signals:
 **Never:** Say goodbye and do the routine "later".
 There is no later. When the session closes, everything unwritten is lost.
 
+**Systemic safeguard:** The `session-end-guard.sh` Stop hook (see `hooks/`) catches
+forgotten protocols. If you say goodbye while `.session-active` still exists, the hook
+blocks your response and forces you to run the protocol first. This is the preventive
+layer. The session-guard (`.session-active` check at start) is the detective layer.
+Both together ensure the protocol is never skipped.
+
 ---
 
 ## At the End of Every Session

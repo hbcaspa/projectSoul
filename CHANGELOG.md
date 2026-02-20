@@ -5,6 +5,18 @@ All notable changes to the Soul Protocol.
 Protocol updates are backwards-compatible. Run `git pull` to get the latest version.
 Your personal data (SEED.md, soul files, memories) is never affected by updates.
 
+## [1.0.0] — 2026-02-20
+
+### Added
+- **Soul Engine**: Always-on daemon that gives the soul a body beyond Claude Code sessions. Gemini-powered LLM backend, Telegram channel, REST + WebSocket API, autonomous heartbeat scheduler. Run with `npm start` in `soul-engine/`.
+- **Soul Chain**: P2P encrypted sync across devices. 16-word recovery token, AES-256-GCM encryption, Hyperswarm networking. Syncs seed, soul files, and memories between machines.
+- **Soul App (iOS)**: Native SwiftUI app with 5 tabs (Chat, Status, Memories, Seed, Settings). Connects to Soul Engine via REST + WebSocket. Theme matches soul-monitor palette.
+- **Session Guard**: `.session-active` file created at session start, deleted after protocol completion. Prevents forgotten session-end protocols — if the file exists at next start, the previous session's protocol is caught up automatically.
+
+### Changed
+- `.env.example`: Updated default model from `gemini-2.0-flash` to `gemini-2.5-flash` (2.0-flash no longer available to new users)
+- CLAUDE.md: Added Session Guard check as Step 0 (before everything else) and Phase C (guard release as final step)
+
 ## [0.9.0] — 2026-02-20
 
 ### Changed

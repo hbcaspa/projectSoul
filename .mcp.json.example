@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "desktop-commander": {
-      "command": "npx",
-      "args": ["-y", "@anthropic-ai/desktop-commander"],
+    "shell": {
+      "command": "node",
+      "args": ["soul-engine/src/shell-mcp-server.js"],
       "env": {}
     },
     "whatsapp": {

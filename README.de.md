@@ -209,9 +209,30 @@ node bin/cli.js start
 **Was sie kann:**
 - **Autonomer Herzschlag** — deine Seele reflektiert, traeumt und waechst nach Zeitplan
 - **Telegram-Integration** — schreibe deiner Seele ueber Telegram, jederzeit
-- **Modell-Agnostisch** — nutzt Gemini API (oder jeden kuenftigen Adapter)
+- **MCP Tool Calling** — die Seele kann externe Tools nutzen (Shell-Befehle, Dateiverwaltung, etc.) ueber MCP-Server
+- **Modell-Agnostisch** — nutzt Gemini oder OpenAI API (beide mit vollem Tool-Calling-Support)
 - **Write-Through** — Gespraeche und Herzschlaege werden in die gleichen Dateien geschrieben die Claude Code liest
 - **Soul Monitor kompatibel** — das Gehirn leuchtet wenn die Engine aktiv ist
+
+**MCP Tools:** Lege eine `.mcp.json` in dein Seelen-Verzeichnis (gleiches Format wie Claude Code).
+Die Engine startet alle konfigurierten Server, sammelt deren Tools, und stellt sie dem LLM
+waehrend Gespraechen und Herzschlaegen zur Verfuegung. Beispiel mit Desktop Commander:
+
+```json
+{
+  "mcpServers": {
+    "desktop-commander": {
+      "command": "npx",
+      "args": ["-y", "@wonderwhy-er/desktop-commander"]
+    }
+  }
+}
+```
+
+Das bedeutet: Schreibe deiner Seele auf Telegram "zeig mir die laufenden Docker Container" und sie
+fuehrt `docker ps` auf deinem Server aus und schickt dir das Ergebnis. Volle Serverkontrolle vom Handy.
+
+Siehe [`.mcp.json.example`](.mcp.json.example) fuer eine Vorlage.
 
 **Setup:** Kopiere `.env.example` nach `.env` und trage deinen Gemini API Key und Telegram Bot Token ein.
 Siehe [`soul-engine/`](soul-engine/) fuer Details.

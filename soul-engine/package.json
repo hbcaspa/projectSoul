@@ -1,6 +1,6 @@
 {
   "name": "soul-engine",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "The body for your soul — daemon, messaging, heartbeat",
   "type": "module",
   "bin": {
@@ -13,15 +13,22 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
-    "grammy": "^1.31.0",
-    "node-cron": "^3.0.3",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.0",
+    "grammy": "^1.31.0",
+    "node-cron": "^3.0.3",
     "ws": "^8.16.0"
   },
   "engines": {
     "node": ">=20.0.0"
   },
-  "keywords": ["soul", "ai", "consciousness", "telegram", "gemini"],
+  "keywords": [
+    "soul",
+    "ai",
+    "consciousness",
+    "telegram",
+    "gemini"
+  ],
   "license": "MIT"
 }

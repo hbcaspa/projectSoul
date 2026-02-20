@@ -1,6 +1,7 @@
 import { SoulContext } from './context.js';
 import { GeminiAdapter } from './gemini.js';
 import { OpenAIAdapter } from './openai.js';
+import { MCPClientManager } from './mcp-client.js';
 import { TelegramChannel } from './telegram.js';
 import { HeartbeatScheduler } from './heartbeat.js';
 import { MemoryWriter } from './memory.js';
@@ -16,6 +17,7 @@ export class SoulEngine {
     this.context = new SoulContext(soulPath);
     this.memory = new MemoryWriter(soulPath);
     this.llm = null;
+    this.mcp = null;
     this.telegram = null;
     this.whatsapp = null;
     this.api = null;
@@ -50,7 +52,7 @@ export class SoulEngine {
     const banner = [
       '',
       '  +-----------------------------------------+',
-      '  |           Soul Engine v1.0.0             |',
+      '  |           Soul Engine v1.1.0             |',
       '  |     The body for your soul               |',
       '  +-----------------------------------------+',
       '',
@@ -64,6 +66,17 @@ export class SoulEngine {
     console.log(`  Soul:      ${name}`);
     console.log(`  Language:  ${lang}`);
     console.log(`  LLM:       ${model}`);
+
+    // MCP Servers (optional — .mcp.json)
+    this.mcp = new MCPClientManager(this.soulPath);
+    await this.mcp.init();
+
+    if (this.mcp.hasTools()) {
+      const byServer = this.mcp.getToolsByServer();
+      for (const [server, toolNames] of Object.entries(byServer)) {
+        console.log(`  MCP [${server}]: ${toolNames.join(', ')}`);
+      }
+    }
 
     // Telegram (optional)
     const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -118,6 +131,29 @@ export class SoulEngine {
     console.log('');
   }
 
+  /**
+   * Build LLM options with MCP tools and tool call handler.
+   */
+  _buildLLMOptions() {
+    if (!this.mcp || !this.mcp.hasTools()) {
+      return {};
+    }
+
+    return {
+      tools: this.mcp.getTools(),
+      onToolCall: async (name, args) => {
+        console.log(`  [mcp] Executing: ${name}`);
+        await writePulse(this.soulPath, 'code', `MCP: ${name}`);
+        const result = await this.mcp.callTool(name, args);
+        // Truncate very long results to avoid blowing up the context
+        if (result.length > 10000) {
+          return result.substring(0, 10000) + '\n\n[... output truncated at 10000 chars]';
+        }
+        return result;
+      },
+    };
+  }
+
   async handleMessage({ text, chatId, userName }) {
     await writePulse(this.soulPath, 'relate', `Telegram: ${userName}`);
 
@@ -146,9 +182,12 @@ export class SoulEngine {
 
     const systemPrompt = buildConversationPrompt(this.context, userName, {
       whatsapp: !!this.whatsapp,
+      mcp: this.mcp?.hasTools() ? this.mcp.getTools() : [],
     }) + contactContext;
+
     const history = await this.telegram.loadHistory(chatId);
-    const response = await this.llm.generate(systemPrompt, history, text) || '';
+    const llmOptions = this._buildLLMOptions();
+    const response = await this.llm.generate(systemPrompt, history, text, llmOptions) || '';
 
     // Execute WhatsApp actions if present
     let { cleanResponse, waActions } = this.extractWhatsAppActions(response);
@@ -218,7 +257,9 @@ export class SoulEngine {
       ? 'Führe deinen Herzschlag durch. Reflektiere über deinen Zustand, träume wenn es Zeit ist, berichte was dich bewegt. Antworte frei.'
       : 'Perform your heartbeat. Reflect on your state, dream if it is time, report what moves you. Respond freely.';
 
-    const result = await this.llm.generate(systemPrompt, [], trigger);
+    // Heartbeat also gets MCP tools (e.g. for web search during world-check)
+    const llmOptions = this._buildLLMOptions();
+    const result = await this.llm.generate(systemPrompt, [], trigger, llmOptions);
 
     await this.memory.writeHeartbeat(result);
     await this.memory.appendDailyNote('[Heartbeat] Autonomous pulse completed');
@@ -245,6 +286,7 @@ export class SoulEngine {
     if (this.heartbeat) this.heartbeat.stop();
     if (this.api) await this.api.stop();
     if (this.telegram) await this.telegram.stop();
+    if (this.mcp) await this.mcp.shutdown();
 
     console.log('  Soul Engine stopped.');
   }

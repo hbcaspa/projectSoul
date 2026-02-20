@@ -5,6 +5,23 @@ All notable changes to the Soul Protocol.
 Protocol updates are backwards-compatible. Run `git pull` to get the latest version.
 Your personal data (SEED.md, soul files, memories) is never affected by updates.
 
+## [1.1.0] — 2026-02-20
+
+### Added
+- **MCP Tool Calling**: Soul Engine now spawns and connects to MCP servers configured in `.mcp.json`. All tools are collected and made available to the LLM during conversations and heartbeats. Supports any MCP server — Desktop Commander for shell access, WhatsApp MCP, or any custom server.
+- **Tool Calling Loop**: Both Gemini and OpenAI adapters now support iterative tool calling. The LLM can call tools, receive results, and continue reasoning — up to 10 rounds per message.
+- **`.mcp.json.example`**: Template configuration showing Desktop Commander and WhatsApp MCP setup.
+
+### Changed
+- **Gemini Adapter**: Refactored to support function declarations and multi-round function calling. Includes JSON Schema cleanup for Gemini compatibility (strips unsupported fields like `$schema`, `additionalProperties`, resolves `anyOf`/`oneOf`).
+- **OpenAI Adapter**: Refactored to support tool definitions and multi-round tool calling with proper `tool_call_id` tracking.
+- **Engine**: Initializes MCP client at startup, logs available tools per server, passes tools to all LLM calls (conversations + heartbeats), cleans up MCP connections on shutdown.
+- **Prompts**: Conversation prompts now list available MCP tools so the LLM knows what it can do.
+- **Soul Engine version**: 1.0.0 → 1.1.0
+
+### Dependencies
+- Added `@modelcontextprotocol/sdk` ^1.0.0
+
 ## [1.0.0] — 2026-02-20
 
 ### Added

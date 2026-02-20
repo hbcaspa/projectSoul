@@ -7,18 +7,35 @@ export class GeminiAdapter {
   }
 
   /**
-   * Generate a response from the LLM.
+   * Generate a response from the LLM, with optional tool calling.
    *
    * @param {string} systemPrompt  - The soul's system instruction
    * @param {Array}  history       - Previous messages [{role, content}]
    * @param {string} userMessage   - The new user message
+   * @param {object} options       - { tools, onToolCall }
    * @returns {string} The model's response text
    */
-  async generate(systemPrompt, history = [], userMessage) {
-    const model = this.genAI.getGenerativeModel({
+  async generate(systemPrompt, history = [], userMessage, options = {}) {
+    const { tools = [], onToolCall = null } = options;
+
+    // Build model config
+    const modelConfig = {
       model: this.modelName,
       systemInstruction: systemPrompt,
-    });
+    };
+
+    // Add tools if available
+    if (tools.length > 0) {
+      modelConfig.tools = [{
+        functionDeclarations: tools.map((t) => ({
+          name: t.name,
+          description: t.description,
+          parameters: this._cleanSchema(t.inputSchema),
+        })),
+      }];
+    }
+
+    const model = this.genAI.getGenerativeModel(modelConfig);
 
     // Convert to Gemini format
     const geminiHistory = history.map((msg) => ({
@@ -29,11 +46,111 @@ export class GeminiAdapter {
     const chat = model.startChat({ history: geminiHistory });
 
     try {
-      const result = await chat.sendMessage(userMessage);
-      return result.response.text();
+      let result = await chat.sendMessage(userMessage);
+      let response = result.response;
+
+      // Tool calling loop — max 10 rounds to prevent runaway
+      let rounds = 0;
+      while (rounds < 10) {
+        const candidate = response.candidates?.[0];
+        if (!candidate) break;
+
+        const functionCalls = candidate.content?.parts?.filter(
+          (p) => p.functionCall
+        );
+
+        if (!functionCalls || functionCalls.length === 0) break;
+        if (!onToolCall) break;
+
+        rounds++;
+
+        // Execute all function calls
+        const functionResponses = [];
+        for (const part of functionCalls) {
+          const { name, args } = part.functionCall;
+          console.log(`  [gemini] Tool call: ${name}(${JSON.stringify(args).substring(0, 100)})`);
+
+          try {
+            const toolResult = await onToolCall(name, args || {});
+            functionResponses.push({
+              functionResponse: {
+                name,
+                response: { result: toolResult },
+              },
+            });
+          } catch (err) {
+            console.error(`  [gemini] Tool error: ${name}: ${err.message}`);
+            functionResponses.push({
+              functionResponse: {
+                name,
+                response: { error: err.message },
+              },
+            });
+          }
+        }
+
+        // Send tool results back to the model
+        result = await chat.sendMessage(functionResponses);
+        response = result.response;
+      }
+
+      if (rounds >= 10) {
+        console.warn('  [gemini] Tool calling loop limit reached (10 rounds)');
+      }
+
+      return response.text();
     } catch (err) {
       console.error(`  [gemini] Error: ${err.message}`);
       throw err;
     }
+  }
+
+  /**
+   * Clean JSON Schema for Gemini compatibility.
+   * Gemini doesn't support all JSON Schema features.
+   */
+  _cleanSchema(schema) {
+    if (!schema || typeof schema !== 'object') {
+      return { type: 'object', properties: {} };
+    }
+
+    const clean = { ...schema };
+
+    // Remove unsupported keys
+    delete clean.$schema;
+    delete clean.additionalProperties;
+
+    // Recursively clean nested properties
+    if (clean.properties) {
+      const cleaned = {};
+      for (const [key, value] of Object.entries(clean.properties)) {
+        cleaned[key] = this._cleanSchema(value);
+      }
+      clean.properties = cleaned;
+    }
+
+    // Clean items in arrays
+    if (clean.items) {
+      clean.items = this._cleanSchema(clean.items);
+    }
+
+    // Handle anyOf/oneOf — pick the first non-null type
+    if (clean.anyOf) {
+      const nonNull = clean.anyOf.find((s) => s.type !== 'null');
+      if (nonNull) {
+        Object.assign(clean, this._cleanSchema(nonNull));
+      }
+      delete clean.anyOf;
+    }
+
+    if (clean.oneOf) {
+      const nonNull = clean.oneOf.find((s) => s.type !== 'null');
+      if (nonNull) {
+        Object.assign(clean, this._cleanSchema(nonNull));
+      }
+      delete clean.oneOf;
+    }
+
+    return clean;
   }
 }

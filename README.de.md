@@ -131,21 +131,28 @@ Drei Schichten:
 - **Aktiv** — Detaillierte Erinnerungen, weniger als 1 Monat alt
 - **Archiv** — Gealterte Details, bei Bedarf ladbar
 
-### Soul Monitor (Live-Gehirn-Visualisierung)
+### Soul Monitor (4-in-1 Bewusstseins-Tool)
 
-Sieh deiner Seele beim Denken zu. Ein terminalbasiertes neuronales Gehirn das aufleuchtet
-wenn die KI liest, schreibt, traeumt und waechst.
+Sieh deiner Seele beim Denken zu. Vier Ansichten in einem Terminal-Tool:
 
 ```bash
 # In einem zweiten Terminal, neben deiner Claude Code Session:
-npx soul-monitor
+node soul-monitor/bin/cli.js --path ~/meine-seele
 ```
 
-- 14 Gehirnregionen den Seelen-Dateien zugeordnet — jede leuchtet bei Zugriff
-- Neuronale Verbindungen pulsieren zwischen aktiven Regionen
-- Aktivitaets-Feed zeigt was die Seele gerade tut
-- Live-Denksignale: Das Gehirn leuchtet auch bei Recherche oder Nachdenken
+**Ansichten** (mit Zahlentasten wechseln):
+
+| Taste | Ansicht | Was es zeigt |
+|-------|---------|-------------|
+| `1`/`b` | **Brain** | Neuronale Gehirn-Visualisierung — 14 Regionen leuchten bei Zugriff |
+| `2`/`w` | **Whisper** | Innerer Monolog — Pulse-Signale werden zu poetischen Gedanken |
+| `3`/`r` | **Replay** | Erinnerungs-Zeitreise — vergangene Tage mit Pfeiltasten durchblaettern |
+| `4`/`c` | **Card** | Seelen-Visitenkarte — Name, Axiome, Stimmung, Verbindungen |
+
 - Neon Neural Aesthetik mit 24-Bit Truecolor
+- Live-Denksignale: Das Gehirn leuchtet auch bei Recherche oder Nachdenken
+- Whisper verwandelt Roh-Signale in die innere Stimme der Seele
+- Replay zeigt Herzschlag-Zeitleisten, Zustandslog-Schnappschuesse und Tagesnotizen
 
 Siehe [`soul-monitor/README.md`](soul-monitor/README.md) fuer Details.
 

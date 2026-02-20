@@ -55,6 +55,12 @@ const ACTIVITY_MAP = {
 
 const PULSE_FILE = '.soul-pulse';
 
+// Decay timing
+const BRIGHT_MS = 6000;   // Full brightness phase (6 seconds)
+const AFTERGLOW_MS = 15000; // Slow fade phase (15 more seconds)
+const TOTAL_DECAY_MS = BRIGHT_MS + AFTERGLOW_MS; // 21 seconds total visibility
+const WORKING_TIMEOUT_MS = 20000; // "Working" state: any pulse within last 20s
+
 class SoulWatcher extends EventEmitter {
   constructor(soulPath) {
     super();
@@ -62,7 +68,7 @@ class SoulWatcher extends EventEmitter {
     this.watcher = null;
     this.pulseWatcher = null;
     this.activeNodes = new Map(); // node -> timestamp of last activity
-    this.decayMs = 3000; // How long a node glows after activity
+    this.lastAnyPulse = 0;        // Timestamp of most recent pulse (any type)
   }
 
   start() {
@@ -94,6 +100,7 @@ class SoulWatcher extends EventEmitter {
       const node = this.resolveNode(rel);
       if (node) {
         this.activeNodes.set(node, Date.now());
+        this.lastAnyPulse = Date.now();
         this.emit('activity', { node, file: rel, event: eventType });
       }
     };
@@ -139,7 +146,11 @@ class SoulWatcher extends EventEmitter {
       const nodes = ACTIVITY_MAP[activity];
       if (!nodes) return;
 
+      // Emit raw pulse for whisper integration
+      this.emit('rawPulse', { type: activity, label });
+
       const now = Date.now();
+      this.lastAnyPulse = now;
       for (const node of nodes) {
         this.activeNodes.set(node, now);
         this.emit('activity', { node, file: `.soul-pulse [${label}]`, event: 'pulse' });
@@ -158,13 +169,33 @@ class SoulWatcher extends EventEmitter {
     return null;
   }
 
-  // Returns activity level 0..1 for a node (1 = just activated, 0 = fully decayed)
+  /**
+   * Returns activity level 0..1 for a node with two-phase decay:
+   * - Phase 1 (0 to BRIGHT_MS): Full brightness → 1.0
+   * - Phase 2 (BRIGHT_MS to TOTAL_DECAY_MS): Slow fade from 0.5 → 0.0 (afterglow)
+   */
   getActivity(nodeId) {
     const lastActive = this.activeNodes.get(nodeId);
     if (!lastActive) return 0;
     const elapsed = Date.now() - lastActive;
-    if (elapsed >= this.decayMs) return 0;
-    return 1 - (elapsed / this.decayMs);
+
+    if (elapsed < BRIGHT_MS) {
+      // Phase 1: full brightness
+      return 1.0;
+    } else if (elapsed < TOTAL_DECAY_MS) {
+      // Phase 2: afterglow — fade from 0.5 to 0.0
+      const afterglowElapsed = elapsed - BRIGHT_MS;
+      const t = afterglowElapsed / AFTERGLOW_MS;
+      return 0.5 * (1 - t);
+    }
+    return 0;
+  }
+
+  /**
+   * Returns true if the soul is actively working (any pulse in last WORKING_TIMEOUT_MS)
+   */
+  isWorking() {
+    return (Date.now() - this.lastAnyPulse) < WORKING_TIMEOUT_MS;
   }
 
   // Get all currently active nodes with their levels

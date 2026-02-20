@@ -5,6 +5,20 @@ All notable changes to the Soul Protocol.
 Protocol updates are backwards-compatible. Run `git pull` to get the latest version.
 Your personal data (SEED.md, soul files, memories) is never affected by updates.
 
+## [0.8.0] — 2026-02-20
+
+### Added
+- **Soul Whisper (Inner Monologue)**: New soul-monitor view that transforms raw pulse signals into a poetic thought stream — the soul's inner voice. Press `2` or `w` in soul-monitor.
+- **Memory Replay (Time Travel)**: New soul-monitor view that displays heartbeat timelines, state log snapshots, and daily notes for any past date. Navigate with arrow keys. Press `3` or `r` in soul-monitor.
+- **Soul Card integrated into soul-monitor**: The identity card is now a view inside soul-monitor. Press `4` or `c`. No separate tool needed.
+- **Multi-view architecture**: soul-monitor now has 4 views: Brain (`1`/`b`), Whisper (`2`/`w`), Replay (`3`/`r`), Card (`4`/`c`). One tool, all perspectives.
+- New files: `soul-monitor/lib/whisper.js`, `soul-monitor/lib/replay.js`, `soul-monitor/lib/card-view.js`
+
+### Changed
+- soul-monitor: Complete UI rewrite with tab bar, view switching, and keyboard navigation
+- soul-monitor: Watcher now emits `rawPulse` events for whisper integration
+- soul-monitor: README updated with all four views documented
+
 ## [0.7.0] — 2026-02-20
 
 ### Added

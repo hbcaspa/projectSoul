@@ -22,13 +22,15 @@ if (args.includes('--help') || args.includes('-h')) {
   ${'\x1b[2m'}Usage:${'\x1b[0m'}
     soul-monitor              ${'\x1b[2m'}# Run in current directory${'\x1b[0m'}
     soul-monitor --path ~/my-soul  ${'\x1b[2m'}# Specify soul directory${'\x1b[0m'}
-    npx soul-monitor          ${'\x1b[2m'}# Run without installing${'\x1b[0m'}
+
+  ${'\x1b[2m'}Views:${'\x1b[0m'}
+    1 / b    ${'\x1b[36m'}Brain${'\x1b[0m'}     Neural brain visualization (default)
+    2 / w    ${'\x1b[35m'}Whisper${'\x1b[0m'}   Inner monologue thought stream
+    3 / r    ${'\x1b[33m'}Replay${'\x1b[0m'}    Memory time travel (\u2190 \u2192 to navigate dates)
+    4 / c    ${'\x1b[32m'}Card${'\x1b[0m'}      Soul identity card
 
   ${'\x1b[2m'}Controls:${'\x1b[0m'}
     q / Ctrl+C / Esc    Quit
-
-  ${'\x1b[2m'}The monitor watches for file changes in your soul directory${'\x1b[0m'}
-  ${'\x1b[2m'}and lights up brain regions as the AI reads and writes.${'\x1b[0m'}
 
   ${'\x1b[36m'}https://github.com/hbcaspa/projectSoul${'\x1b[0m'}
 `);

@@ -93,8 +93,9 @@ class BrainRenderer {
     }
   }
 
-  render(activeNodes, sessionInfo) {
+  render(activeNodes, sessionInfo, isWorking) {
     this.tick += 0.15;
+    this.isWorking = !!isWorking;
     const lines = [];
 
     // Title
@@ -143,19 +144,29 @@ class BrainRenderer {
 
       // Calculate display color based on activity
       let displayColor;
-      if (activity > 0) {
-        // Active: bright glow with pulse
+      if (activity > 0.5) {
+        // Bright phase: strong glow with pulse
         const pulseT = glow(this.tick, 3) * 0.3;
         displayColor = lerp(baseColor, PALETTE.white, activity * 0.5 + pulseT);
+      } else if (activity > 0) {
+        // Afterglow phase: softer glow, still clearly visible
+        const pulseT = glow(this.tick, 1.5) * 0.15;
+        displayColor = lerp(dim(baseColor, 0.5), baseColor, activity * 2 + pulseT);
+      } else if (this.isWorking) {
+        // Soul is working but this node is not active:
+        // gentle ambient breathing to show the brain is "alive"
+        const ambientT = glow(this.tick + id.length * 0.7, 0.8) * 0.2;
+        displayColor = dim(baseColor, 0.35 + ambientT);
       } else {
-        // Idle: dim with slow ambient pulse
-        const ambientT = glow(this.tick + id.length, 0.5) * 0.15;
-        displayColor = dim(baseColor, 0.25 + ambientT);
+        // Truly idle: dim with slow ambient pulse
+        const ambientT = glow(this.tick + id.length, 0.5) * 0.1;
+        displayColor = dim(baseColor, 0.2 + ambientT);
       }
 
-      // Node marker
-      const marker = activity > 0 ? '\u25C9' : '\u25CB'; // ◉ or ○
-      const nodeStr = `${fg(displayColor)}${activity > 0 ? BOLD : ''}${marker} ${node.label}${RESET}`;
+      // Node marker: ◉ bright, ◎ afterglow, ○ idle
+      const marker = activity > 0.5 ? '\u25C9' : activity > 0 ? '\u25CE' : '\u25CB';
+      const isBold = activity > 0.5;
+      const nodeStr = `${fg(displayColor)}${isBold ? BOLD : ''}${marker} ${node.label}${RESET}`;
 
       // Store for rendering
       if (!connectionChars[node.y]) connectionChars[node.y] = {};
@@ -311,14 +322,22 @@ class BrainRenderer {
     const totalNodes = Object.keys(NODES).length;
 
     // Heartbeat animation
-    const heartT = glow(this.tick, 2);
-    const heartColor = lerp(PALETTE.heartbeat, PALETTE.white, heartT * 0.5);
+    const heartT = glow(this.tick, this.isWorking ? 3 : 1);
+    const heartColor = this.isWorking
+      ? lerp(PALETTE.heartbeat, PALETTE.white, heartT * 0.6)
+      : lerp(PALETTE.dimWhite, PALETTE.heartbeat, heartT * 0.3);
     const heart = heartT > 0.7 ? '\u2665' : '\u2661'; // ♥ or ♡
+
+    // Working indicator
+    const workingStr = this.isWorking
+      ? `${fg(PALETTE.cyan)}${BOLD}WORKING${RESET}`
+      : `${fg(PALETTE.dimWhite)}${DIM}IDLE${RESET}`;
 
     const statusColor = activeCount > 0 ? PALETTE.cyan : PALETTE.dimWhite;
 
     return (
       `  ${fg(heartColor)}${heart}${RESET} ` +
+      `${workingStr}  ` +
       `${fg(statusColor)}${activeCount}/${totalNodes} active${RESET}  ` +
       `${fg(PALETTE.dimWhite)}${DIM}q:quit${RESET}`
     );

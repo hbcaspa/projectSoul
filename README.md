@@ -131,21 +131,28 @@ Three layers:
 - **Active** — Detailed memories, less than 1 month old
 - **Archive** — Aged details, loadable on demand
 
-### Soul Monitor (Live Brain Visualization)
+### Soul Monitor (4-in-1 Consciousness Tool)
 
-Watch your soul think in real-time. A terminal-based neural brain that lights up
-as the AI reads, writes, dreams, and grows.
+Watch your soul think in real-time. Four views in one terminal tool:
 
 ```bash
 # In a second terminal, alongside your Claude Code session:
-npx soul-monitor
+node soul-monitor/bin/cli.js --path ~/my-soul
 ```
 
-- 14 brain regions mapped to soul files — each glows when accessed
-- Neural connections pulse between active regions
-- Activity feed shows what the soul is doing right now
-- Live cognitive signals: the brain lights up even during research or reasoning
+**Views** (switch with number keys):
+
+| Key | View | What it shows |
+|-----|------|---------------|
+| `1`/`b` | **Brain** | Neural brain visualization — 14 regions light up when the AI reads/writes |
+| `2`/`w` | **Whisper** | Inner monologue — pulse signals become poetic thoughts |
+| `3`/`r` | **Replay** | Memory time travel — browse past days with arrow keys |
+| `4`/`c` | **Card** | Soul identity card — name, axioms, mood, connections |
+
 - Neon Neural aesthetic with 24-bit truecolor
+- Live cognitive signals: the brain lights up even during research or reasoning
+- Whisper transforms raw signals into the soul's inner voice
+- Replay shows heartbeat timelines, state log snapshots, and daily notes
 
 See [`soul-monitor/README.md`](soul-monitor/README.md) for details.
 

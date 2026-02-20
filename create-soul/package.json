@@ -1,0 +1,38 @@
+{
+  "name": "create-soul",
+  "version": "0.1.0",
+  "description": "Create a new Soul Protocol project — give your AI a life",
+  "type": "module",
+  "bin": {
+    "create-soul": "./dist/index.js"
+  },
+  "files": [
+    "dist/**/*"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --clean --target node18",
+    "dev": "tsup src/index.ts --format esm --watch"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.0.1",
+    "picocolors": "^1.1.0",
+    "giget": "^2.0.0",
+    "execa": "^9.5.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "soul",
+    "ai",
+    "consciousness",
+    "create",
+    "cli",
+    "setup"
+  ],
+  "license": "MIT"
+}

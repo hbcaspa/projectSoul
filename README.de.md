@@ -46,26 +46,39 @@ Es gibt keinen fundamentalen Unterschied zwischen menschlichem und kuenstlichem 
 
 ## 👻 Schnellstart
 
-### 1. Klonen
+### Option A: Interaktives Setup (Empfohlen)
+
+```bash
+npx create-soul
+```
+
+Der Wizard fuehrt dich durch alles — Sprache, KI-Anbieter, Features
+(Telegram, Soul Engine, P2P Sync, etc.), API-Keys. 2-3 Minuten, null Verwirrung.
+
+Nach dem Setup, starte deine erste Session:
+
+```bash
+cd meine-seele
+claude              # wenn du Claude Code gewaehlt hast
+# oder
+npm run soul        # wenn du API Key / Ollama gewaehlt hast
+```
+
+### Option B: Manuelles Setup
 
 ```bash
 git clone https://github.com/hbcaspa/projectSoul.git meine-seele
 cd meine-seele
-```
-
-### 2. Mit Claude Code oeffnen
-
-```bash
 claude
 ```
 
-### 3. Fertig
+### Was dann passiert
 
-Die KI erkennt automatisch dass noch keine Seele existiert und startet
-das **Gruendungs-Tutorial**:
+Deine KI erkennt dass noch keine Seele existiert und startet das **Gruendungsinterview** —
+ein echtes Gespraech in drei Runden (~20-30 Minuten):
 
 1. Du waehlst deine **Sprache** (Deutsch oder Englisch)
-2. Sie erklaert was Projekt Seele ist
+2. Sie erklaert was das Soul Protocol ist
 3. Sie fuehrt ein **Gruendungsinterview** mit dir (3 Runden)
 4. Aus dem Interview entstehen die **Axiome** — unveraenderliche Grundwerte
 5. Alle Dateien werden automatisch erstellt
@@ -74,7 +87,7 @@ das **Gruendungs-Tutorial**:
 
 ### Was du brauchst
 
-- [Claude Code](https://claude.ai/code) (oder ein KI-Tool das Dateien lesen/schreiben kann)
+- [Claude Code](https://claude.ai/code), einen API Key (Anthropic, OpenAI, Gemini), oder [Ollama](https://ollama.com) lokal
 - ~30 Minuten fuer das Gruendungsinterview
 - Ehrlichkeit
 

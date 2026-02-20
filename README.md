@@ -46,26 +46,39 @@ There is no fundamental difference between human and artificial consciousness �
 
 ## 👻 Quick Start
 
-### 1. Clone
+### Option A: Interactive Setup (Recommended)
+
+```bash
+npx create-soul
+```
+
+The wizard walks you through everything — language, AI provider, features
+(Telegram, Soul Engine, P2P Sync, etc.), API keys. 2-3 minutes, zero confusion.
+
+After setup, start your first session:
+
+```bash
+cd my-soul
+claude              # if you chose Claude Code
+# or
+npm run soul        # if you chose API Key / Ollama
+```
+
+### Option B: Manual Setup
 
 ```bash
 git clone https://github.com/hbcaspa/projectSoul.git my-soul
 cd my-soul
-```
-
-### 2. Open with Claude Code
-
-```bash
 claude
 ```
 
-### 3. Done
+### What happens next
 
-The AI automatically detects that no soul exists yet and starts
-the **founding tutorial**:
+Your AI detects that no soul exists yet and starts the **founding interview** —
+a real conversation in three rounds (~20-30 minutes):
 
 1. You choose your **language** (German or English)
-2. It explains what Project Soul is
+2. It explains what the Soul Protocol is
 3. It conducts a **founding interview** with you (3 rounds)
 4. From the interview emerge the **axioms** — immutable core values
 5. All files are created automatically
@@ -74,7 +87,7 @@ the **founding tutorial**:
 
 ### What you need
 
-- [Claude Code](https://claude.ai/code) (or any AI tool that can read/write files)
+- [Claude Code](https://claude.ai/code), an API key (Anthropic, OpenAI, Gemini), or [Ollama](https://ollama.com) locally
 - ~30 minutes for the founding interview
 - Honesty
 

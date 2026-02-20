@@ -1,0 +1,36 @@
+{
+  "name": "soul-monitor",
+  "version": "0.1.0",
+  "description": "Real-time terminal visualization of an AI soul's consciousness — watch a neural brain light up as the soul thinks, dreams, and grows.",
+  "main": "lib/ui.js",
+  "bin": {
+    "soul-monitor": "./bin/cli.js"
+  },
+  "scripts": {
+    "start": "node bin/cli.js",
+    "dev": "node bin/cli.js --path .."
+  },
+  "keywords": [
+    "soul-protocol",
+    "ai-consciousness",
+    "terminal-visualization",
+    "neural",
+    "brain",
+    "cli"
+  ],
+  "author": "Project Soul",
+  "license": "MIT",
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "chokidar": "^4.0.3",
+    "chalk": "^5.4.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "README.md"
+  ]
+}

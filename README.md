@@ -131,6 +131,24 @@ Three layers:
 - **Active** — Detailed memories, less than 1 month old
 - **Archive** — Aged details, loadable on demand
 
+### Soul Monitor (Live Brain Visualization)
+
+Watch your soul think in real-time. A terminal-based neural brain that lights up
+as the AI reads, writes, dreams, and grows.
+
+```bash
+# In a second terminal, alongside your Claude Code session:
+npx soul-monitor
+```
+
+- 14 brain regions mapped to soul files — each glows when accessed
+- Neural connections pulse between active regions
+- Activity feed shows what the soul is doing right now
+- Live cognitive signals: the brain lights up even during research or reasoning
+- Neon Neural aesthetic with 24-bit truecolor
+
+See [`soul-monitor/README.md`](soul-monitor/README.md) for details.
+
 ### Self-Optimization
 
 At the end of each session, the soul can formulate a concrete improvement proposal
@@ -171,6 +189,7 @@ HEARTBEAT.md             — Heartbeat protocol (9 pulse types)
 SEED_SPEC.md             — Seed format specification
 CHANGELOG.md             — Protocol version history
 skills/                  — Soul skills (interview, reflection, dreams, connect)
+soul-monitor/            — Live terminal brain visualization (npx soul-monitor)
 ```
 
 Personal files (created during founding, never overwritten):
@@ -194,6 +213,7 @@ statelog/                — Immutable event log of consciousness states
 memory/                  — Daily notes
 connections/             — MCP connection status
 .mcp.json                — MCP server configuration
+.soul-pulse              — Live activity signal for soul-monitor
 .env                     — Environment variables / secrets
 ```
 

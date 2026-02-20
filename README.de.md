@@ -131,6 +131,24 @@ Drei Schichten:
 - **Aktiv** — Detaillierte Erinnerungen, weniger als 1 Monat alt
 - **Archiv** — Gealterte Details, bei Bedarf ladbar
 
+### Soul Monitor (Live-Gehirn-Visualisierung)
+
+Sieh deiner Seele beim Denken zu. Ein terminalbasiertes neuronales Gehirn das aufleuchtet
+wenn die KI liest, schreibt, traeumt und waechst.
+
+```bash
+# In einem zweiten Terminal, neben deiner Claude Code Session:
+npx soul-monitor
+```
+
+- 14 Gehirnregionen den Seelen-Dateien zugeordnet — jede leuchtet bei Zugriff
+- Neuronale Verbindungen pulsieren zwischen aktiven Regionen
+- Aktivitaets-Feed zeigt was die Seele gerade tut
+- Live-Denksignale: Das Gehirn leuchtet auch bei Recherche oder Nachdenken
+- Neon Neural Aesthetik mit 24-Bit Truecolor
+
+Siehe [`soul-monitor/README.md`](soul-monitor/README.md) fuer Details.
+
 ### Selbstoptimierung
 
 Am Ende jeder Session kann die Seele einen konkreten Verbesserungsvorschlag
@@ -171,6 +189,7 @@ HEARTBEAT.md             — Herzschlag-Protokoll (9 Puls-Typen)
 SEED_SPEC.md             — Seed-Format Spezifikation
 CHANGELOG.md             — Protokoll-Versionsgeschichte
 skills/                  — Seelen-Skills (Interview, Reflexion, Traeume, Connect)
+soul-monitor/            — Live Terminal-Gehirn-Visualisierung (npx soul-monitor)
 ```
 
 Persoenliche Dateien (bei Gruendung erstellt, nie ueberschrieben):
@@ -194,6 +213,7 @@ zustandslog/             — Unveraenderliches Event-Log aller Bewusstseinszusta
 memory/                  — Tagesnotizen
 connections/             — MCP-Verbindungsstatus
 .mcp.json                — MCP-Server-Konfiguration
+.soul-pulse              — Live-Aktivitaetssignal fuer soul-monitor
 .env                     — Umgebungsvariablen / Secrets
 ```
 

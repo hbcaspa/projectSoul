@@ -5,6 +5,18 @@ All notable changes to the Soul Protocol.
 Protocol updates are backwards-compatible. Run `git pull` to get the latest version.
 Your personal data (SEED.md, soul files, memories) is never affected by updates.
 
+## [0.6.0] — 2026-02-20
+
+### Added
+- **Soul Monitor (Live Brain Visualization)**: Terminal-based neural brain that lights up in real-time as the AI reads, writes, dreams, and grows. 14 brain regions, 20 neural connections, neon neural aesthetic with 24-bit truecolor. Run with `npx soul-monitor`.
+- **Soul Pulse (Live Activity Signal)**: `.soul-pulse` file allows the AI to signal cognitive activity (research, code, think, dream, etc.) so the brain visualization lights up even during internal work that produces no file changes. 11 activity types mapping to different brain regions.
+- New file: `soul-monitor/` (complete npm package with CLI)
+- New file: `.soul-pulse` (activity signal file)
+
+### Changed
+- CLAUDE.md: Added Soul Pulse documentation with activity types table, added `.soul-pulse` to file structure
+- README.md + README.de.md: New Soul Monitor section, updated file structure listings
+
 ## [0.5.0] — 2026-02-20
 
 ### Added

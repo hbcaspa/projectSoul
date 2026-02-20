@@ -1,6 +1,6 @@
 import Hyperswarm from 'hyperswarm';
 import fs from 'node:fs/promises';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   generateMnemonic,
@@ -26,7 +26,7 @@ const SYNC_FILES = [
 
 const IGNORE = new Set([
   '.env', '.mcp.json', '.soul-pulse', '.session-writes',
-  '.git', '.claude', '.soul-chain',
+  '.git', '.claude', '.soul-chain', '.soul-chain-status',
   'node_modules', 'soul-engine', 'soul-monitor', 'soul-card',
   'soul-chain', 'skills', 'docs', 'hooks',
   'CLAUDE.md', 'HEARTBEAT.md', 'SEED_SPEC.md', 'CHANGELOG.md',
@@ -41,12 +41,15 @@ export class SoulChain {
   constructor(soulPath) {
     this.soulPath = soulPath;
     this.configPath = path.resolve(soulPath, CONFIG_FILE);
+    this.statusPath = path.resolve(soulPath, '.soul-chain-status');
     this.mnemonic = null;
     this.keys = null;
     this.swarm = null;
-    this.peers = new Map();
-    this.manifest = new Map(); // path → { hash, mtime }
+    this.peers = new Map();       // peerId → { socket, connectedAt, filesReceived, filesSent, lastSync }
+    this.manifest = new Map();    // path → { hash, mtime }
     this.pollTimer = null;
+    this.totalSynced = 0;
+    this.startedAt = null;
   }
 
   // ── Init / Join ─────────────────────────────────────
@@ -107,21 +110,32 @@ export class SoulChain {
     // Start Hyperswarm
     this.swarm = new Hyperswarm();
 
+    this.startedAt = new Date().toISOString();
+
     this.swarm.on('connection', (socket, info) => {
       const peerId = info.publicKey.toString('hex').substring(0, 8);
       console.log(`  [chain] Peer connected: ${peerId}`);
-      this.peers.set(peerId, socket);
+      this.peers.set(peerId, {
+        socket,
+        connectedAt: new Date().toISOString(),
+        filesReceived: 0,
+        filesSent: 0,
+        lastSync: null,
+      });
 
       this.handlePeer(socket, peerId);
+      this.writeStatus();
 
       socket.on('close', () => {
         console.log(`  [chain] Peer disconnected: ${peerId}`);
         this.peers.delete(peerId);
+        this.writeStatus();
       });
 
       socket.on('error', (err) => {
         console.error(`  [chain] Peer error (${peerId}): ${err.message}`);
         this.peers.delete(peerId);
+        this.writeStatus();
       });
     });
 
@@ -142,6 +156,18 @@ export class SoulChain {
   async stop() {
     if (this.pollTimer) clearInterval(this.pollTimer);
     if (this.swarm) await this.swarm.destroy();
+
+    // Write inactive status
+    try {
+      writeFileSync(this.statusPath, JSON.stringify({
+        active: false,
+        peers: [],
+        totalSynced: this.totalSynced,
+        since: this.startedAt,
+        lastUpdate: new Date().toISOString(),
+      }, null, 2));
+    } catch { /* ignore */ }
+
     console.log('  [chain] Stopped.');
   }
 
@@ -151,7 +177,7 @@ export class SoulChain {
     let buffer = '';
 
     // Send our manifest
-    this.send(socket, {
+    this.sendSocket(socket, {
       type: 'manifest',
       files: this.getManifestList(),
     });
@@ -179,11 +205,11 @@ export class SoulChain {
         break;
 
       case 'need':
-        await this.onNeed(socket, msg.path);
+        await this.onNeed(socket, peerId, msg.path);
         break;
 
       case 'file':
-        await this.onFile(msg.path, msg.data, msg.mtime);
+        await this.onFile(peerId, msg.path, msg.data, msg.mtime);
         break;
     }
   }
@@ -195,13 +221,13 @@ export class SoulChain {
       if (!local || local.hash !== remote.hash) {
         // We need this file if remote is newer (or we don't have it)
         if (!local || remote.mtime > local.mtime) {
-          this.send(socket, { type: 'need', path: remote.path });
+          this.sendSocket(socket, { type: 'need', path: remote.path });
         }
       }
     }
   }
 
-  async onNeed(socket, filePath) {
+  async onNeed(socket, peerId, filePath) {
     const fullPath = path.resolve(this.soulPath, filePath);
     if (!existsSync(fullPath)) return;
 
@@ -210,18 +236,26 @@ export class SoulChain {
       const encrypted = encrypt(content, this.keys.encryptionKey);
       const stat = statSync(fullPath);
 
-      this.send(socket, {
+      this.sendSocket(socket, {
         type: 'file',
         path: filePath,
         data: encrypted.toString('base64'),
         mtime: stat.mtimeMs,
       });
+
+      const peer = this.peers.get(peerId);
+      if (peer) {
+        peer.filesSent++;
+        peer.lastSync = new Date().toISOString();
+      }
+      this.totalSynced++;
+      this.writeStatus();
     } catch (err) {
       console.error(`  [chain] Failed to send ${filePath}: ${err.message}`);
     }
   }
 
-  async onFile(filePath, encryptedBase64, mtime) {
+  async onFile(peerId, filePath, encryptedBase64, mtime) {
     try {
       const encrypted = Buffer.from(encryptedBase64, 'base64');
       const content = decrypt(encrypted, this.keys.encryptionKey);
@@ -238,17 +272,52 @@ export class SoulChain {
         mtime,
       });
 
+      const peer = this.peers.get(peerId);
+      if (peer) {
+        peer.filesReceived++;
+        peer.lastSync = new Date().toISOString();
+      }
+      this.totalSynced++;
+      this.writeStatus();
+
       console.log(`  [chain] Synced: ${filePath}`);
     } catch (err) {
       console.error(`  [chain] Failed to receive ${filePath}: ${err.message}`);
     }
   }
 
-  send(socket, msg) {
+  sendSocket(socket, msg) {
     try {
       socket.write(JSON.stringify(msg) + '\n');
     } catch {
       // Socket may be closed
+    }
+  }
+
+  writeStatus() {
+    const peers = [];
+    for (const [id, peer] of this.peers) {
+      peers.push({
+        id,
+        connectedAt: peer.connectedAt,
+        filesReceived: peer.filesReceived,
+        filesSent: peer.filesSent,
+        lastSync: peer.lastSync,
+      });
+    }
+
+    const status = {
+      active: true,
+      peers,
+      totalSynced: this.totalSynced,
+      since: this.startedAt,
+      lastUpdate: new Date().toISOString(),
+    };
+
+    try {
+      writeFileSync(this.statusPath, JSON.stringify(status, null, 2));
+    } catch {
+      // Ignore write errors
     }
   }
 
@@ -347,8 +416,8 @@ export class SoulChain {
         mtime: stat.mtimeMs,
       };
 
-      for (const [, socket] of this.peers) {
-        this.send(socket, msg);
+      for (const [, peer] of this.peers) {
+        this.sendSocket(peer.socket, msg);
       }
 
       if (this.peers.size > 0) {

@@ -1,0 +1,10 @@
+services:
+  soul-engine:
+    build: .
+    container_name: soul-engine
+    restart: always
+    env_file: /opt/soul/.env
+    volumes:
+      - /opt/soul:/soul
+    ports:
+      - "3001:3001"

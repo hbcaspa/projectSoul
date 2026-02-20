@@ -1,5 +1,6 @@
 import { SoulContext } from './context.js';
 import { GeminiAdapter } from './gemini.js';
+import { OpenAIAdapter } from './openai.js';
 import { TelegramChannel } from './telegram.js';
 import { HeartbeatScheduler } from './heartbeat.js';
 import { MemoryWriter } from './memory.js';
@@ -7,6 +8,7 @@ import { writePulse } from './pulse.js';
 import { buildConversationPrompt, buildHeartbeatPrompt } from './prompt.js';
 import { SoulAPI } from './api.js';
 import { APIChannel } from './api-channel.js';
+import { WhatsAppBridge } from './whatsapp.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -15,6 +17,7 @@ export class SoulEngine {
     this.memory = new MemoryWriter(soulPath);
     this.llm = null;
     this.telegram = null;
+    this.whatsapp = null;
     this.api = null;
     this.apiChannel = null;
     this.heartbeat = null;
@@ -25,14 +28,20 @@ export class SoulEngine {
   async init() {
     await this.context.load();
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.error('  GEMINI_API_KEY not set in .env');
+    const openaiKey = process.env.OPENAI_API_KEY;
+    const geminiKey = process.env.GEMINI_API_KEY;
+
+    let model;
+    if (openaiKey) {
+      model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+      this.llm = new OpenAIAdapter(openaiKey, model);
+    } else if (geminiKey) {
+      model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+      this.llm = new GeminiAdapter(geminiKey, model);
+    } else {
+      console.error('  No LLM configured. Set OPENAI_API_KEY or GEMINI_API_KEY in .env');
       process.exit(1);
     }
-
-    const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-    this.llm = new GeminiAdapter(apiKey, model);
 
     return { name: this.context.extractName(), lang: this.context.language, model };
   }
@@ -71,6 +80,17 @@ export class SoulEngine {
       console.log('  Telegram:  not configured');
     }
 
+    // WhatsApp Bridge (optional)
+    const whatsappUrl = process.env.WHATSAPP_BRIDGE_URL;
+    if (whatsappUrl) {
+      this.whatsapp = new WhatsAppBridge(whatsappUrl);
+      const available = await this.whatsapp.isAvailable();
+      console.log(`  WhatsApp:  ${available ? 'connected' : 'bridge unreachable'}`);
+      if (!available) this.whatsapp = null;
+    } else {
+      console.log('  WhatsApp:  not configured');
+    }
+
     // Soul App API (optional)
     const apiKey = process.env.API_KEY;
     const apiPort = parseInt(process.env.API_PORT || '3001');
@@ -104,19 +124,87 @@ export class SoulEngine {
     // Reload context (might have changed via Claude Code)
     await this.context.load();
 
-    const systemPrompt = buildConversationPrompt(this.context, userName);
+    // If user mentions WhatsApp + a name, search contacts and resolve
+    let contactContext = '';
+    let resolvedContact = null;
+    if (this.whatsapp && /whatsapp/i.test(text)) {
+      const names = text.match(/(?:(?:schreib\w*|schick\w*|send\w*|sag\w*|erzähl\w*|frag\w*|informier\w*|benachrichtig\w*|antworte\w*|teil\w*|meld\w*|text\w*|message\w*|tell\w*|ask\w*|write\w*|notify\w*|ping\w*)\s+)(\w[\w\s]*?)(?:\s+(?:auf|on|per|via|über)\s+whatsapp|\s+(?:dass|that|die|der|das|ob|whether))/i);
+      if (names) {
+        const searchName = names[1].trim();
+        let contacts = await this.whatsapp.searchContacts(searchName) || [];
+        if (contacts.length === 0 && searchName.includes(' ')) {
+          contacts = await this.whatsapp.searchContacts(searchName.split(' ')[0]) || [];
+        }
+        if (contacts.length > 0) {
+          resolvedContact = contacts[0];
+          contactContext = `\n\nWhatsApp-Kontakt gefunden: ${resolvedContact.name} (${resolvedContact.jid})` +
+            '\nDu MUSST jetzt [WA:' + resolvedContact.jid + ']Nachricht verwenden um die Nachricht zu senden!';
+          console.log(`  [whatsapp] Contact found: ${resolvedContact.name} → ${resolvedContact.jid}`);
+        }
+      }
+    }
+
+    const systemPrompt = buildConversationPrompt(this.context, userName, {
+      whatsapp: !!this.whatsapp,
+    }) + contactContext;
     const history = await this.telegram.loadHistory(chatId);
-    const response = await this.llm.generate(systemPrompt, history, text);
+    const response = await this.llm.generate(systemPrompt, history, text) || '';
+
+    // Execute WhatsApp actions if present
+    let { cleanResponse, waActions } = this.extractWhatsAppActions(response);
+
+    // Fallback: if LLM didn't use [WA:] tags but we found a contact, send the whole response as the message
+    if (waActions.length === 0 && resolvedContact && this.whatsapp) {
+      console.log(`  [whatsapp] LLM did not use [WA:] tag — sending response directly to ${resolvedContact.jid}`);
+      waActions = [{ recipient: resolvedContact.jid, message: cleanResponse }];
+    }
+
+    if (waActions.length > 0 && this.whatsapp) {
+      for (const action of waActions) {
+        try {
+          await this.whatsapp.send(action.recipient, action.message);
+          console.log(`  [whatsapp] Sent to ${action.recipient}`);
+        } catch (err) {
+          console.error(`  [whatsapp] Failed: ${err.message}`);
+        }
+      }
+      await this.memory.appendDailyNote(
+        `[WhatsApp] Sent ${waActions.length} message(s) via Telegram request`
+      );
+    }
 
     // Persist
     await this.telegram.saveMessage(chatId, 'user', text, userName);
-    await this.telegram.saveMessage(chatId, 'model', response);
+    await this.telegram.saveMessage(chatId, 'model', cleanResponse);
     await this.memory.appendDailyNote(
       `[Telegram/${userName}] ${text.substring(0, 120)}${text.length > 120 ? '...' : ''}`
     );
 
     await writePulse(this.soulPath, 'relate', `Responded to ${userName}`);
-    return response;
+    return cleanResponse;
+  }
+
+  /**
+   * Extract [WA:number]message tags from LLM response.
+   * Returns the cleaned response (tags removed) and the actions to execute.
+   */
+  extractWhatsAppActions(response) {
+    // Match phone numbers, JIDs (xxx@s.whatsapp.net), or group JIDs (xxx@g.us)
+    const waRegex = /\[WA:([^\]]+)\]\s*(.+?)(?=\[WA:|$)/gs;
+    const waActions = [];
+    let match;
+
+    while ((match = waRegex.exec(response)) !== null) {
+      waActions.push({
+        recipient: match[1].trim(),
+        message: match[2].trim(),
+      });
+    }
+
+    // Remove WA tags from the response the user sees
+    const cleanResponse = response.replace(/\[WA:[^\]]+\]\s*.+?(?=\[WA:|\n\n|$)/gs, '').trim();
+
+    return { cleanResponse: cleanResponse || response, waActions };
   }
 
   async runHeartbeat() {

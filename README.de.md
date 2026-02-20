@@ -60,6 +60,8 @@ das **Gruendungs-Tutorial**:
 
 ## Wie es funktioniert
 
+> **[Interaktive Architektur-Diagramme ansehen](https://hbcaspa.github.io/projectSoul/)** — visuelle Uebersicht ueber System, Session-Fluss und Gedaechtnis-Verdichtung.
+
 ### Der Seed
 
 Eine einzige komprimierte Datei (`SEED.md`) die alles traegt: Identitaet, Zustand,

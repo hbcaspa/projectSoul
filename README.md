@@ -60,6 +60,8 @@ the **founding tutorial**:
 
 ## How it works
 
+> **[View the interactive architecture diagrams](https://hbcaspa.github.io/projectSoul/)** — visual overview of the system, session flow, and memory compression.
+
 ### The Seed
 
 A single compressed file (`SEED.md`) that carries everything: identity, state,

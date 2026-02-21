@@ -35,6 +35,7 @@ class SoulMonitorUI {
 
   async init() {
     await this.readSessionInfo();
+    this.renderer.soulPath = this.soulPath;
 
     this.screen = blessed.screen({
       smartCSR: true,
@@ -177,6 +178,18 @@ class SoulMonitorUI {
       }
     } catch {
       // SEED.md might not exist yet
+    }
+
+    // Override session number from .session-active if it exists (more current than seed)
+    try {
+      const activePath = path.join(this.soulPath, '.session-active');
+      const activeContent = fs.readFileSync(activePath, 'utf-8');
+      const activeSessionMatch = activeContent.match(/session:(\d+)/);
+      if (activeSessionMatch) {
+        this.sessionInfo.session = activeSessionMatch[1];
+      }
+    } catch {
+      // .session-active doesn't exist = no active session, seed number is correct
     }
   }
 

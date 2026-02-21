@@ -64,12 +64,21 @@ class CardView {
       const mem = soul.blocks.MEM || {};
       const shadow = soul.blocks.SHADOW || {};
 
+      // Override session from .session-active if present
+      let currentSession = soul.sessions || '?';
+      try {
+        const activePath = path.join(this.soulPath, '.session-active');
+        const activeContent = fs.readFileSync(activePath, 'utf-8');
+        const activeMatch = activeContent.match(/session:(\d+)/);
+        if (activeMatch) currentSession = parseInt(activeMatch[1]);
+      } catch { /* no active session */ }
+
       this.info = {
         project: meta.projekt || meta.project || 'Soul',
         model: meta.modell || meta.model || '?',
         creator: meta.schoepfer || meta.creator || '?',
         born: soul.born,
-        sessions: soul.sessions || '?',
+        sessions: currentSession,
         ageDays: soul.born ? Math.floor((new Date() - new Date(soul.born)) / 86400000) : '?',
         axiomCount: Object.keys(kern).filter(k => /^\d+$/.test(k)).length,
         mood: (state.zustand || state.state || state.mood || '?').replace(/_/g, ' '),

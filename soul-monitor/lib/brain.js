@@ -76,6 +76,7 @@ class BrainRenderer {
     this.activityLog = []; // Recent activity feed
     this.maxLogEntries = 8;
     this.currentAction = null; // Current pulse action for status line
+    this.soulPath = null; // Set by UI for chain status reading
   }
 
   addActivity(node, file, event) {
@@ -317,6 +318,27 @@ class BrainRenderer {
     return lines.join('\n');
   }
 
+  /**
+   * Read chain health from .soul-chain-status
+   */
+  getChainHealth() {
+    if (!this.soulPath) return null;
+    try {
+      const statusPath = require('path').join(this.soulPath, '.soul-chain-status');
+      if (!require('fs').existsSync(statusPath)) return null;
+      const data = JSON.parse(require('fs').readFileSync(statusPath, 'utf-8'));
+      return {
+        active: data.active,
+        health: data.health || (data.active ? 'unknown' : 'offline'),
+        peerCount: (data.peers || []).length,
+        totalSynced: data.totalSynced || 0,
+        lastUpdate: data.lastUpdate,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   renderStatusBar(activeNodes, sessionInfo) {
     const activeCount = Object.keys(activeNodes).filter(k => activeNodes[k] > 0).length;
     const totalNodes = Object.keys(NODES).length;
@@ -335,10 +357,30 @@ class BrainRenderer {
 
     const statusColor = activeCount > 0 ? PALETTE.cyan : PALETTE.dimWhite;
 
+    // Chain health indicator
+    let chainStr = '';
+    const chain = this.getChainHealth();
+    if (chain) {
+      const healthDisplay = {
+        syncing: { symbol: '\u21C5', color: PALETTE.cyan,      label: 'SYNCING' },  // ⇅
+        synced:  { symbol: '\u2713', color: PALETTE.green || [0,200,100], label: 'SYNCED' },   // ✓
+        idle:    { symbol: '\u223C', color: PALETTE.gold,       label: 'IDLE' },     // ∼
+        stale:   { symbol: '\u26A0', color: PALETTE.heartbeat,  label: 'STALE' },    // ⚠
+        offline: { symbol: '\u2717', color: PALETTE.dimWhite,   label: 'OFFLINE' },  // ✗
+        unknown: { symbol: '?',      color: PALETTE.dimWhite,   label: 'CHAIN' },
+      };
+      const h = healthDisplay[chain.health] || healthDisplay.unknown;
+      const chainPulse = chain.health === 'syncing' ? glow(this.tick, 3) * 0.4 : 0;
+      const chainColor = lerp(h.color, PALETTE.white, chainPulse);
+      chainStr = `  ${fg(chainColor)}${h.symbol} ${h.label}${RESET}` +
+        `${fg(PALETTE.dimWhite)}${DIM}(${chain.peerCount}p)${RESET}`;
+    }
+
     return (
       `  ${fg(heartColor)}${heart}${RESET} ` +
       `${workingStr}  ` +
-      `${fg(statusColor)}${activeCount}/${totalNodes} active${RESET}  ` +
+      `${fg(statusColor)}${activeCount}/${totalNodes} active${RESET}` +
+      `${chainStr}  ` +
       `${fg(PALETTE.dimWhite)}${DIM}q:quit${RESET}`
     );
   }

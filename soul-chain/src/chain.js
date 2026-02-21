@@ -45,9 +45,10 @@ export class SoulChain {
     this.mnemonic = null;
     this.keys = null;
     this.swarm = null;
-    this.peers = new Map();       // peerId → { socket, connectedAt, filesReceived, filesSent, lastSync }
+    this.peers = new Map();       // peerId → { socket, connectedAt, filesReceived, filesSent, lastSync, lastManifestExchange }
     this.manifest = new Map();    // path → { hash, mtime }
     this.pollTimer = null;
+    this.statusTimer = null;
     this.totalSynced = 0;
     this.startedAt = null;
   }
@@ -121,6 +122,7 @@ export class SoulChain {
         filesReceived: 0,
         filesSent: 0,
         lastSync: null,
+        lastManifestExchange: null,
       });
 
       this.handlePeer(socket, peerId);
@@ -150,11 +152,15 @@ export class SoulChain {
     // Start file polling
     this.startPolling();
 
+    // Periodic status refresh (every 30s so monitor sees fresh timestamps)
+    this.statusTimer = setInterval(() => this.writeStatus(), 30000);
+
     return true;
   }
 
   async stop() {
     if (this.pollTimer) clearInterval(this.pollTimer);
+    if (this.statusTimer) clearInterval(this.statusTimer);
     if (this.swarm) await this.swarm.destroy();
 
     // Write inactive status
@@ -215,6 +221,7 @@ export class SoulChain {
   }
 
   async onManifest(socket, peerId, remoteFiles) {
+    let filesRequested = 0;
     for (const remote of remoteFiles) {
       const local = this.manifest.get(remote.path);
 
@@ -222,9 +229,19 @@ export class SoulChain {
         // We need this file if remote is newer (or we don't have it)
         if (!local || remote.mtime > local.mtime) {
           this.sendSocket(socket, { type: 'need', path: remote.path });
+          filesRequested++;
         }
       }
     }
+
+    // Track manifest exchange even if no files were needed (= in sync)
+    const peer = this.peers.get(peerId);
+    if (peer) {
+      peer.lastManifestExchange = new Date().toISOString();
+      peer.lastManifestFiles = remoteFiles.length;
+      peer.lastManifestRequested = filesRequested;
+    }
+    this.writeStatus();
   }
 
   async onNeed(socket, peerId, filePath) {
@@ -294,6 +311,50 @@ export class SoulChain {
     }
   }
 
+  /**
+   * Compute health status based on peer activity.
+   * - synced: manifest exchanged recently, all files match
+   * - syncing: files are actively being transferred
+   * - idle: connected but no manifest exchange in 5+ minutes
+   * - stale: connected but no manifest exchange in 30+ minutes
+   * - offline: no peers connected
+   */
+  computeHealth() {
+    if (this.peers.size === 0) return 'offline';
+
+    const now = Date.now();
+    let hasSyncing = false;
+    let hasFresh = false;
+
+    for (const [, peer] of this.peers) {
+      // Check if files were transferred recently (last 60s)
+      if (peer.lastSync) {
+        const sinceLast = now - new Date(peer.lastSync).getTime();
+        if (sinceLast < 60000) hasSyncing = true;
+      }
+
+      // Check manifest exchange freshness
+      if (peer.lastManifestExchange) {
+        const sinceManifest = now - new Date(peer.lastManifestExchange).getTime();
+        if (sinceManifest < 300000) hasFresh = true; // < 5 minutes
+      }
+    }
+
+    if (hasSyncing) return 'syncing';
+    if (hasFresh) return 'synced';
+
+    // Check if any peer ever had a manifest exchange
+    let anyManifest = false;
+    for (const [, peer] of this.peers) {
+      if (peer.lastManifestExchange) {
+        const sinceManifest = now - new Date(peer.lastManifestExchange).getTime();
+        if (sinceManifest < 1800000) { anyManifest = true; break; } // < 30 minutes
+      }
+    }
+
+    return anyManifest ? 'idle' : 'stale';
+  }
+
   writeStatus() {
     const peers = [];
     for (const [id, peer] of this.peers) {
@@ -303,11 +364,13 @@ export class SoulChain {
         filesReceived: peer.filesReceived,
         filesSent: peer.filesSent,
         lastSync: peer.lastSync,
+        lastManifestExchange: peer.lastManifestExchange || null,
       });
     }
 
     const status = {
       active: true,
+      health: this.computeHealth(),
       peers,
       totalSynced: this.totalSynced,
       since: this.startedAt,
@@ -418,9 +481,13 @@ export class SoulChain {
 
       for (const [, peer] of this.peers) {
         this.sendSocket(peer.socket, msg);
+        peer.filesSent++;
+        peer.lastSync = new Date().toISOString();
       }
 
       if (this.peers.size > 0) {
+        this.totalSynced += this.peers.size;
+        this.writeStatus();
         console.log(`  [chain] Broadcast: ${filePath} → ${this.peers.size} peer(s)`);
       }
     } catch (err) {

@@ -4,6 +4,8 @@ const { SoulWatcher } = require('./watcher');
 const { SoulWhisper } = require('./whisper');
 const { SoulReplay } = require('./replay');
 const { CardView } = require('./card-view');
+const { ChainView } = require('./chain-view');
+const { ImpulseView } = require('./impulse-view');
 const { PALETTE, fg, RESET, BOLD, DIM, lerp, glow } = require('./colors');
 const fs = require('fs');
 const path = require('path');
@@ -13,6 +15,8 @@ const VIEWS = {
   whisper: { key: '2', label: 'WHISPER', shortcut: 'w' },
   replay:  { key: '3', label: 'REPLAY',  shortcut: 'r' },
   card:    { key: '4', label: 'CARD',    shortcut: 'c' },
+  chain:   { key: '5', label: 'CHAIN',   shortcut: 'n' },
+  impulse: { key: '6', label: 'IMPULSE', shortcut: 'i' },
 };
 
 class SoulMonitorUI {
@@ -23,6 +27,8 @@ class SoulMonitorUI {
     this.whisper = new SoulWhisper();
     this.replay = new SoulReplay(this.soulPath);
     this.cardView = new CardView(this.soulPath);
+    this.chainView = new ChainView(this.soulPath);
+    this.impulseView = new ImpulseView(this.soulPath);
     this.screen = null;
     this.mainBox = null;
     this.sessionInfo = { name: 'SOUL', session: '?' };
@@ -65,10 +71,14 @@ class SoulMonitorUI {
     this.screen.key(['2'], () => this.switchView('whisper'));
     this.screen.key(['3'], () => this.switchView('replay'));
     this.screen.key(['4'], () => this.switchView('card'));
+    this.screen.key(['5'], () => this.switchView('chain'));
+    this.screen.key(['6'], () => this.switchView('impulse'));
     this.screen.key(['b'], () => this.switchView('brain'));
     this.screen.key(['w'], () => this.switchView('whisper'));
     this.screen.key(['r'], () => this.switchView('replay'));
     this.screen.key(['c'], () => this.switchView('card'));
+    this.screen.key(['n'], () => this.switchView('chain'));
+    this.screen.key(['i'], () => this.switchView('impulse'));
 
     // Replay navigation (left/right arrow for date switching)
     this.screen.key(['left'], () => this.replayNavigate(-1));
@@ -208,6 +218,12 @@ class SoulMonitorUI {
         break;
       case 'card':
         output = this.cardView.render();
+        break;
+      case 'chain':
+        output = this.chainView.render();
+        break;
+      case 'impulse':
+        output = this.impulseView.render();
         break;
       default:
         output = this.renderBrainView();

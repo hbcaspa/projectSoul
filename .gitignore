@@ -45,6 +45,9 @@ connections/*
 .session-writes
 .session-active
 .soul-chain
+.soul-chain-status
+.soul-impulse-state
+.soul-impulse-log
 
 # Soul Engine conversation logs (personal data)
 conversations/

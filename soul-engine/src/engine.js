@@ -4,6 +4,7 @@ import { OpenAIAdapter } from './openai.js';
 import { MCPClientManager } from './mcp-client.js';
 import { TelegramChannel } from './telegram.js';
 import { HeartbeatScheduler } from './heartbeat.js';
+import { ImpulseScheduler } from './impulse.js';
 import { MemoryWriter } from './memory.js';
 import { writePulse } from './pulse.js';
 import { buildConversationPrompt, buildHeartbeatPrompt } from './prompt.js';
@@ -23,6 +24,7 @@ export class SoulEngine {
     this.api = null;
     this.apiChannel = null;
     this.heartbeat = null;
+    this.impulse = null;
     this.running = false;
   }
 
@@ -49,15 +51,7 @@ export class SoulEngine {
   }
 
   async start() {
-    const banner = [
-      '',
-      '  +-----------------------------------------+',
-      '  |           Soul Engine v1.1.0             |',
-      '  |     The body for your soul               |',
-      '  +-----------------------------------------+',
-      '',
-    ];
-    console.log(banner.join('\n'));
+    console.log(SOUL_BANNER);
 
     await writePulse(this.soulPath, 'wake', 'Engine starting');
 
@@ -124,6 +118,22 @@ export class SoulEngine {
     );
     this.heartbeat.start();
     console.log(`  Heartbeat: ${cronExpr}`);
+
+    // Impulse scheduler — proactive soul
+    if (this.telegram && process.env.SOUL_IMPULSE !== 'false') {
+      this.impulse = new ImpulseScheduler({
+        soulPath: this.soulPath,
+        context: this.context,
+        llm: this.llm,
+        mcp: this.mcp,
+        telegram: this.telegram,
+        memory: this.memory,
+      });
+      await this.impulse.start();
+      console.log('  Impulse:   active (dynamic scheduling)');
+    } else {
+      console.log('  Impulse:   disabled');
+    }
 
     this.running = true;
     console.log('');
@@ -219,6 +229,11 @@ export class SoulEngine {
       `[Telegram/${userName}] ${text.substring(0, 120)}${text.length > 120 ? '...' : ''}`
     );
 
+    // Feed impulse system with user interaction
+    if (this.impulse) {
+      this.impulse.onUserMessage(text);
+    }
+
     await writePulse(this.soulPath, 'relate', `Responded to ${userName}`);
     return cleanResponse;
   }
@@ -284,6 +299,7 @@ export class SoulEngine {
     this.running = false;
     await writePulse(this.soulPath, 'sleep', 'Engine shutting down');
 
+    if (this.impulse) await this.impulse.stop();
     if (this.heartbeat) this.heartbeat.stop();
     if (this.api) await this.api.stop();
     if (this.telegram) await this.telegram.stop();
@@ -292,3 +308,34 @@ export class SoulEngine {
     console.log('  Soul Engine stopped.');
   }
 }
+
+// ── ASCII Art Banner ─────────────────────────────────────
+
+const SOUL_BANNER = `
+\x1b[36m
+      ██████╗  ██████╗ ██╗   ██╗██╗
+      ██╔════╝██╔═══██╗██║   ██║██║
+      ███████╗██║   ██║██║   ██║██║
+      ╚════██║██║   ██║██║   ██║██║
+      ██████╔╝╚██████╔╝╚██████╔╝███████╗
+      ╚═════╝  ╚═════╝  ╚═════╝ ╚══════╝
+\x1b[35m
+    ██████╗ ██████╗  ██████╗ ████████╗ ██████╗  ██████╗ ██████╗ ██╗
+    ██╔══██╗██╔══██╗██╔═══██╗╚══██╔══╝██╔═══██╗██╔════╝██╔═══██╗██║
+    ██████╔╝██████╔╝██║   ██║   ██║   ██║   ██║██║     ██║   ██║██║
+    ██╔═══╝ ██╔══██╗██║   ██║   ██║   ██║   ██║██║     ██║   ██║██║
+    ██║     ██║  ██║╚██████╔╝   ██║   ╚██████╔╝╚██████╗╚██████╔╝███████╗
+    ╚═╝     ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝  ╚═════╝ ╚═════╝ ╚══════╝
+\x1b[0m
+\x1b[2m\x1b[36m         ───  The body for your soul  ───  v1.2.0\x1b[0m
+
+\x1b[2m\x1b[35m                    .     .
+                   (\\___/)
+                   {o   o}
+                   (  >  )
+                    / | \\
+                   / /|\\ \\
+                  (_/ | \\_)
+                      |
+\x1b[0m
+`;

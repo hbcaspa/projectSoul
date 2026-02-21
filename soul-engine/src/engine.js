@@ -170,22 +170,36 @@ export class SoulEngine {
     // Reload context (might have changed via Claude Code)
     await this.context.load();
 
-    // If user mentions WhatsApp + a name, search contacts and resolve
+    // If user mentions WhatsApp, try to extract and resolve contact names
     let contactContext = '';
     let resolvedContact = null;
     if (this.whatsapp && /whatsapp/i.test(text)) {
-      const names = text.match(/(?:(?:schreib\w*|schick\w*|send\w*|sag\w*|erzähl\w*|frag\w*|informier\w*|benachrichtig\w*|antworte\w*|teil\w*|meld\w*|text\w*|message\w*|tell\w*|ask\w*|write\w*|notify\w*|ping\w*)\s+)(\w[\w\s]*?)(?:\s+(?:auf|on|per|via|über)\s+whatsapp|\s+(?:dass|that|die|der|das|ob|whether))/i);
-      if (names) {
-        const searchName = names[1].trim();
-        let contacts = await this.whatsapp.searchContacts(searchName) || [];
-        if (contacts.length === 0 && searchName.includes(' ')) {
-          contacts = await this.whatsapp.searchContacts(searchName.split(' ')[0]) || [];
-        }
-        if (contacts.length > 0) {
-          resolvedContact = contacts[0];
-          contactContext = `\n\nWhatsApp-Kontakt gefunden: ${resolvedContact.name} (${resolvedContact.jid})` +
-            '\nDu MUSST jetzt [WA:' + resolvedContact.jid + ']Nachricht verwenden um die Nachricht zu senden!';
-          console.log(`  [whatsapp] Contact found: ${resolvedContact.name} → ${resolvedContact.jid}`);
+      // Strategy 1: Extract name from send-command patterns
+      const sendMatch = text.match(/(?:(?:schreib\w*|schick\w*|send\w*|sag\w*|erzähl\w*|frag\w*|informier\w*|benachrichtig\w*|antworte\w*|teil\w*|meld\w*|text\w*|message\w*|tell\w*|ask\w*|write\w*|notify\w*|ping\w*)\s+)(\w[\w\s]*?)(?:\s+(?:auf|on|per|via|über)\s+whatsapp|\s+(?:dass|that|die|der|das|ob|whether))/i);
+
+      // Strategy 2: Extract name from "X auf/on WhatsApp" pattern
+      const toMatch = !sendMatch && text.match(/(\w[\w\s]{1,30}?)\s+(?:auf|on|per|via|über)\s+whatsapp/i);
+
+      // Strategy 3: Extract name after WhatsApp keyword ("WhatsApp an X", "WhatsApp Kontakt X")
+      const afterMatch = !sendMatch && !toMatch && text.match(/whatsapp\w*\s+(?:an|to|kontakt|contact|von|from|mit|with|nachricht|message)?\s*(\w[\w\s]{1,30})/i);
+
+      const nameMatch = sendMatch || toMatch || afterMatch;
+      if (nameMatch) {
+        const searchName = nameMatch[1].trim().replace(/\s+(auf|on|per|via|über|whatsapp|kontakt|contact).*$/i, '').trim();
+        if (searchName.length >= 2) {
+          let contacts = await this.whatsapp.searchContacts(searchName) || [];
+          if (contacts.length === 0 && searchName.includes(' ')) {
+            contacts = await this.whatsapp.searchContacts(searchName.split(' ')[0]) || [];
+          }
+          if (contacts.length > 0) {
+            resolvedContact = contacts[0];
+            contactContext = `\n\nWhatsApp-Kontakt gefunden: ${resolvedContact.name} (${resolvedContact.jid})` +
+              '\nDu MUSST jetzt [WA:' + resolvedContact.jid + ']Nachricht verwenden um die Nachricht zu senden!';
+            console.log(`  [whatsapp] Contact found: ${resolvedContact.name} → ${resolvedContact.jid}`);
+          } else {
+            contactContext = `\n\nWhatsApp-Kontakt "${searchName}" wurde NICHT gefunden. Frage nach der Telefonnummer.`;
+            console.log(`  [whatsapp] Contact not found: ${searchName}`);
+          }
         }
       }
     }

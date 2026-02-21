@@ -98,6 +98,103 @@ export class MemoryWriter {
       }
     }
   }
+
+  /**
+   * Write learned data from a user interaction to soul files.
+   * Called immediately when user shares something relevant.
+   */
+  async writeLearned({ detectedInterests, newInterests, boostedInterests, topics, userName }) {
+    const lines = [];
+
+    // Log new interests prominently
+    if (newInterests.length > 0) {
+      lines.push(`[Gelernt/Neu] ${userName} interessiert sich fuer: ${newInterests.join(', ')}`);
+    }
+
+    // Log boosted interests
+    if (boostedInterests.length > 0) {
+      lines.push(`[Gelernt/Verstaerkt] ${userName} spricht wieder ueber: ${boostedInterests.join(', ')}`);
+    }
+
+    // Log detected topics
+    if (topics && topics.length > 0) {
+      for (const topic of topics) {
+        const prefix = topic.type === 'question' ? 'Frage' :
+                       topic.type === 'opinion' ? 'Meinung' : 'Thema';
+        lines.push(`[Gelernt/${prefix}] ${topic.text}`);
+      }
+    }
+
+    // Write all to daily notes
+    for (const line of lines) {
+      await this.appendDailyNote(line);
+    }
+
+    // Write to dedicated learning log (rolling file for chain sync)
+    if (lines.length > 0) {
+      await this._updateLearningLog(detectedInterests, topics, userName);
+    }
+  }
+
+  /**
+   * Write a rolling learning snapshot that changes with every interaction.
+   * This file gets synced by the chain, keeping peers up to date on learned data.
+   */
+  async _updateLearningLog(interests, topics, userName) {
+    const dir = resolve(this.soulPath, 'memory');
+    await mkdir(dir, { recursive: true });
+
+    const file = resolve(dir, 'learned-today.md');
+    const date = isoDate();
+    const time = isoTime();
+
+    // Read existing or create new
+    let content = '';
+    if (existsSync(file)) {
+      content = await readFile(file, 'utf-8');
+      // Reset if from a different day
+      if (!content.startsWith(`# Gelernt — ${date}`)) {
+        content = '';
+      }
+    }
+
+    if (!content) {
+      content = `# Gelernt — ${date}\n\n> Automatisch erfasst aus Gespraechen. Wird taeglich zurueckgesetzt.\n`;
+    }
+
+    const entry = `\n## ${time} — ${userName || 'User'}\n`;
+    const items = [];
+    if (interests.length > 0) items.push(`- Interessen: ${interests.join(', ')}`);
+    if (topics) {
+      for (const t of topics) {
+        items.push(`- ${t.type}: ${t.text}`);
+      }
+    }
+
+    if (items.length > 0) {
+      content += entry + items.join('\n') + '\n';
+      await writeFile(file, content);
+    }
+  }
+
+  /**
+   * Write a lightweight state tick for chain sync.
+   * Updated every ~2 min by the impulse tick, no LLM call needed.
+   */
+  async writeStateTick(mood, engagement, topInterests, dailyCount) {
+    const file = resolve(this.soulPath, '.soul-state-tick');
+    const data = {
+      timestamp: new Date().toISOString(),
+      mood,
+      engagement,
+      topInterests,
+      dailyImpulseCount: dailyCount,
+    };
+
+    try {
+      await writeFile(file, JSON.stringify(data, null, 2));
+    } catch { /* best effort */ }
+  }
 }
 
 function isoDate() {

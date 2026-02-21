@@ -243,9 +243,22 @@ export class SoulEngine {
       `[Telegram/${userName}] ${text.substring(0, 120)}${text.length > 120 ? '...' : ''}`
     );
 
-    // Feed impulse system with user interaction
+    // Feed impulse system with user interaction + live write-through
     if (this.impulse) {
-      this.impulse.onUserMessage(text);
+      const learned = this.impulse.onUserMessage(text);
+
+      // Live write-through: write learned data to soul files immediately
+      if (learned && learned.hasRelevantContent) {
+        try {
+          await this.memory.writeLearned({
+            ...learned,
+            userName: userName || 'User',
+          });
+          console.log(`  [learned] ${learned.newInterests.length} new, ${learned.boostedInterests.length} boosted, ${learned.topics.length} topics`);
+        } catch (err) {
+          console.error(`  [learned] Write failed: ${err.message}`);
+        }
+      }
     }
 
     await writePulse(this.soulPath, 'relate', `Responded to ${userName}`);

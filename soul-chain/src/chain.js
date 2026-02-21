@@ -22,6 +22,7 @@ const SYNC_DIRS = [
 
 const SYNC_FILES = [
   'SEED.md', 'SOUL.md', '.language',
+  '.soul-impulse-state', '.soul-impulse-log', '.soul-state-tick',
 ];
 
 const IGNORE = new Set([

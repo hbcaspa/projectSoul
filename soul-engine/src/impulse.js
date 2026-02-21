@@ -7,6 +7,7 @@ const DEFAULT_MIN_DELAY = 600;    // 10 minutes
 const DEFAULT_MAX_DELAY = 14400;  // 4 hours
 const DEFAULT_NIGHT_START = 23;
 const DEFAULT_NIGHT_END = 7;
+const TICK_INTERVAL = 120000;     // 2 minutes — lightweight state tick
 
 export class ImpulseScheduler {
   constructor({ soulPath, context, llm, mcp, telegram, memory }) {
@@ -18,6 +19,7 @@ export class ImpulseScheduler {
     this.memory = memory;
     this.state = new ImpulseState(soulPath);
     this.timer = null;
+    this.tickTimer = null;
     this.running = false;
 
     // Config from env
@@ -31,14 +33,19 @@ export class ImpulseScheduler {
     await this.state.load();
     this.running = true;
 
+    // Start heartbeat tick (every 2 min — lightweight, no LLM)
+    this._startTick();
+
     // First impulse after a short warm-up (30-90 seconds)
     const warmup = 30000 + Math.random() * 60000;
     console.log(`  [impulse] First impulse in ${Math.round(warmup / 1000)}s`);
+    console.log(`  [impulse] Tick active (every ${TICK_INTERVAL / 1000}s)`);
     this.timer = setTimeout(() => this._loop(), warmup);
   }
 
   async stop() {
     this.running = false;
+    this._stopTick();
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
@@ -46,10 +53,14 @@ export class ImpulseScheduler {
     await this.state.save();
   }
 
-  /** Called when user sends a Telegram message */
+  /**
+   * Called when user sends a Telegram message.
+   * Returns detected learning data for live write-through.
+   */
   onUserMessage(text) {
-    this.state.trackUserMessage(text);
+    const learned = this.state.trackUserMessage(text);
     this.state.save().catch(() => {});
+    return learned;
   }
 
   // ── Core Loop ─────────────────────────────────────────
@@ -234,6 +245,62 @@ export class ImpulseScheduler {
     };
 
     return triggers[type] || triggers.share_thought;
+  }
+
+  // ── Heartbeat Tick (lightweight, no LLM) ──────────────
+
+  _startTick() {
+    this.tickTimer = setInterval(() => this._tick(), TICK_INTERVAL);
+  }
+
+  _stopTick() {
+    if (this.tickTimer) {
+      clearInterval(this.tickTimer);
+      this.tickTimer = null;
+    }
+  }
+
+  async _tick() {
+    if (!this.running) return;
+
+    try {
+      // Natural mood drift (tiny, accumulates over time)
+      this.state.driftMood();
+      this.state.applyTimeInfluence();
+
+      // Light engagement decay
+      if (this.state.engagement > 0.1) {
+        this.state.state.engagementScore = Math.max(0, this.state.engagement - 0.005);
+      }
+
+      // Save state — this writes .soul-impulse-state which chain syncs
+      await this.state.save();
+
+      // Append lightweight tick entry to log (for monitor)
+      await this.state.appendLog({
+        type: 'tick',
+        time: new Date().toISOString(),
+        preview: `Mood: ${this.state.mood.label} (${this.state.mood.valence.toFixed(2)}/${this.state.mood.energy.toFixed(2)}) | Engagement: ${this.state.engagement.toFixed(2)}`,
+        mood: { ...this.state.mood },
+        engagement: this.state.engagement,
+      });
+
+      // Write pulse signal (monitor sees activity)
+      await writePulse(this.soulPath, 'heartbeat', `tick — ${this.state.mood.label}`);
+
+      // Write state tick file (another file for chain to sync)
+      if (this.memory) {
+        await this.memory.writeStateTick(
+          this.state.mood,
+          this.state.engagement,
+          this.state.getTopInterests(5),
+          this.state.dailyCount,
+        );
+      }
+    } catch (err) {
+      // Tick is best-effort, never crash
+      console.error(`  [impulse/tick] Error: ${err.message}`);
+    }
   }
 
   // ── LLM Options ───────────────────────────────────────

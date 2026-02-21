@@ -200,6 +200,10 @@ export class ImpulseState {
 
   // ── Interest Tracking ─────────────────────────────────
 
+  /**
+   * Track a user message — extract interests, update engagement.
+   * Returns { detectedInterests, isNew, moodShift } for live write-through.
+   */
   trackUserMessage(text) {
     this.state.lastUserMessage = new Date().toISOString();
     this.markLastImpulseResponded();
@@ -215,17 +219,68 @@ export class ImpulseState {
       }
     }
 
-    // Boost found interests
+    // Track which are new vs boosted
+    const newInterests = [];
+    const boostedInterests = [];
+
     for (const interest of found) {
       const current = this.state.interestWeights[interest] || 0;
       if (current === 0) {
-        // New interest
         this.state.interestWeights[interest] = 0.5;
+        newInterests.push(interest);
       } else {
-        // Boost existing
         this.state.interestWeights[interest] = Math.min(1, current + 0.15);
+        boostedInterests.push(interest);
       }
     }
+
+    // Detect topics beyond keywords (longer phrases, questions, opinions)
+    const topics = this._extractTopics(text);
+
+    return {
+      detectedInterests: [...found],
+      newInterests,
+      boostedInterests,
+      topics,
+      hasRelevantContent: found.size > 0 || topics.length > 0,
+    };
+  }
+
+  /**
+   * Extract broader topics from text (beyond keyword matching).
+   * Looks for questions, opinions, emotional statements, named entities.
+   */
+  _extractTopics(text) {
+    const topics = [];
+
+    // Questions the user asks (shows what they care about)
+    const questions = text.match(/(?:was |wie |warum |wer |wo |wann |kannst |hast |kennst |weisst |what |how |why |who |where |when |can |do |have |know ).{10,80}\?/gi);
+    if (questions) {
+      for (const q of questions.slice(0, 3)) {
+        topics.push({ type: 'question', text: q.trim() });
+      }
+    }
+
+    // Opinions / emotional statements
+    const opinions = text.match(/(?:ich finde|ich glaube|ich denke|ich mag|ich hasse|ich liebe|ich will|ich brauche|i think|i believe|i love|i hate|i want|i need|ich bin |mir gefällt|mir geht).{5,80}/gi);
+    if (opinions) {
+      for (const o of opinions.slice(0, 3)) {
+        topics.push({ type: 'opinion', text: o.trim() });
+      }
+    }
+
+    // Project/tool names (capitalized words or quoted terms)
+    const names = text.match(/(?:["„]([^"\"]+)["\"]|(?:^|\s)([A-Z][a-zA-Z]{2,}(?:\s[A-Z][a-zA-Z]+)?))/g);
+    if (names) {
+      for (const n of names.slice(0, 3)) {
+        const clean = n.replace(/[\"\"„]/g, '').trim();
+        if (clean.length >= 3 && clean.length <= 40) {
+          topics.push({ type: 'entity', text: clean });
+        }
+      }
+    }
+
+    return topics;
   }
 
   decayInterests() {

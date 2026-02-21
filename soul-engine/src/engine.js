@@ -262,6 +262,7 @@ export class SoulEngine {
     const result = await this.llm.generate(systemPrompt, [], trigger, llmOptions);
 
     await this.memory.writeHeartbeat(result);
+    await this.memory.persistHeartbeatState(result, this.context.language);
     await this.memory.appendDailyNote('[Heartbeat] Autonomous pulse completed');
 
     // Telegram notification

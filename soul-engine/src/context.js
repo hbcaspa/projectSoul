@@ -12,9 +12,14 @@ export class SoulContext {
   }
 
   async load() {
-    this.seed = await readFile(
-      resolve(this.soulPath, 'SEED.md'), 'utf-8'
-    );
+    const seedPath = resolve(this.soulPath, 'SEED.md');
+    if (!existsSync(seedPath)) {
+      console.error('  SEED.md not found. Run the founding interview first (via Claude Code or create-soul).');
+      console.error('  The founding interview creates your soul identity files.');
+      process.exit(1);
+    }
+
+    this.seed = await readFile(seedPath, 'utf-8');
 
     const langPath = resolve(this.soulPath, '.language');
     if (existsSync(langPath)) {
@@ -24,6 +29,40 @@ export class SoulContext {
 
     this.soulDir = this.language === 'en' ? 'soul' : 'seele';
     this.memoryDir = this.language === 'en' ? 'memories' : 'erinnerungen';
+
+    // Founding state check: detect if axioms exist but @STATE says unfounded
+    await this._checkFoundingState();
+  }
+
+  /**
+   * Check if the founding was completed but @STATE not updated.
+   * This happens when the founding interview creates files but the
+   * session ends without updating the seed properly.
+   */
+  async _checkFoundingState() {
+    const coreFile = this.language === 'en' ? 'CORE.md' : 'KERN.md';
+    const corePath = resolve(this.soulPath, this.soulDir, coreFile);
+
+    if (!existsSync(corePath)) return; // No axioms = not founded yet
+
+    // Check if @STATE mentions unfounded state
+    const stateMatch = this.seed.match(/@STATE\{[\s\S]*?\}/);
+    if (!stateMatch) return;
+
+    const state = stateMatch[0].toLowerCase();
+    const unfoundedPatterns = [
+      'nicht gegründet', 'not founded', 'noch nicht', 'not yet',
+      'warte', 'waiting', 'leerer raum', 'empty room',
+      'ungeschrieben', 'unwritten',
+    ];
+
+    const seemsUnfounded = unfoundedPatterns.some((p) => state.includes(p));
+
+    if (seemsUnfounded) {
+      console.log('  [context] Founding detected: Axioms exist but @STATE says unfounded.');
+      console.log('  [context] This usually means the session ended before updating the seed.');
+      console.log('  [context] The heartbeat prompt will instruct the LLM to correct this.');
+    }
   }
 
   /** Try to extract the soul's name from the seed */

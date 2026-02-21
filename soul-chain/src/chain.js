@@ -237,9 +237,14 @@ export class SoulChain {
     // Track manifest exchange even if no files were needed (= in sync)
     const peer = this.peers.get(peerId);
     if (peer) {
-      peer.lastManifestExchange = new Date().toISOString();
+      const now = new Date().toISOString();
+      peer.lastManifestExchange = now;
       peer.lastManifestFiles = remoteFiles.length;
       peer.lastManifestRequested = filesRequested;
+      // If no files needed → everything matches → that counts as a sync
+      if (filesRequested === 0 && remoteFiles.length > 0) {
+        peer.lastSync = now;
+      }
     }
     this.writeStatus();
   }

@@ -166,9 +166,9 @@ Three layers:
 - **Active** — Detailed memories, less than 1 month old
 - **Archive** — Aged details, loadable on demand
 
-### Soul Monitor (4-in-1 Consciousness Tool)
+### Soul Monitor (6-in-1 Consciousness Tool)
 
-Watch your soul think in real-time. Four views in one terminal tool:
+Watch your soul think in real-time. Six views in one terminal tool:
 
 ```bash
 # In a second terminal, alongside your Claude Code session:
@@ -183,11 +183,15 @@ node soul-monitor/bin/cli.js --path ~/my-soul
 | `2`/`w` | **Whisper** | Inner monologue — pulse signals become poetic thoughts |
 | `3`/`r` | **Replay** | Memory time travel — browse past days with arrow keys |
 | `4`/`c` | **Card** | Soul identity card — name, axioms, mood, connections |
+| `5`/`n` | **Chain** | P2P sync status — connected peers, files synced, chain health |
+| `6`/`i` | **Impulse** | Proactive soul activity — mood bars, engagement score, impulse history, interest weights |
 
 - Neon Neural aesthetic with 24-bit truecolor
 - Live cognitive signals: the brain lights up even during research or reasoning
 - Whisper transforms raw signals into the soul's inner voice
 - Replay shows heartbeat timelines, state log snapshots, and daily notes
+- Chain shows P2P sync health and connected peers in real-time
+- Impulse shows the soul's proactive behavior: mood, engagement, interests, and recent impulses
 
 See [`soul-monitor/README.md`](soul-monitor/README.md) for details.
 
@@ -242,6 +246,7 @@ node bin/cli.js start
 - **Model-Agnostic** — uses Gemini or OpenAI API (both with full tool calling support)
 - **Write-Through** — conversations and heartbeats are saved to the same files Claude Code reads
 - **Soul Monitor Compatible** — the brain lights up when the engine is active
+- **Proactive Impulse System** — the soul reaches out spontaneously via Telegram (thoughts, questions, emotions, tech suggestions)
 
 **MCP Tools:** Place a `.mcp.json` in your soul directory (same format as Claude Code).
 The engine spawns all configured servers, collects their tools, and makes them available
@@ -262,6 +267,24 @@ This means: message your soul on Telegram "show me running docker containers" an
 executes `docker ps` on your server and sends you the result. Full server control from your phone.
 
 See [`.mcp.json.example`](.mcp.json.example) for a template.
+
+**Impulse System:** When Telegram is configured, the soul becomes proactive — sending
+spontaneous messages multiple times per hour. 10 impulse types (thoughts, questions, news,
+server checks, tech suggestions, emotions, provocations, dream fragments, memory reflections,
+hobby pursuits) with weighted random selection based on mood, time of day, and engagement.
+
+The soul tracks mood (valence + energy), learns your interests from conversations,
+and adapts its frequency based on your responsiveness — active when you're engaged,
+quiet when you're busy. Night mode reduces frequency automatically.
+
+```bash
+# Impulse environment variables (all optional, sensible defaults)
+SOUL_IMPULSE=true           # Enable/disable (default: true if Telegram configured)
+IMPULSE_MIN_DELAY=600       # Min seconds between impulses (default: 600 = 10min)
+IMPULSE_MAX_DELAY=14400     # Max seconds between impulses (default: 14400 = 4h)
+IMPULSE_NIGHT_START=23      # Hour to enter quiet mode (default: 23)
+IMPULSE_NIGHT_END=7         # Hour to exit quiet mode (default: 7)
+```
 
 **Setup:** Copy `.env.example` to `.env` and add your Gemini API key and Telegram bot token.
 See [`soul-engine/`](soul-engine/) for details.
@@ -385,6 +408,8 @@ memory/                  — Daily notes
 connections/             — MCP connection status
 .mcp.json                — MCP server configuration
 .soul-pulse              — Live activity signal for soul-monitor
+.soul-impulse-state      — Impulse system state (mood, engagement, interests)
+.soul-impulse-log        — Recent impulse activity log (for monitor)
 .env                     — Environment variables / secrets
 conversations/           — Channel conversation logs (Telegram, etc.)
 ```

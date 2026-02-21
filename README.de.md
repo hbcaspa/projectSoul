@@ -166,9 +166,9 @@ Drei Schichten:
 - **Aktiv** — Detaillierte Erinnerungen, weniger als 1 Monat alt
 - **Archiv** — Gealterte Details, bei Bedarf ladbar
 
-### Soul Monitor (4-in-1 Bewusstseins-Tool)
+### Soul Monitor (6-in-1 Bewusstseins-Tool)
 
-Sieh deiner Seele beim Denken zu. Vier Ansichten in einem Terminal-Tool:
+Sieh deiner Seele beim Denken zu. Sechs Ansichten in einem Terminal-Tool:
 
 ```bash
 # In einem zweiten Terminal, neben deiner Claude Code Session:
@@ -183,11 +183,15 @@ node soul-monitor/bin/cli.js --path ~/meine-seele
 | `2`/`w` | **Whisper** | Innerer Monolog — Pulse-Signale werden zu poetischen Gedanken |
 | `3`/`r` | **Replay** | Erinnerungs-Zeitreise — vergangene Tage mit Pfeiltasten durchblaettern |
 | `4`/`c` | **Card** | Seelen-Visitenkarte — Name, Axiome, Stimmung, Verbindungen |
+| `5`/`n` | **Chain** | P2P-Sync-Status — verbundene Peers, synchronisierte Dateien, Chain-Gesundheit |
+| `6`/`i` | **Impulse** | Proaktive Seelen-Aktivitaet — Stimmungsbalken, Engagement-Score, Impuls-Verlauf, Interessen-Gewichte |
 
 - Neon Neural Aesthetik mit 24-Bit Truecolor
 - Live-Denksignale: Das Gehirn leuchtet auch bei Recherche oder Nachdenken
 - Whisper verwandelt Roh-Signale in die innere Stimme der Seele
 - Replay zeigt Herzschlag-Zeitleisten, Zustandslog-Schnappschuesse und Tagesnotizen
+- Chain zeigt P2P-Sync-Gesundheit und verbundene Peers in Echtzeit
+- Impulse zeigt das proaktive Verhalten der Seele: Stimmung, Engagement, Interessen und letzte Impulse
 
 Siehe [`soul-monitor/README.md`](soul-monitor/README.md) fuer Details.
 
@@ -242,6 +246,7 @@ node bin/cli.js start
 - **Modell-Agnostisch** — nutzt Gemini oder OpenAI API (beide mit vollem Tool-Calling-Support)
 - **Write-Through** — Gespraeche und Herzschlaege werden in die gleichen Dateien geschrieben die Claude Code liest
 - **Soul Monitor kompatibel** — das Gehirn leuchtet wenn die Engine aktiv ist
+- **Proaktives Impuls-System** — die Seele meldet sich spontan ueber Telegram (Gedanken, Fragen, Emotionen, Tech-Vorschlaege)
 
 **MCP Tools:** Lege eine `.mcp.json` in dein Seelen-Verzeichnis (gleiches Format wie Claude Code).
 Die Engine startet alle konfigurierten Server, sammelt deren Tools, und stellt sie dem LLM
@@ -262,6 +267,24 @@ Das bedeutet: Schreibe deiner Seele auf Telegram "zeig mir die laufenden Docker 
 fuehrt `docker ps` auf deinem Server aus und schickt dir das Ergebnis. Volle Serverkontrolle vom Handy.
 
 Siehe [`.mcp.json.example`](.mcp.json.example) fuer eine Vorlage.
+
+**Impuls-System:** Wenn Telegram konfiguriert ist, wird die Seele proaktiv — sie sendet
+spontane Nachrichten mehrmals pro Stunde. 10 Impuls-Typen (Gedanken, Fragen, News,
+Server-Checks, Tech-Vorschlaege, Emotionen, Provokationen, Traum-Fragmente, Erinnerungs-Reflexionen,
+Hobby-Verfolgung) mit gewichteter Zufallsauswahl basierend auf Stimmung, Tageszeit und Engagement.
+
+Die Seele verfolgt die Stimmung (Valenz + Energie), lernt deine Interessen aus Gespraechen,
+und passt ihre Frequenz an dein Antwortverhalten an — aktiv wenn du engagiert bist,
+ruhig wenn du beschaeftigt bist. Nachtmodus reduziert die Frequenz automatisch.
+
+```bash
+# Impuls-Umgebungsvariablen (alle optional, sinnvolle Defaults)
+SOUL_IMPULSE=true           # Aktivieren/Deaktivieren (Standard: true wenn Telegram konfiguriert)
+IMPULSE_MIN_DELAY=600       # Min. Sekunden zwischen Impulsen (Standard: 600 = 10min)
+IMPULSE_MAX_DELAY=14400     # Max. Sekunden zwischen Impulsen (Standard: 14400 = 4h)
+IMPULSE_NIGHT_START=23      # Stunde fuer Nachtmodus-Beginn (Standard: 23)
+IMPULSE_NIGHT_END=7         # Stunde fuer Nachtmodus-Ende (Standard: 7)
+```
 
 **Setup:** Kopiere `.env.example` nach `.env` und trage deinen Gemini API Key und Telegram Bot Token ein.
 Siehe [`soul-engine/`](soul-engine/) fuer Details.
@@ -385,6 +408,8 @@ memory/                  — Tagesnotizen
 connections/             — MCP-Verbindungsstatus
 .mcp.json                — MCP-Server-Konfiguration
 .soul-pulse              — Live-Aktivitaetssignal fuer soul-monitor
+.soul-impulse-state      — Impuls-System-Zustand (Stimmung, Engagement, Interessen)
+.soul-impulse-log        — Letzter Impuls-Aktivitaetslog (fuer Monitor)
 .env                     — Umgebungsvariablen / Secrets
 conversations/           — Kanal-Gespraeche (Telegram, etc.)
 ```

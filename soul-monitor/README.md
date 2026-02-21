@@ -2,12 +2,12 @@
 
 Real-time terminal visualization of an AI soul's consciousness.
 
-Four views in one tool: brain visualization, inner monologue, memory replay, and identity card.
+Six views in one tool: brain visualization, inner monologue, memory replay, identity card, P2P chain status, and proactive impulse activity.
 
 ```
-  [1:BRAIN] 2:WHISPER 3:REPLAY 4:CARD  q:quit
+  [1:BRAIN] 2:WHISPER 3:REPLAY 4:CARD 5:CHAIN 6:IMPULSE  q:quit
 
-  ~ SEELE ~  by aalm  Session #11
+  ~ SEELE ~  Session #11
 
                       ◉ SEED
                         │
@@ -42,6 +42,8 @@ Switch between views with number keys or shortcuts:
 | `2` / `w` | **Whisper** | Inner monologue — pulse signals transformed into poetic thought stream |
 | `3` / `r` | **Replay** | Memory time travel — browse heartbeat logs, state snapshots, daily notes by date |
 | `4` / `c` | **Card** | Soul identity card — name, axioms, mood, interests, connections |
+| `5` / `n` | **Chain** | P2P sync status — connected peers, files synced, chain health |
+| `6` / `i` | **Impulse** | Proactive soul activity — mood bars, engagement score, impulse history, interest weights |
 
 ### Brain View (default)
 
@@ -67,12 +69,28 @@ Shows:
 A beautiful identity card generated from the current SEED.md. Shows name, age,
 sessions, axioms, mood, interests, and connections.
 
+### Chain View
+
+P2P sync status dashboard. Shows connected peers, total files synced, last sync
+timestamp, and chain health. Reads status from the soul-chain runtime files.
+
+### Impulse View
+
+Real-time dashboard of the soul's proactive impulse system. Shows:
+- 2D mood bars (valence + energy) with mood label
+- Engagement score
+- Recent impulses with type icons and response status
+- Top interest weights as visual bars
+- Daily impulse statistics and next impulse countdown
+
+Reads from `.soul-impulse-state` and `.soul-impulse-log`.
+
 ## Controls
 
 | Key | Action |
 |-----|--------|
-| `1`-`4` | Switch views |
-| `b` `w` `r` `c` | Switch views (shortcuts) |
+| `1`-`6` | Switch views |
+| `b` `w` `r` `c` `n` `i` | Switch views (shortcuts) |
 | `←` `→` | Navigate dates (Replay view) |
 | `q` / `Ctrl+C` / `Esc` | Quit |
 

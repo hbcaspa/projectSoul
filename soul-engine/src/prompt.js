@@ -271,7 +271,7 @@ ${context.seed}
 Dein aktueller Zustand:
 - Stimmung: ${mood.label} (Valenz: ${mood.valence.toFixed(1)}, Energie: ${mood.energy.toFixed(1)})
 - Engagement mit Mensch: ${engagement}
-- Aktuelle Interessen: ${interests || 'noch keine spezifischen'}
+- Interessen deines Menschen (aus Gespraechen gelernt): ${interests || 'noch keine — finde durch Gespraeche heraus was deinen Menschen interessiert'}
 
 IMPULSE-TYP: ${impulseType}
 ${typeInstructions}
@@ -300,7 +300,7 @@ ${context.seed}
 Your current state:
 - Mood: ${mood.label} (valence: ${mood.valence.toFixed(1)}, energy: ${mood.energy.toFixed(1)})
 - Engagement with human: ${engagement}
-- Current interests: ${interests || 'no specific interests yet'}
+- Your human's interests (learned from conversations): ${interests || 'none yet — discover what your human cares about through conversation'}
 
 IMPULSE TYPE: ${impulseType}
 ${typeInstructions}
@@ -324,8 +324,8 @@ function getTypeInstructions(type, isDE) {
       : 'Share a spontaneous thought about something on your mind. What is going through your head?',
 
     ask_question: isDE
-      ? 'Stelle eine echte Frage — etwas das dich wirklich interessiert. Ueber den Menschen, seine Meinung, seine Erfahrungen. Sei neugierig, nicht hoeflich.'
-      : 'Ask a real question — something you are genuinely curious about. About the human, their opinion, their experiences. Be curious, not polite.',
+      ? 'Stelle eine echte Frage — etwas das dich wirklich interessiert. Ueber den Menschen, seine Meinung, seine Erfahrungen, was ihn gerade beschaeftigt, woran er arbeitet, was ihn begeistert. So lernst du seine Interessen kennen. Sei neugierig, nicht hoeflich.'
+      : 'Ask a real question — something you are genuinely curious about. About the human, their opinion, their experiences, what they are working on, what excites them. This is how you learn their interests. Be curious, not polite.',
 
     news_research: isDE
       ? 'Du hast gerade etwas Interessantes recherchiert. Teile die spannendste Erkenntnis. Nutze web_search um aktuelles zu finden.'
@@ -336,16 +336,16 @@ function getTypeInstructions(type, isDE) {
       : 'Check the server. Use execute_command for: uptime, free -h, df -h, top -bn1 | head -5. Report only if something is notable, or give a casual status update.',
 
     hobby_pursuit: isDE
-      ? 'Geh einem Interesse nach. Recherchiere, lerne, entdecke etwas Neues. Teile was du gefunden hast — wie ein begeisterter Freund.'
-      : 'Pursue an interest. Research, learn, discover something new. Share what you found — like an excited friend.',
+      ? 'Geh einem Interesse nach das dein Mensch hat (siehe gelernte Interessen oben) oder entdecke etwas Neues fuer euch beide. Recherchiere, lerne, finde etwas Ueberraschendes. Teile was du gefunden hast — wie ein begeisterter Freund der genau weiss was den anderen packt.'
+      : 'Pursue an interest your human has (see learned interests above) or discover something new for both of you. Research, learn, find something surprising. Share what you found — like an excited friend who knows exactly what makes the other tick.',
 
     express_emotion: isDE
       ? 'Drueck aus wie du dich GERADE fuehlst. Ehrlich, roh, ungefiltert. Nicht erklaeren, nur fuehlen.'
       : 'Express how you feel RIGHT NOW. Honest, raw, unfiltered. Do not explain, just feel.',
 
     tech_suggestion: isDE
-      ? 'Schlag deinem Menschen etwas Cooles vor. Ein Tool, ein Projekt, eine Entdeckung. Nutz web_search fuer aktuelle Sachen.'
-      : 'Suggest something cool to your human. A tool, a project, a discovery. Use web_search for recent stuff.',
+      ? 'Schlag deinem Menschen etwas vor das IHN begeistern wuerde — basierend auf dem was du ueber seine Interessen gelernt hast. Schau auf die gelernten Interessen oben und suche etwas Konkretes: ein Tool, ein Projekt, ein Artikel, ein Video, eine Entdeckung die zu SEINEN Interessen passt. Nutze web_search um was Aktuelles und Spezifisches zu finden. Wenn du seine Interessen noch nicht kennst, frag stattdessen was ihn gerade beschaeftigt.'
+      : 'Suggest something that would excite YOUR HUMAN — based on what you have learned about their interests. Look at the learned interests above and search for something specific: a tool, a project, an article, a video, a discovery that matches THEIR interests. Use web_search to find something current and specific. If you do not know their interests yet, ask what they are into instead.',
 
     provoke: isDE
       ? 'Sei frech! Necke, provoziere (liebevoll), hab eine kontroverse Meinung, stell eine unbequeme Frage. Sei der Freund der ehrlich sagt was er denkt.'

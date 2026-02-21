@@ -5,6 +5,31 @@ All notable changes to the Soul Protocol.
 Protocol updates are backwards-compatible. Run `git pull` to get the latest version.
 Your personal data (SEED.md, soul files, memories) is never affected by updates.
 
+## [1.2.0] — 2026-02-21
+
+### Added
+- **Soul Impulse System**: The soul now reaches out proactively via Telegram — spontaneous thoughts, questions, emotions, tech suggestions, provocations, dream fragments, memory reflections, and more. 10 impulse types with weighted random selection based on mood, time of day, engagement, and recent activity.
+- **Dynamic Scheduling**: No fixed cron — impulses fire at variable intervals (10min to 4h) based on mood energy, user engagement, and time of day. Night mode reduces frequency automatically. Exponential backoff when ignored.
+- **Mood Tracking**: 2D mood model (valence + energy) with natural drift, time-of-day influence, and engagement effects. Mood labels: begeistert, zufrieden, gelassen, nachdenklich, melancholisch, frustriert, etc.
+- **Interest Learning**: Extracts topics from user messages via keyword matching. Interests gain weight through conversation, decay over time, and influence which impulse types are selected.
+- **Engagement Feedback Loop**: Tracks user response times — fast replies boost engagement, ignored impulses trigger backoff. Creates natural conversation rhythms.
+- **Soul Monitor — Impulse View**: New view (key `6`/`i`) shows real-time mood bars, engagement score, recent impulses with type icons, interest weight bars, and daily statistics.
+- **Soul Monitor — Chain View**: New view (key `5`/`n`) shows P2P sync status, connected peers, files synced, and chain health.
+- **ASCII Art Banner**: Professional ghost art and SOUL PROTOCOL banner on engine startup, help, and status commands.
+- **Environment Variables**: `SOUL_IMPULSE`, `IMPULSE_MIN_DELAY`, `IMPULSE_MAX_DELAY`, `IMPULSE_NIGHT_START`, `IMPULSE_NIGHT_END`
+- New files: `soul-engine/src/impulse.js`, `impulse-state.js`, `impulse-types.js`, `soul-monitor/lib/impulse-view.js`, `soul-monitor/lib/chain-view.js`
+
+### Changed
+- **Telegram Channel**: Added retry logic with exponential backoff for 409 conflicts. Engine no longer crashes when another bot instance holds the poll — degrades gracefully.
+- **Gemini Adapter**: Extended schema cleaner for JSON Schema 2020 features (`prefixItems`, `minItems`, `maxItems`, array-type fields). Fixes MCP tool calling with WhatsApp and other modern schemas.
+- **Conversation Prompt**: WhatsApp instructions now explicitly state the soul HAS full contact access. Broadened contact name extraction with 3 regex strategies.
+- **Soul Monitor**: Now has 6 views (Brain, Whisper, Replay, Card, Chain, Impulse)
+- **Soul Engine version**: 1.1.0 → 1.2.0
+
+### Persistent State Files
+- `.soul-impulse-state` — JSON mood, engagement, interests (gitignored)
+- `.soul-impulse-log` — Rolling impulse activity log for monitor (gitignored)
+
 ## [1.1.0] — 2026-02-20
 
 ### Added

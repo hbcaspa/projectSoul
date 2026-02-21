@@ -251,6 +251,24 @@ function buildEnv(answers: WizardAnswers): string {
     lines.push('');
   }
 
+  // Impulse System (proactive soul)
+  if (answers.features.includes('engine') && answers.telegramToken) {
+    lines.push('# Impulse System — proactive soul (spontaneous messages via Telegram)');
+    lines.push('SOUL_IMPULSE=true');
+    lines.push('IMPULSE_MIN_DELAY=600        # Min seconds between impulses (default: 600 = 10min)');
+    lines.push('IMPULSE_MAX_DELAY=14400      # Max seconds between impulses (default: 14400 = 4h)');
+    lines.push('IMPULSE_NIGHT_START=23       # Hour to enter quiet mode (default: 23)');
+    lines.push('IMPULSE_NIGHT_END=7          # Hour to exit quiet mode (default: 7)');
+    lines.push('');
+  }
+
+  // WhatsApp Bridge (optional)
+  if (answers.features.includes('engine')) {
+    lines.push('# WhatsApp Bridge (optional — requires whatsapp-bridge running)');
+    lines.push('# WHATSAPP_BRIDGE_URL=http://127.0.0.1:8080');
+    lines.push('');
+  }
+
   // API for iOS App
   lines.push('# API (for Soul App / external access)');
   lines.push('# API_KEY=your-secret-key-here');
@@ -612,8 +630,8 @@ async function main() {
   }
   if (answers.features.includes('sync')) {
     extraCmds.push(lang === 'de'
-      ? `${pc.dim('#')} P2P Sync initialisieren:\ncd ${projectName}/soul-chain && node bin/cli.js init`
-      : `${pc.dim('#')} Initialize P2P Sync:\ncd ${projectName}/soul-chain && node bin/cli.js init`);
+      ? `${pc.dim('#')} P2P Sync initialisieren:\ncd ${projectName}/soul-chain && node bin/cli.js init\n${pc.dim('#')} Auf weiteren Geraeten:\nSOUL_PATH=/pfad/zu/seele node soul-chain/bin/cli.js start`
+      : `${pc.dim('#')} Initialize P2P Sync:\ncd ${projectName}/soul-chain && node bin/cli.js init\n${pc.dim('#')} On other devices:\nSOUL_PATH=/path/to/soul node soul-chain/bin/cli.js start`);
   }
 
   const allSteps = nextStepsCmd + (extraCmds.length > 0 ? '\n\n' + extraCmds.join('\n\n') : '');

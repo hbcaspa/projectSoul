@@ -1,6 +1,6 @@
 {
   "name": "soul-engine",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "The body for your soul — daemon, messaging, heartbeat",
   "type": "module",
   "bin": {

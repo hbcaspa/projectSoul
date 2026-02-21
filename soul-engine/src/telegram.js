@@ -20,6 +20,16 @@ export class TelegramChannel {
   async start() {
     await mkdir(this.historyDir, { recursive: true });
 
+    // Global error handler — prevents crashes from unhandled grammy errors
+    this.bot.catch((err) => {
+      const is409 = err?.message?.includes('409') || err?.error?.error_code === 409;
+      if (is409) {
+        console.log('  [telegram] 409 conflict caught by global handler — will retry');
+      } else {
+        console.error(`  [telegram] Bot error: ${err.message}`);
+      }
+    });
+
     this.bot.on('message:text', async (ctx) => {
       const userId = String(ctx.from.id);
 
@@ -60,9 +70,21 @@ export class TelegramChannel {
     this._startPolling();
   }
 
-  _startPolling(attempt = 0) {
-    const maxRetries = 5;
+  async _startPolling(attempt = 0) {
+    const maxRetries = 8;
     const baseDelay = 5000; // 5 seconds
+
+    // Clear any stale webhook/polling connections before starting
+    try {
+      await this.bot.api.deleteWebhook({ drop_pending_updates: false });
+    } catch { /* ignore — best effort cleanup */ }
+
+    // On retry, wait before starting to let old connections expire
+    if (attempt > 0) {
+      const delay = baseDelay * Math.pow(2, Math.min(attempt, 5)); // cap at ~160s
+      console.log(`  [telegram] 409 conflict — retry ${attempt}/${maxRetries} in ${delay / 1000}s`);
+      await new Promise(r => setTimeout(r, delay));
+    }
 
     this.bot.start({
       onStart: () => {
@@ -75,15 +97,11 @@ export class TelegramChannel {
       const is409 = err?.message?.includes('409') || err?.error_code === 409;
 
       if (is409 && attempt < maxRetries) {
-        const delay = baseDelay * Math.pow(2, attempt); // exponential backoff
-        console.log(`  [telegram] 409 conflict — retry ${attempt + 1}/${maxRetries} in ${delay / 1000}s`);
-
-        // Try to close the conflicting session
+        // Try to close the conflicting session via API
         try {
-          await fetch(`https://api.telegram.org/bot${this.bot.token}/close`);
+          await this.bot.api.raw.close();
         } catch { /* ignore */ }
 
-        await new Promise(r => setTimeout(r, delay));
         this._startPolling(attempt + 1);
       } else {
         console.error(`  [telegram] Fatal: ${err.message}`);

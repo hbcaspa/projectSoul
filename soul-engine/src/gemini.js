@@ -119,6 +119,28 @@ export class GeminiAdapter {
     // Remove unsupported keys
     delete clean.$schema;
     delete clean.additionalProperties;
+    delete clean.minItems;
+    delete clean.maxItems;
+    delete clean.title;
+    delete clean.default;
+
+    // Convert prefixItems (JSON Schema 2020 tuple) to regular items
+    if (clean.prefixItems) {
+      if (Array.isArray(clean.prefixItems) && clean.prefixItems.length > 0) {
+        clean.items = this._cleanSchema(clean.prefixItems[0]);
+      }
+      delete clean.prefixItems;
+    }
+
+    // Handle array type field (Gemini doesn't support array of types like ["string", "null"])
+    if (Array.isArray(clean.type)) {
+      clean.type = clean.type.find((t) => t !== 'null') || 'string';
+    }
+
+    // Ensure arrays have items
+    if (clean.type === 'array' && !clean.items) {
+      clean.items = { type: 'string' };
+    }
 
     // Recursively clean nested properties
     if (clean.properties) {

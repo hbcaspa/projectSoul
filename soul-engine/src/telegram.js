@@ -56,15 +56,48 @@ export class TelegramChannel {
       }
     });
 
-    // Start long-polling
+    // Start long-polling with retry on 409 conflict
+    this._startPolling();
+  }
+
+  _startPolling(attempt = 0) {
+    const maxRetries = 5;
+    const baseDelay = 5000; // 5 seconds
+
     this.bot.start({
-      onStart: () => {},
+      onStart: () => {
+        if (attempt > 0) {
+          console.log(`  [telegram] Connected after ${attempt} retries`);
+        }
+      },
       allowed_updates: ['message'],
+    }).catch(async (err) => {
+      const is409 = err?.message?.includes('409') || err?.error_code === 409;
+
+      if (is409 && attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt); // exponential backoff
+        console.log(`  [telegram] 409 conflict — retry ${attempt + 1}/${maxRetries} in ${delay / 1000}s`);
+
+        // Try to close the conflicting session
+        try {
+          await fetch(`https://api.telegram.org/bot${this.bot.token}/close`);
+        } catch { /* ignore */ }
+
+        await new Promise(r => setTimeout(r, delay));
+        this._startPolling(attempt + 1);
+      } else {
+        console.error(`  [telegram] Fatal: ${err.message}`);
+        console.error(`  [telegram] Bot will run without Telegram polling.`);
+        console.error(`  [telegram] Outgoing messages (sendToOwner) still work.`);
+        // Don't crash — engine continues without incoming Telegram messages
+      }
     });
   }
 
   async stop() {
-    await this.bot.stop();
+    try {
+      await this.bot.stop();
+    } catch { /* may not be running */ }
   }
 
   // ── History management ───────────────────────────────────

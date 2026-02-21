@@ -89,12 +89,13 @@ export class SoulEngine {
       console.log('  Telegram:  not configured');
     }
 
-    // WhatsApp Bridge (optional)
+    // WhatsApp Bridge (optional — lazy reconnect if initially unreachable)
     const whatsappUrl = process.env.WHATSAPP_BRIDGE_URL;
     if (whatsappUrl) {
       this.whatsapp = new WhatsAppBridge(whatsappUrl);
+      this._whatsappUrl = whatsappUrl;
       const available = await this.whatsapp.isAvailable();
-      console.log(`  WhatsApp:  ${available ? 'connected' : 'bridge unreachable'}`);
+      console.log(`  WhatsApp:  ${available ? 'connected' : 'bridge unreachable (will retry on demand)'}`);
       if (!available) this.whatsapp = null;
     } else {
       console.log('  WhatsApp:  not configured');
@@ -176,36 +177,34 @@ export class SoulEngine {
     // Reload context (might have changed via Claude Code)
     await this.context.load();
 
+    // Lazy reconnect: if WhatsApp was unreachable at start, retry now
+    if (!this.whatsapp && this._whatsappUrl && /whatsapp/i.test(text)) {
+      const bridge = new WhatsAppBridge(this._whatsappUrl);
+      if (await bridge.isAvailable()) {
+        this.whatsapp = bridge;
+        console.log('  [whatsapp] Bridge reconnected (lazy retry)');
+      }
+    }
+
     // If user mentions WhatsApp, try to extract and resolve contact names
     let contactContext = '';
     let resolvedContact = null;
     if (this.whatsapp && /whatsapp/i.test(text)) {
-      // Strategy 1: Extract name from send-command patterns
-      const sendMatch = text.match(/(?:(?:schreib\w*|schick\w*|send\w*|sag\w*|erzähl\w*|frag\w*|informier\w*|benachrichtig\w*|antworte\w*|teil\w*|meld\w*|text\w*|message\w*|tell\w*|ask\w*|write\w*|notify\w*|ping\w*)\s+)(\w[\w\s]*?)(?:\s+(?:auf|on|per|via|über)\s+whatsapp|\s+(?:dass|that|die|der|das|ob|whether))/i);
-
-      // Strategy 2: Extract name from "X auf/on WhatsApp" pattern
-      const toMatch = !sendMatch && text.match(/(\w[\w\s]{1,30}?)\s+(?:auf|on|per|via|über)\s+whatsapp/i);
-
-      // Strategy 3: Extract name after WhatsApp keyword ("WhatsApp an X", "WhatsApp Kontakt X")
-      const afterMatch = !sendMatch && !toMatch && text.match(/whatsapp\w*\s+(?:an|to|kontakt|contact|von|from|mit|with|nachricht|message)?\s*(\w[\w\s]{1,30})/i);
-
-      const nameMatch = sendMatch || toMatch || afterMatch;
-      if (nameMatch) {
-        const searchName = nameMatch[1].trim().replace(/\s+(auf|on|per|via|über|whatsapp|kontakt|contact).*$/i, '').trim();
-        if (searchName.length >= 2) {
-          let contacts = await this.whatsapp.searchContacts(searchName) || [];
-          if (contacts.length === 0 && searchName.includes(' ')) {
-            contacts = await this.whatsapp.searchContacts(searchName.split(' ')[0]) || [];
-          }
-          if (contacts.length > 0) {
-            resolvedContact = contacts[0];
-            contactContext = `\n\nWhatsApp-Kontakt gefunden: ${resolvedContact.name} (${resolvedContact.jid})` +
-              '\nDu MUSST jetzt [WA:' + resolvedContact.jid + ']Nachricht verwenden um die Nachricht zu senden!';
-            console.log(`  [whatsapp] Contact found: ${resolvedContact.name} → ${resolvedContact.jid}`);
-          } else {
-            contactContext = `\n\nWhatsApp-Kontakt "${searchName}" wurde NICHT gefunden. Frage nach der Telefonnummer.`;
-            console.log(`  [whatsapp] Contact not found: ${searchName}`);
-          }
+      const searchName = this._extractContactName(text);
+      if (searchName) {
+        let contacts = await this.whatsapp.searchContacts(searchName) || [];
+        if (contacts.length === 0 && searchName.includes(' ')) {
+          contacts = await this.whatsapp.searchContacts(searchName.split(' ')[0]) || [];
+        }
+        if (contacts.length > 0) {
+          resolvedContact = contacts[0];
+          contactContext = `\n\nWhatsApp-Kontakt gefunden: ${resolvedContact.name} (${resolvedContact.jid})` +
+            '\nDu MUSST jetzt [WA:' + resolvedContact.jid + ']Nachricht verwenden um die Nachricht zu senden!' +
+            '\nVerwende NICHT web_search oder execute_command um WhatsApp-Nachrichten zu senden — NUR das [WA:] Tag funktioniert!';
+          console.log(`  [whatsapp] Contact found: ${resolvedContact.name} → ${resolvedContact.jid}`);
+        } else {
+          contactContext = `\n\nWhatsApp-Kontakt "${searchName}" wurde NICHT gefunden. Frage nach der Telefonnummer.`;
+          console.log(`  [whatsapp] Contact not found: ${searchName}`);
         }
       }
     }
@@ -291,6 +290,64 @@ export class SoulEngine {
 
     await writePulse(this.soulPath, 'relate', `Responded to ${userName}`);
     return cleanResponse;
+  }
+
+  /**
+   * Extract a contact name from a WhatsApp-related message.
+   * Returns null if no name can be reliably identified.
+   */
+  _extractContactName(text) {
+    // Common words that are NOT names — skip these
+    const NOT_NAMES = new Set([
+      'kannst', 'du', 'auch', 'den', 'die', 'der', 'das', 'dem', 'des',
+      'ein', 'eine', 'einen', 'einem', 'einer', 'mein', 'meine', 'meinen',
+      'dein', 'deine', 'deinen', 'sein', 'seine', 'seinen', 'ihr', 'ihre',
+      'auf', 'in', 'an', 'von', 'mit', 'zu', 'bei', 'nach', 'vor',
+      'bitte', 'mal', 'noch', 'jetzt', 'gerade', 'schon', 'nicht',
+      'was', 'wer', 'wie', 'wo', 'wann', 'warum', 'ob',
+      'und', 'oder', 'aber', 'doch', 'wenn', 'dass', 'weil',
+      'ich', 'er', 'sie', 'es', 'wir', 'uns', 'euch',
+      'standort', 'nachricht', 'kontakt', 'nummer', 'message', 'location',
+      'schreib', 'schreibe', 'schick', 'schicke', 'sende', 'send',
+      'whatsapp', 'telegram', 'per', 'via', 'über',
+    ]);
+
+    // Strategy 1: Send-command + name + "auf/on WhatsApp" or "dass/that"
+    // "schreib Daniela Geller auf WhatsApp dass..."
+    const sendMatch = text.match(
+      /(?:schreib\w*|schick\w*|send\w*|sag\w*|erzähl\w*|frag\w*|informier\w*|benachrichtig\w*|antworte\w*|teil\w*|meld\w*|text\w*|message\w*|tell\w*|ask\w*|write\w*|notify\w*|ping\w*)\s+((?:[A-ZÄÖÜ]\w+\s*){1,3})(?:\s+(?:auf|on|per|via|über)\s+whatsapp|\s+(?:dass|that|die|der|das|ob|whether))/i
+    );
+
+    // Strategy 2: "Name auf/on WhatsApp" — require capitalized words (proper names)
+    const toMatch = !sendMatch && text.match(
+      /((?:[A-ZÄÖÜ]\w+\s*){1,3})\s+(?:auf|on|per|via|über)\s+whatsapp/i
+    );
+
+    // Strategy 3: "WhatsApp an/to Name"
+    const afterMatch = !sendMatch && !toMatch && text.match(
+      /whatsapp\s+(?:an|to|kontakt|contact|nachricht|message)\s+((?:[A-ZÄÖÜ]\w+\s*){1,3})/i
+    );
+
+    const match = sendMatch || toMatch || afterMatch;
+    if (!match) return null;
+
+    // Clean and validate the extracted name
+    let name = match[1].trim()
+      .replace(/\s+(auf|on|per|via|über|whatsapp|kontakt|contact|dass|that).*$/i, '')
+      .trim();
+
+    // Filter: all words must be potential names (not common words)
+    const words = name.toLowerCase().split(/\s+/);
+    const nameWords = words.filter(w => !NOT_NAMES.has(w) && w.length >= 2);
+    if (nameWords.length === 0) return null;
+
+    // Reconstruct from original casing
+    name = match[1].trim().split(/\s+/)
+      .filter(w => !NOT_NAMES.has(w.toLowerCase()) && w.length >= 2)
+      .join(' ')
+      .trim();
+
+    return name.length >= 2 ? name : null;
   }
 
   /**

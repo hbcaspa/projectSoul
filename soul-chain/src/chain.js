@@ -26,7 +26,7 @@ const SYNC_FILES = [
 ];
 
 const IGNORE = new Set([
-  '.env', '.mcp.json', '.soul-pulse', '.session-writes',
+  '.env', '.mcp.json', '.soul-pulse', '.session-writes', '.soul-route-log',
   '.git', '.claude', '.soul-chain', '.soul-chain-status',
   'node_modules', 'soul-engine', 'soul-monitor', 'soul-card',
   'soul-chain', 'skills', 'docs', 'hooks',

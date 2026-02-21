@@ -11,6 +11,7 @@ import { buildConversationPrompt, buildHeartbeatPrompt } from './prompt.js';
 import { SoulAPI } from './api.js';
 import { APIChannel } from './api-channel.js';
 import { WhatsAppBridge } from './whatsapp.js';
+import { SemanticRouter } from './semantic-router.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -25,6 +26,7 @@ export class SoulEngine {
     this.apiChannel = null;
     this.heartbeat = null;
     this.impulse = null;
+    this.router = null;
     this.running = false;
   }
 
@@ -118,6 +120,10 @@ export class SoulEngine {
     );
     this.heartbeat.start();
     console.log(`  Heartbeat: ${cronExpr}`);
+
+    // Semantic router — learned data → soul files
+    this.router = new SemanticRouter(this.soulPath, this.context.language);
+    console.log('  Router:    active (interests, personal)');
 
     // Impulse scheduler — proactive soul
     if (this.telegram && process.env.SOUL_IMPULSE !== 'false') {
@@ -257,6 +263,28 @@ export class SoulEngine {
           console.log(`  [learned] ${learned.newInterests.length} new, ${learned.boostedInterests.length} boosted, ${learned.topics.length} topics`);
         } catch (err) {
           console.error(`  [learned] Write failed: ${err.message}`);
+        }
+
+        // Semantic routing: learned data → soul files
+        if (this.router) {
+          try {
+            await this.router.route(learned, text, userName);
+          } catch (err) {
+            console.error(`  [router] Route failed: ${err.message}`);
+          }
+        }
+      }
+
+      // Also route personal facts even without keyword hits
+      if (this.router && (!learned || !learned.hasRelevantContent)) {
+        try {
+          await this.router.route(
+            { detectedInterests: [], newInterests: [], boostedInterests: [], topics: [], hasRelevantContent: false },
+            text,
+            userName,
+          );
+        } catch (err) {
+          console.error(`  [router] Route failed: ${err.message}`);
         }
       }
     }

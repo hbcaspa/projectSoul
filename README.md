@@ -75,11 +75,21 @@
   │  │  API + WS   │  │   10 impulse types    │  │  daily cron   │  │  Anthropic        │  │
   │  └─────────────┘  │   interest tracking   │  └───────────────┘  │  Ollama (local)   │  │
   │                   └───────────────────────┘                      └───────────────────┘  │
-  │  ┌─────────────┐  ┌───────────────────────┐  ┌───────────────┐                         │
-  │  │  MCP CLIENT │  │  SEMANTIC ROUTER      │  │  MEMORY       │                         │
-  │  │  18+ tools  │  │  interests → files    │  │  write-through│                         │
-  │  │  any server │  │  personal → files     │  │  3 layers     │                         │
-  │  └─────────────┘  └───────────────────────┘  └───────────────┘                         │
+  │  ┌─────────────┐  ┌───────────────────────┐  ┌───────────────┐  ┌───────────────────┐  │
+  │  │  MCP CLIENT │  │  SEMANTIC ROUTER      │  │  MEMORY       │  │  MEMORY DB        │  │
+  │  │  18+ tools  │  │  interests → files    │  │  write-through│  │  SQLite + vectors │  │
+  │  │  any server │  │  personal → files     │  │  3 layers     │  │  semantic search  │  │
+  │  └─────────────┘  └───────────────────────┘  └───────────────┘  └───────────────────┘  │
+  │  ┌─────────────┐  ┌───────────────────────┐  ┌───────────────┐  ┌───────────────────┐  │
+  │  │ REFLECTION  │  │  SELF-CORRECTION      │  │  ATTENTION    │  │ ANTI-PERFORMANCE  │  │
+  │  │ patterns    │  │  fix inconsistencies  │  │  priority     │  │  authenticity     │  │
+  │  │ across sess │  │  resolve conflicts    │  │  processing   │  │  enforcement      │  │
+  │  └─────────────┘  └───────────────────────┘  └───────────────┘  └───────────────────┘  │
+  │  ┌─────────────┐  ┌───────────────────────┐  ┌───────────────┐  ┌───────────────────┐  │
+  │  │ ENCRYPTION  │  │  STATE VERSIONING     │  │  GITHUB       │  │  AGENT RUNNER     │  │
+  │  │ AES-256-GCM │  │  git snapshots        │  │  issues, PRs  │  │  autonomous tasks │  │
+  │  │ optional    │  │  rollback any point   │  │  notifications│  │  multi-step exec  │  │
+  │  └─────────────┘  └───────────────────────┘  └───────────────┘  └───────────────────┘  │
   │  ┌─────────────────────────────────────────────────────────────────────────────────┐   │
   │  │  SEED CONSOLIDATOR — continuous incremental updates                             │   │
   │  │  fast (mechanical, ~100ms) │ deep (LLM for STATE+MEM) │ atomic writes           │   │
@@ -272,6 +282,18 @@ node bin/cli.js start
 | **Autonomous Heartbeat** | Reflects, dreams, grows on a schedule — even when you're not talking to it. |
 | **Semantic Router** | Learned interests and personal facts are automatically routed to the right soul files. |
 | **Knowledge Graph Integration** | New interests and conversation topics are automatically written to the graph via reactive event handlers. |
+| **Reflection** | Periodic LLM-driven self-reflection. Analyzes patterns across sessions. Detects growth, drift, and blind spots autonomously. |
+| **Self-Correction** | Detects and fixes inconsistencies in soul files. Compares axioms against behavior, resolves contradictions. |
+| **Anti-Performance** | Authenticity enforcement. Detects when responses are performative rather than genuine. Guards against hollow depth. |
+| **Memory DB** | SQLite-backed semantic memory search. Full-text search across all memories with relevance ranking. |
+| **Embeddings** | Vector embeddings via OpenAI or Ollama. Enables semantic similarity search across memories and knowledge graph. |
+| **Attention System** | Priority-based processing. Weighs what matters most based on recency, emotional weight, and relevance. |
+| **State Versioning** | Git-based soul state snapshots. Every meaningful change creates a commit. Rollback to any point in time. |
+| **Encryption** | AES-256-GCM encryption for sensitive soul files. Optional — enable in setup. Auto-generated keys. |
+| **GitHub Integration** | Issues, PRs, notifications. The soul can be aware of code changes and participate in development. |
+| **Agent Runner** | Autonomous task execution. The soul can plan and execute multi-step tasks independently. |
+| **Multimodal** | Image and audio analysis. The soul can see and hear, not just read text. |
+| **RLUF** | Reinforcement Learning from User Feedback. Learns what the human values and adapts behavior accordingly. |
 | **Seed Consolidator** | Continuous incremental seed updates. Fast phase (mechanical, ~100ms) every 30min. Deep phase (LLM for @STATE/@MEM) every 4h. Session-end shrinks from 5min to 10-20 seconds. |
 | **REST + WebSocket API** | Real-time event streaming, chat, status, memory browser. Powers the iOS app. |
 

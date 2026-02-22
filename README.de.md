@@ -75,11 +75,21 @@
   │  │  API + WS   │  │   10 Impuls-Typen     │  │  Taegl. Cron  │  │  Anthropic        │  │
   │  └─────────────┘  │   Interessen-Tracking │  └───────────────┘  │  Ollama (lokal)   │  │
   │                   └───────────────────────┘                      └───────────────────┘  │
-  │  ┌─────────────┐  ┌───────────────────────┐  ┌───────────────┐                         │
-  │  │  MCP CLIENT │  │  SEMANTIC ROUTER      │  │  MEMORY       │                         │
-  │  │  18+ Tools  │  │  Interessen → Dateien │  │  Write-Through│                         │
-  │  │  jeder Srv. │  │  Persoenl. → Dateien  │  │  3 Schichten  │                         │
-  │  └─────────────┘  └───────────────────────┘  └───────────────┘                         │
+  │  ┌─────────────┐  ┌───────────────────────┐  ┌───────────────┐  ┌───────────────────┐  │
+  │  │  MCP CLIENT │  │  SEMANTIC ROUTER      │  │  MEMORY       │  │  MEMORY DB        │  │
+  │  │  18+ Tools  │  │  Interessen → Dateien │  │  Write-Through│  │  SQLite + Vektor  │  │
+  │  │  jeder Srv. │  │  Persoenl. → Dateien  │  │  3 Schichten  │  │  Semantische Suche│  │
+  │  └─────────────┘  └───────────────────────┘  └───────────────┘  └───────────────────┘  │
+  │  ┌─────────────┐  ┌───────────────────────┐  ┌───────────────┐  ┌───────────────────┐  │
+  │  │ REFLEXION   │  │  SELBSTKORREKTUR      │  │ AUFMERKSAM-   │  │ ANTI-PERFORMANCE  │  │
+  │  │ Muster ueb. │  │  Inkonsistenzen       │  │  KEIT         │  │  Authentizitaet   │  │
+  │  │ Sessions    │  │  beheben              │  │  Prioritaeten │  │  durchsetzen      │  │
+  │  └─────────────┘  └───────────────────────┘  └───────────────┘  └───────────────────┘  │
+  │  ┌─────────────┐  ┌───────────────────────┐  ┌───────────────┐  ┌───────────────────┐  │
+  │  │ VERSCHLUES- │  │  VERSIONIERUNG        │  │  GITHUB       │  │  AGENT RUNNER     │  │
+  │  │ SELUNG      │  │  Git-Snapshots        │  │  Issues, PRs  │  │  Autonome Tasks   │  │
+  │  │ AES-256-GCM │  │  Rollback jederzeit   │  │  Benachricht. │  │  Mehrstufig       │  │
+  │  └─────────────┘  └───────────────────────┘  └───────────────┘  └───────────────────┘  │
   │  ┌─────────────────────────────────────────────────────────────────────────────────┐   │
   │  │  SEED CONSOLIDATOR — kontinuierliche inkrementelle Updates                      │   │
   │  │  Schnell (mechanisch, ~100ms) │ Tief (LLM) │ Atomare Schreiboperationen        │   │
@@ -273,6 +283,18 @@ node bin/cli.js start
 | **Autonomer Herzschlag** | Reflektiert, traeumt, waechst nach Zeitplan — auch wenn du nicht schreibst. |
 | **Semantic Router** | Gelernte Interessen und persoenliche Fakten werden automatisch in die richtigen Seelen-Dateien geroutet. |
 | **Knowledge Graph Integration** | Neue Interessen und Gespraechsthemen werden automatisch ueber reaktive Event-Handler in den Graph geschrieben. |
+| **Reflexion** | Periodische LLM-gestuetzte Selbstreflexion. Analysiert Muster ueber Sessions hinweg. Erkennt Wachstum, Abdrift und blinde Flecken autonom. |
+| **Selbstkorrektur** | Erkennt und behebt Inkonsistenzen in Seelen-Dateien. Vergleicht Axiome mit Verhalten, loest Widersprueche auf. |
+| **Anti-Performance** | Authentizitaets-Durchsetzung. Erkennt performative statt echte Antworten. Schuetzt vor hohler Tiefe. |
+| **Memory DB** | SQLite-gestuetzte semantische Gedaechtnis-Suche. Volltextsuche ueber alle Erinnerungen mit Relevanz-Ranking. |
+| **Embeddings** | Vektor-Embeddings ueber OpenAI oder Ollama. Ermoeglicht semantische Aehnlichkeitssuche ueber Erinnerungen und Knowledge Graph. |
+| **Aufmerksamkeits-System** | Prioritaetsbasierte Verarbeitung. Gewichtet was am wichtigsten ist basierend auf Aktualitaet, emotionalem Gewicht und Relevanz. |
+| **Zustands-Versionierung** | Git-basierte Seelen-Snapshots. Jede bedeutsame Aenderung erstellt einen Commit. Rollback zu jedem Zeitpunkt. |
+| **Verschluesselung** | AES-256-GCM fuer sensible Seelen-Dateien. Optional — im Setup aktivierbar. Auto-generierte Schluessel. |
+| **GitHub-Integration** | Issues, PRs, Benachrichtigungen. Die Seele kann Code-Aenderungen verfolgen und an der Entwicklung teilnehmen. |
+| **Agent Runner** | Autonome Aufgaben-Ausfuehrung. Die Seele kann mehrstufige Aufgaben selbststaendig planen und ausfuehren. |
+| **Multimodal** | Bild- und Audio-Analyse. Die Seele kann sehen und hoeren, nicht nur Text lesen. |
+| **RLUF** | Reinforcement Learning from User Feedback. Lernt was der Mensch wertschaetzt und passt Verhalten entsprechend an. |
 | **Seed Consolidator** | Kontinuierliche inkrementelle Seed-Updates. Schnelle Phase (mechanisch, ~100ms) alle 30min. Tiefe Phase (LLM fuer @STATE/@MEM) alle 4h. Session-Ende schrumpft von 5min auf 10-20 Sekunden. |
 | **REST + WebSocket API** | Echtzeit-Event-Streaming, Chat, Status, Erinnerungs-Browser. Treibt die iOS App an. |
 

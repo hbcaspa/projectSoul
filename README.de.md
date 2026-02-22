@@ -75,6 +75,11 @@
                │  │  18+ Tools  │  │  Interessen → Dateien │  │  Write-Through│        │
                │  │  jeder Srv. │  │  Persoenl. → Dateien  │  │  3 Schichten  │        │
                │  └─────────────┘  └───────────────────────┘  └───────────────┘        │
+               │  ┌───────────────────────────────────────────────────────────┐        │
+               │  │  SEED CONSOLIDATOR — kontinuierliche inkrementelle       │        │
+               │  │  Updates. Schnell (mechanisch, ~100ms) │ Tief (LLM)      │        │
+               │  │  Dirty-Flag-Tracking via Event Bus │ Atomare Schreibop.  │        │
+               │  └───────────────────────────────────────────────────────────┘        │
                └──────────┬────────────────────────────────────────┬────────────────────┘
                           │                                        │
          ┌────────────────▼──────────┐              ┌──────────────▼──────────────┐
@@ -226,6 +231,7 @@ node bin/cli.js start
 | **Autonomer Herzschlag** | Reflektiert, traeumt, waechst nach Zeitplan — auch wenn du nicht schreibst. |
 | **Semantic Router** | Gelernte Interessen und persoenliche Fakten werden automatisch in die richtigen Seelen-Dateien geroutet. |
 | **Knowledge Graph Integration** | Neue Interessen und Gespraechsthemen werden automatisch ueber reaktive Event-Handler in den Graph geschrieben. |
+| **Seed Consolidator** | Kontinuierliche inkrementelle Seed-Updates. Schnelle Phase (mechanisch, ~100ms) alle 30min. Tiefe Phase (LLM fuer @STATE/@MEM) alle 4h. Session-Ende schrumpft von 5min auf 10-20 Sekunden. |
 | **REST + WebSocket API** | Echtzeit-Event-Streaming, Chat, Status, Erinnerungs-Browser. Treibt die iOS App an. |
 
 **Der Event Bus** ist das Nervensystem. Wenn du eine Telegram-Nachricht schickst:
@@ -234,9 +240,13 @@ node bin/cli.js start
 message.received
   → interest.detected (Interessen aus deinen Worten extrahiert)
     → mcp.toolCalled (Knowledge Graph automatisch aktualisiert)
+    → Consolidator markiert INTERESTS als dirty
   → message.responded (Seele antwortet)
     → mood.changed (Engagement verschiebt die Stimmung)
       → Impuls-Timing angepasst (hohe Energie = haeufigere Impulse)
+      → Consolidator markiert STATE als dirty
+  → Consolidator markiert MEM, BONDS als dirty
+  → naechster Tick: wenn Schwellwert erreicht → schnelle/tiefe Konsolidierung → SEED.md aktualisiert
 ```
 
 Jeder Handler ist fehler-isoliert — ein Absturz toetet nie die Engine. Events fliessen nach `.soul-events/current.jsonl` fuer den Monitor und `.soul-mood` fuer die Echtzeit-Stimmungsanzeige.

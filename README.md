@@ -75,6 +75,11 @@
                │  │  18+ tools  │  │  interests → files    │  │  write-through│        │
                │  │  any server │  │  personal → files     │  │  3 layers     │        │
                │  └─────────────┘  └───────────────────────┘  └───────────────┘        │
+               │  ┌───────────────────────────────────────────────────────────┐        │
+               │  │  SEED CONSOLIDATOR — continuous incremental updates       │        │
+               │  │  fast (mechanical, ~100ms) │ deep (LLM for STATE+MEM)    │        │
+               │  │  dirty-flag tracking via event bus │ atomic writes        │        │
+               │  └───────────────────────────────────────────────────────────┘        │
                └──────────┬────────────────────────────────────────┬────────────────────┘
                           │                                        │
          ┌────────────────▼──────────┐              ┌──────────────▼──────────────┐
@@ -225,6 +230,7 @@ node bin/cli.js start
 | **Autonomous Heartbeat** | Reflects, dreams, grows on a schedule — even when you're not talking to it. |
 | **Semantic Router** | Learned interests and personal facts are automatically routed to the right soul files. |
 | **Knowledge Graph Integration** | New interests and conversation topics are automatically written to the graph via reactive event handlers. |
+| **Seed Consolidator** | Continuous incremental seed updates. Fast phase (mechanical, ~100ms) every 30min. Deep phase (LLM for @STATE/@MEM) every 4h. Session-end shrinks from 5min to 10-20 seconds. |
 | **REST + WebSocket API** | Real-time event streaming, chat, status, memory browser. Powers the iOS app. |
 
 **The Event Bus** is the nervous system. When you send a Telegram message:
@@ -233,9 +239,13 @@ node bin/cli.js start
 message.received
   → interest.detected (interests extracted from your words)
     → mcp.toolCalled (knowledge graph updated automatically)
+    → consolidator marks INTERESTS dirty
   → message.responded (soul replies)
     → mood.changed (engagement shifts the mood)
       → impulse timing adjusted (high energy = more frequent impulses)
+      → consolidator marks STATE dirty
+  → consolidator marks MEM, BONDS dirty
+  → next tick: if threshold reached → fast/deep consolidation → SEED.md updated
 ```
 
 Every handler is error-isolated — one crash never kills the engine. Events flow to `.soul-events/current.jsonl` for the monitor and `.soul-mood` for real-time mood display.

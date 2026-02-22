@@ -23,7 +23,13 @@ const SYNC_DIRS = [
 const SYNC_FILES = [
   'SEED.md', 'SOUL.md', '.language',
   '.soul-impulse-state', '.soul-impulse-log', '.soul-state-tick',
+  'knowledge-graph.jsonl',
 ];
+
+// Files that use line-based merge instead of overwrite
+const MERGE_FILES = new Set([
+  'knowledge-graph.jsonl',
+]);
 
 const IGNORE = new Set([
   '.env', '.mcp.json', '.soul-pulse', '.session-writes', '.soul-route-log',
@@ -284,15 +290,23 @@ export class SoulChain {
       const content = decrypt(encrypted, this.keys.encryptionKey);
 
       const fullPath = path.resolve(this.soulPath, filePath);
+      const fileName = path.basename(filePath);
 
       // Create directories if needed
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
-      await fs.writeFile(fullPath, content);
 
-      // Update manifest
+      // JSONL merge: line-based union instead of overwrite
+      if (MERGE_FILES.has(fileName)) {
+        await this.mergeJsonl(fullPath, content);
+      } else {
+        await fs.writeFile(fullPath, content);
+      }
+
+      // Update manifest with merged result
+      const finalContent = await fs.readFile(fullPath);
       this.manifest.set(filePath, {
-        hash: hashFile(content),
-        mtime,
+        hash: hashFile(finalContent),
+        mtime: MERGE_FILES.has(fileName) ? Date.now() : mtime,
       });
 
       const peer = this.peers.get(peerId);
@@ -303,9 +317,89 @@ export class SoulChain {
       this.totalSynced++;
       this.writeStatus();
 
-      console.log(`  [chain] Synced: ${filePath}`);
+      console.log(`  [chain] Synced: ${filePath}${MERGE_FILES.has(fileName) ? ' (merged)' : ''}`);
     } catch (err) {
       console.error(`  [chain] Failed to receive ${filePath}: ${err.message}`);
+    }
+  }
+
+  /**
+   * Merge JSONL files line-by-line instead of overwriting.
+   * Entities merge by name (union of observations).
+   * Relations merge by from+to+relationType (deduplicated).
+   * No data is ever lost — additive merge only.
+   */
+  async mergeJsonl(fullPath, remoteContent) {
+    // Parse remote lines
+    const remoteLines = remoteContent.toString('utf-8')
+      .split('\n')
+      .filter((l) => l.trim())
+      .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter(Boolean);
+
+    // Parse local lines (if file exists)
+    let localLines = [];
+    if (existsSync(fullPath)) {
+      try {
+        const localContent = await fs.readFile(fullPath, 'utf-8');
+        localLines = localContent
+          .split('\n')
+          .filter((l) => l.trim())
+          .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+          .filter(Boolean);
+      } catch { /* empty or unreadable */ }
+    }
+
+    // Build entity map: name → entity (with merged observations)
+    const entities = new Map();
+    const relations = new Set();
+    const relationObjects = [];
+
+    // Process local first, then remote (remote adds what's missing)
+    for (const lines of [localLines, remoteLines]) {
+      for (const line of lines) {
+        if (line.type === 'entity') {
+          const existing = entities.get(line.name);
+          if (existing) {
+            // Merge observations (union, deduplicated)
+            const obsSet = new Set(existing.observations || []);
+            for (const obs of (line.observations || [])) {
+              obsSet.add(obs);
+            }
+            existing.observations = [...obsSet];
+            // Keep the most specific entityType
+            if (line.entityType && !existing.entityType) {
+              existing.entityType = line.entityType;
+            }
+          } else {
+            entities.set(line.name, { ...line });
+          }
+        } else if (line.type === 'relation') {
+          const key = `${line.from}|${line.to}|${line.relationType}`;
+          if (!relations.has(key)) {
+            relations.add(key);
+            relationObjects.push(line);
+          }
+        }
+      }
+    }
+
+    // Write merged result
+    const merged = [
+      ...Array.from(entities.values()),
+      ...relationObjects,
+    ];
+
+    await fs.writeFile(
+      fullPath,
+      merged.map((obj) => JSON.stringify(obj)).join('\n') + (merged.length > 0 ? '\n' : ''),
+    );
+
+    const localCount = localLines.length;
+    const remoteCount = remoteLines.length;
+    const mergedCount = merged.length;
+    if (mergedCount > localCount) {
+      console.log(`  [chain] JSONL merge: ${localCount} local + ${remoteCount} remote → ${mergedCount} merged`);
     }
   }
 

@@ -10,14 +10,15 @@ const DEFAULT_NIGHT_END = 7;
 const TICK_INTERVAL = 120000;     // 2 minutes — lightweight state tick
 
 export class ImpulseScheduler {
-  constructor({ soulPath, context, llm, mcp, telegram, memory }) {
+  constructor({ soulPath, context, llm, mcp, telegram, memory, bus }) {
     this.soulPath = soulPath;
     this.context = context;
     this.llm = llm;
     this.mcp = mcp;
     this.telegram = telegram;
     this.memory = memory;
-    this.state = new ImpulseState(soulPath);
+    this.bus = bus;
+    this.state = new ImpulseState(soulPath, { bus });
     this.timer = null;
     this.tickTimer = null;
     this.running = false;
@@ -155,6 +156,10 @@ export class ImpulseScheduler {
     // Persist state
     await this.state.save();
 
+    this.bus?.safeEmit('impulse.fired', {
+      source: 'impulse', type, mood: { ...this.state.mood }, engagement: this.state.engagement,
+    });
+
     await writePulse(this.soulPath, 'impulse', `${type} — done`);
   }
 
@@ -275,6 +280,10 @@ export class ImpulseScheduler {
 
       // Save state — this writes .soul-impulse-state which chain syncs
       await this.state.save();
+
+      this.bus?.safeEmit('impulse.tick', {
+        source: 'impulse', mood: { ...this.state.mood }, engagement: this.state.engagement,
+      });
 
       // Append lightweight tick entry to log (for monitor)
       await this.state.appendLog({

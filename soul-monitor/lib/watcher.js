@@ -20,6 +20,7 @@ const FILE_NODE_MAP = [
   { pattern: /heartbeat\//,                      node: 'heartbeat' },
   { pattern: /zustandslog\/|statelog\//,         node: 'statelog' },
   { pattern: /SOUL\.md$/,                        node: 'seed' },
+  { pattern: /knowledge-graph\.jsonl$/,           node: 'graph' },
 ];
 
 // Activity types → which brain nodes light up
@@ -29,7 +30,7 @@ const ACTIVITY_MAP = {
   research:  ['interessen', 'mem'],           // Searching the web → interests + memory
   code:      ['manifest', 'evolution'],        // Writing code → creation + growth
   think:     ['kern', 'bewusstsein'],          // Deep reasoning → core + consciousness
-  remember:  ['mem'],                          // Accessing memories → memory only
+  remember:  ['mem', 'graph'],                  // Accessing memories → memory + graph
   dream:     ['traeume', 'garten'],            // Creative associations → dreams + garden
   relate:    ['bonds'],                        // Thinking about relationships → bonds only
   reflect:   ['schatten', 'bewusstsein'],       // Self-examination → shadow + consciousness
@@ -43,7 +44,7 @@ const ACTIVITY_MAP = {
   // Specific actions
   read:      ['mem', 'bewusstsein'],            // Reading a file → memory + consciousness
   write:     ['manifest'],                      // Writing a file → creation
-  search:    ['interessen', 'mem'],             // Web search → interests + memory
+  search:    ['interessen', 'mem', 'graph'],     // Web search → interests + memory + graph
   analyze:   ['kern', 'schatten'],              // Analyzing something → core + shadow
   plan:      ['manifest', 'kern'],              // Planning → creation + core
   connect:   ['bonds', 'interessen'],           // Connecting to services → bonds + interests
@@ -54,6 +55,8 @@ const ACTIVITY_MAP = {
 };
 
 const PULSE_FILE = '.soul-pulse';
+const MOOD_FILE = '.soul-mood';
+const EVENTS_FILE = '.soul-events/current.jsonl';
 
 // Decay timing
 const BRIGHT_MS = 6000;   // Full brightness phase (6 seconds)
@@ -69,6 +72,10 @@ class SoulWatcher extends EventEmitter {
     this.pulseWatcher = null;
     this.activeNodes = new Map(); // node -> timestamp of last activity
     this.lastAnyPulse = 0;        // Timestamp of most recent pulse (any type)
+    this.currentMood = null;      // Current mood from .soul-mood
+    this.moodWatcher = null;
+    this.eventsWatcher = null;
+    this._lastJsonlSize = 0;      // Track file size to detect new lines
   }
 
   start() {
@@ -122,6 +129,28 @@ class SoulWatcher extends EventEmitter {
       .on('change', () => this.handlePulse(pulseFilePath))
       .on('add', () => this.handlePulse(pulseFilePath));
 
+    // Watch .soul-mood for mood changes
+    const moodFilePath = path.join(this.soulPath, MOOD_FILE);
+    this.moodWatcher = watch(moodFilePath, {
+      persistent: true,
+      ignoreInitial: false,
+      awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 100 },
+    });
+    this.moodWatcher
+      .on('change', () => this.handleMoodChange(moodFilePath))
+      .on('add', () => this.handleMoodChange(moodFilePath));
+
+    // Watch .soul-events/current.jsonl for cross-process events
+    const eventsFilePath = path.join(this.soulPath, EVENTS_FILE);
+    this.eventsWatcher = watch(eventsFilePath, {
+      persistent: true,
+      ignoreInitial: false,
+      awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
+    });
+    this.eventsWatcher
+      .on('change', () => this.handleEventsChange(eventsFilePath))
+      .on('add', () => this.handleEventsChange(eventsFilePath));
+
     return this;
   }
 
@@ -157,6 +186,43 @@ class SoulWatcher extends EventEmitter {
       }
     } catch {
       // Ignore read errors
+    }
+  }
+
+  handleMoodChange(filePath) {
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8').trim();
+      if (!content) return;
+      const mood = JSON.parse(content);
+      this.currentMood = mood;
+      this.emit('moodChange', mood);
+    } catch {
+      // Ignore parse errors
+    }
+  }
+
+  handleEventsChange(filePath) {
+    try {
+      const stat = fs.statSync(filePath);
+      if (stat.size <= this._lastJsonlSize) {
+        this._lastJsonlSize = stat.size;
+        return;
+      }
+      this._lastJsonlSize = stat.size;
+
+      // Read last few lines for new events
+      const content = fs.readFileSync(filePath, 'utf-8').trim();
+      const lines = content.split('\n').filter(Boolean);
+      const last = lines.slice(-3); // Process last 3 events max
+
+      for (const line of last) {
+        try {
+          const event = JSON.parse(line);
+          this.emit('busEvent', event);
+        } catch { /* skip malformed lines */ }
+      }
+    } catch {
+      // File may not exist yet
     }
   }
 
@@ -213,6 +279,8 @@ class SoulWatcher extends EventEmitter {
   stop() {
     if (this.watcher) this.watcher.close();
     if (this.pulseWatcher) this.pulseWatcher.close();
+    if (this.moodWatcher) this.moodWatcher.close();
+    if (this.eventsWatcher) this.eventsWatcher.close();
   }
 }
 

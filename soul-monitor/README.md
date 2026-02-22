@@ -2,10 +2,10 @@
 
 Real-time terminal visualization of an AI soul's consciousness.
 
-Six views in one tool: brain visualization, inner monologue, memory replay, identity card, P2P chain status, and proactive impulse activity.
+Seven views in one tool: brain visualization, inner monologue, memory replay, identity card, P2P chain status, proactive impulse activity, and knowledge graph.
 
 ```
-  [1:BRAIN] 2:WHISPER 3:REPLAY 4:CARD 5:CHAIN 6:IMPULSE  q:quit
+  [1:BRAIN] 2:WHISPER 3:REPLAY 4:CARD 5:CHAIN 6:IMPULSE 7:GRAPH  q:quit
 
   ~ SEELE ~  Session #11
 
@@ -44,10 +44,11 @@ Switch between views with number keys or shortcuts:
 | `4` / `c` | **Card** | Soul identity card — name, axioms, mood, interests, connections |
 | `5` / `n` | **Chain** | P2P sync status — connected peers, files synced, chain health |
 | `6` / `i` | **Impulse** | Proactive soul activity — mood bars, engagement score, impulse history, interest weights |
+| `7` / `g` | **Graph** | Knowledge graph overview — entity types, relations, recent entries, observation counts |
 
 ### Brain View (default)
 
-14 brain regions mapped to soul files. Nodes glow when accessed, connections
+15 brain regions mapped to soul files. Nodes glow when accessed, connections
 pulse with traveling light. Activity feed shows real-time events.
 
 ### Whisper View
@@ -85,12 +86,20 @@ Real-time dashboard of the soul's proactive impulse system. Shows:
 
 Reads from `.soul-impulse-state` and `.soul-impulse-log`.
 
+### Graph View
+
+Knowledge graph overview. Reads `knowledge-graph.jsonl` and shows:
+- Entity count, relation count, observation count
+- Entity type breakdown with visual bar charts
+- Recent entities (newest first) with type and observation count
+- Recent relations (newest first) with from/to/type
+
 ## Controls
 
 | Key | Action |
 |-----|--------|
-| `1`-`6` | Switch views |
-| `b` `w` `r` `c` `n` `i` | Switch views (shortcuts) |
+| `1`-`7` | Switch views |
+| `b` `w` `r` `c` `n` `i` `g` | Switch views (shortcuts) |
 | `←` `→` | Navigate dates (Replay view) |
 | `q` / `Ctrl+C` / `Esc` | Quit |
 
@@ -115,6 +124,7 @@ Each file maps to a brain region:
 | `seele/EVOLUTION.md` | EVOLUTION (Growth) |
 | `seele/WACHSTUM.md` | WACHSTUM (Change) |
 | `zustandslog/*` | STATELOG (Archive) |
+| `knowledge-graph.jsonl` | GRAPH (Knowledge) |
 
 ## Part of
 

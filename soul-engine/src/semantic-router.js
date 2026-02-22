@@ -106,9 +106,10 @@ const MAX_PERSONAL_PER_DAY = 3;
 // ── Router Class ────────────────────────────────────────
 
 export class SemanticRouter {
-  constructor(soulPath, language = 'de') {
+  constructor(soulPath, language = 'de', options = {}) {
     this.soulPath = soulPath;
     this.language = language;
+    this.bus = options.bus;
     this.logPath = resolve(soulPath, ROUTE_LOG);
 
     // Throttle state: { key → lastRouteTimestamp }
@@ -255,6 +256,11 @@ export class SemanticRouter {
 
     if (modified) {
       await writeFile(filePath, content);
+      this.bus?.safeEmit('interest.routed', {
+        source: 'semantic-router',
+        clusters: clustersToRoute.map((c) => c.cluster),
+        filePath: filePath.replace(this.soulPath + '/', ''),
+      });
     }
   }
 
@@ -401,6 +407,12 @@ export class SemanticRouter {
       this.throttle[throttleKey] = Date.now();
       this.dailyCounts[dailyKey] = count + 1;
       await this._appendLog('personal', humanName, relPath, 'written');
+      this.bus?.safeEmit('personal.detected', {
+        source: 'semantic-router',
+        facts,
+        userName: humanName,
+        filePath: relPath.replace(this.soulPath + '/', ''),
+      });
       console.log(`  [router] Personal fact written for ${humanName}`);
     }
   }

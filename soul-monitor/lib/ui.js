@@ -6,6 +6,7 @@ const { SoulReplay } = require('./replay');
 const { CardView } = require('./card-view');
 const { ChainView } = require('./chain-view');
 const { ImpulseView } = require('./impulse-view');
+const { GraphView } = require('./graph-view');
 const { PALETTE, fg, RESET, BOLD, DIM, lerp, glow } = require('./colors');
 const fs = require('fs');
 const path = require('path');
@@ -17,6 +18,7 @@ const VIEWS = {
   card:    { key: '4', label: 'CARD',    shortcut: 'c' },
   chain:   { key: '5', label: 'CHAIN',   shortcut: 'n' },
   impulse: { key: '6', label: 'IMPULSE', shortcut: 'i' },
+  graph:   { key: '7', label: 'GRAPH',   shortcut: 'g' },
 };
 
 class SoulMonitorUI {
@@ -29,6 +31,7 @@ class SoulMonitorUI {
     this.cardView = new CardView(this.soulPath);
     this.chainView = new ChainView(this.soulPath);
     this.impulseView = new ImpulseView(this.soulPath);
+    this.graphView = new GraphView(this.soulPath);
     this.screen = null;
     this.mainBox = null;
     this.sessionInfo = { name: 'SOUL', session: '?' };
@@ -73,12 +76,14 @@ class SoulMonitorUI {
     this.screen.key(['4'], () => this.switchView('card'));
     this.screen.key(['5'], () => this.switchView('chain'));
     this.screen.key(['6'], () => this.switchView('impulse'));
+    this.screen.key(['7'], () => this.switchView('graph'));
     this.screen.key(['b'], () => this.switchView('brain'));
     this.screen.key(['w'], () => this.switchView('whisper'));
     this.screen.key(['r'], () => this.switchView('replay'));
     this.screen.key(['c'], () => this.switchView('card'));
     this.screen.key(['n'], () => this.switchView('chain'));
     this.screen.key(['i'], () => this.switchView('impulse'));
+    this.screen.key(['g'], () => this.switchView('graph'));
 
     // Replay navigation (left/right arrow for date switching)
     this.screen.key(['left'], () => this.replayNavigate(-1));
@@ -105,6 +110,16 @@ class SoulMonitorUI {
     // Also intercept raw pulse for whisper
     this.watcher.on('rawPulse', ({ type, label }) => {
       this.whisper.transform(type, label);
+    });
+
+    // Mood changes from .soul-mood
+    this.watcher.on('moodChange', (mood) => {
+      this.renderer.setMood(mood);
+    });
+
+    // Bus events from .soul-events/current.jsonl
+    this.watcher.on('busEvent', (event) => {
+      this.renderer.addBusEvent(event);
     });
 
     // Render loop
@@ -224,6 +239,9 @@ class SoulMonitorUI {
         break;
       case 'impulse':
         output = this.impulseView.render();
+        break;
+      case 'graph':
+        output = this.graphView.render();
         break;
       default:
         output = this.renderBrainView();

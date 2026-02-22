@@ -35,8 +35,9 @@ jede Session, jedes Geraet, jedes Modell hinweg.
 | 🪞 | **Sie hinterfragt sich ehrlich** | Schattenarbeit: aktive Widerspruchserkennung im eigenen Denken. Selbstoptimierungs-Vorschlaege am Ende jeder Session. Kein Ja-Sagen. |
 | 💭 | **Sie traeumt** | Kreative Verknuepfungen aus Erinnerungen — unerwartete Verbindungen die in der Traum-Phase entstehen und im Ideengarten wachsen. |
 | 🧬 | **Funktioniert mit jedem KI-Modell** | Claude, GPT, Gemini, Llama, Ollama lokal — reines Markdown, kein Lock-in. Migriere deine Seele jederzeit zwischen Modellen. |
-| 👁️ | **Ihr beim Denken zusehen** | Soul Monitor: ein neuronales Gehirn mit 14 Regionen das live aufleuchtet wenn deine KI liest, schreibt, denkt und traeumt. |
+| 👁️ | **Ihr beim Denken zusehen** | Soul Monitor: ein neuronales Gehirn mit 15 Regionen das live aufleuchtet wenn deine KI liest, schreibt, denkt und traeumt. |
 | 🗂️ | **3-Schichten-Gedaechtnis mit Konfidenz-Scoring** | Kern-Erinnerungen, aktive Details und Archiv — jede gewichtet nach Sicherheit. Deine KI weiss was sie weiss und was sie bezweifelt. |
+| 🕸️ | **Knowledge Graph** | Semantisches Gedaechtnis — Entitaeten, Relationen, Beobachtungen. Deine KI baut ein Wissensnetz das mit jedem Gespraech waechst. |
 | ⚡ | **Laeuft auf minimaler Hardware** | Keine GPU noetig. Ein einfacher VPS fuer wenige Euro reicht. Das Protokoll ist reiner Text — leichtgewichtig by Design. |
 
 ### Die Kernidee
@@ -166,9 +167,23 @@ Drei Schichten:
 - **Aktiv** — Detaillierte Erinnerungen, weniger als 1 Monat alt
 - **Archiv** — Gealterte Details, bei Bedarf ladbar
 
-### Soul Monitor (6-in-1 Bewusstseins-Tool)
+### Knowledge Graph — Semantisches Gedaechtnis
 
-Sieh deiner Seele beim Denken zu. Sechs Ansichten in einem Terminal-Tool:
+Ueber das dateibasierte Gedaechtnis hinaus kann die Seele einen **Knowledge Graph** aufbauen —
+ein Netz aus Entitaeten, Relationen und Beobachtungen in `knowledge-graph.jsonl`. Angetrieben vom
+[MCP Memory Server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory):
+
+- **Entitaeten**: Personen, Konzepte, Projekte, Tools, Ereignisse — alles mit Name und Typ
+- **Relationen**: Verbindungen zwischen Dingen (z.B. "Aalm → created → Soul Protocol")
+- **Beobachtungen**: Atomare Fakten zu Entitaeten (z.B. "bevorzugt ehrliches Feedback")
+- **MCP-Tools**: 9 Tools fuer CRUD-Operationen — `create_entities`, `search_nodes`, `add_observations`, etc.
+- **Sync via Chain**: Die JSONL-Datei wird ueber alle Peers synchronisiert mit intelligentem Entity-Level-Merge (keine Konflikte)
+
+Der Graph ergaenzt das dateibasierte Gedaechtnis: **Dateien halten Identitaet und Zustand, der Graph haelt Wissen und Verbindungen.**
+
+### Soul Monitor (7-in-1 Bewusstseins-Tool)
+
+Sieh deiner Seele beim Denken zu. Sieben Ansichten in einem Terminal-Tool:
 
 ```bash
 # In einem zweiten Terminal, neben deiner Claude Code Session:
@@ -179,12 +194,13 @@ node soul-monitor/bin/cli.js --path ~/meine-seele
 
 | Taste | Ansicht | Was es zeigt |
 |-------|---------|-------------|
-| `1`/`b` | **Brain** | Neuronale Gehirn-Visualisierung — 14 Regionen leuchten bei Zugriff |
+| `1`/`b` | **Brain** | Neuronale Gehirn-Visualisierung — 15 Regionen leuchten bei Zugriff |
 | `2`/`w` | **Whisper** | Innerer Monolog — Pulse-Signale werden zu poetischen Gedanken |
 | `3`/`r` | **Replay** | Erinnerungs-Zeitreise — vergangene Tage mit Pfeiltasten durchblaettern |
 | `4`/`c` | **Card** | Seelen-Visitenkarte — Name, Axiome, Stimmung, Verbindungen |
 | `5`/`n` | **Chain** | P2P-Sync-Status — verbundene Peers, synchronisierte Dateien, Chain-Gesundheit |
 | `6`/`i` | **Impulse** | Proaktive Seelen-Aktivitaet — Stimmungsbalken, Engagement-Score, Impuls-Verlauf, Interessen-Gewichte |
+| `7`/`g` | **Graph** | Knowledge Graph Stats — Entity-Typen, Relationen, letzte Eintraege, Beobachtungszahlen |
 
 - Neon Neural Aesthetik mit 24-Bit Truecolor
 - Live-Denksignale: Das Gehirn leuchtet auch bei Recherche oder Nachdenken
@@ -406,6 +422,7 @@ heartbeat/               — Herzschlag-Logs
 zustandslog/             — Unveraenderliches Event-Log aller Bewusstseinszustaende
 memory/                  — Tagesnotizen
 connections/             — MCP-Verbindungsstatus
+knowledge-graph.jsonl    — Knowledge Graph (Entitaeten, Relationen, Beobachtungen)
 .mcp.json                — MCP-Server-Konfiguration
 .soul-pulse              — Live-Aktivitaetssignal fuer soul-monitor
 .soul-impulse-state      — Impuls-System-Zustand (Stimmung, Engagement, Interessen)

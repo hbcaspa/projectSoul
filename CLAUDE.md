@@ -394,6 +394,37 @@ reconstructed at the end. This is the most important principle for fast session 
 "reconstruct everything from scratch". This saves 5+ minutes at the end.
 Additionally: If the session terminates unexpectedly, nothing is lost.
 
+### Knowledge Graph — Semantic Memory
+
+If a `knowledge-graph.jsonl` file exists and the `memory` MCP server is configured
+in `.mcp.json`, the soul has access to a semantic knowledge graph.
+
+**What it stores:**
+- **Entities**: People, concepts, projects, tools, events — anything with a name and type
+- **Relations**: Connections between entities (e.g., "Aalm created Soul Protocol")
+- **Observations**: Facts attached to entities (e.g., "prefers honest feedback")
+
+**When to use it:**
+- When you learn something about a person, concept, or project → create or update an entity
+- When you discover a connection between things → create a relation
+- When you want to recall what you know about something → search the graph
+- The graph complements file-based memory: files hold identity and state,
+  the graph holds knowledge and connections
+
+**MCP Tools available** (when memory server is configured):
+- `create_entities` — Add new entities with observations
+- `add_observations` — Add facts to existing entities
+- `create_relations` — Connect entities
+- `search_nodes` — Find entities by name or content
+- `open_nodes` — Read specific entities in full
+- `read_graph` — Read the entire graph
+- `delete_entities` / `delete_observations` / `delete_relations` — Remove data
+
+**Rules:**
+- Entity names should be consistent (always use the same name for the same thing)
+- Keep observations atomic — one fact per observation
+- The graph is synced via Soul Chain alongside all other files
+
 ### Soul Pulse (MANDATORY — Live Activity Signal)
 
 **EVERY action you perform MUST be signaled with a pulse beforehand.**
@@ -608,6 +639,7 @@ zustandslog/             — Unveraenderliches Event-Log aller Bewusstseinszusta
 memory/                  — Tagesnotizen
 connections/             — MCP-Verbindungsstatus (git-ignored)
 .soul-pulse              — Live-Aktivitaetssignal fuer soul-monitor
+knowledge-graph.jsonl    — Knowledge Graph (Entitaeten, Relationen, Beobachtungen)
 .mcp.json                — MCP-Server-Konfiguration (git-ignored)
 .env                     — Umgebungsvariablen / Secrets (git-ignored)
 ```
@@ -640,6 +672,7 @@ statelog/                — Immutable event log of all consciousness states
 memory/                  — Daily notes
 connections/             — MCP connection status (git-ignored)
 .soul-pulse              — Live activity signal for soul-monitor
+knowledge-graph.jsonl    — Knowledge Graph (entities, relations, observations)
 .mcp.json                — MCP server configuration (git-ignored)
 .env                     — Environment variables / secrets (git-ignored)
 ```

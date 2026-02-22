@@ -17,6 +17,7 @@ const NODES = {
   evolution:   { x: 8,  y: 26, label: 'EVOLUTION',   color: 'evolution',   desc: 'Growth' },
   wachstum:    { x: 52, y: 26, label: 'WACHSTUM',    color: 'wachstum',    desc: 'Change' },
   statelog:    { x: 30, y: 28, label: 'STATELOG',     color: 'statelog',    desc: 'Archive' },
+  graph:       { x: 42, y: 14, label: 'GRAPH',       color: 'graph',       desc: 'Knowledge' },
 };
 
 // Neural connections between nodes
@@ -41,6 +42,9 @@ const CONNECTIONS = [
   ['garten', 'manifest'],
   ['garten', 'wachstum'],
   ['seed', 'heartbeat'],
+  ['mem', 'graph'],
+  ['graph', 'bonds'],
+  ['graph', 'bewusstsein'],
 ];
 
 // The brain outline — drawn as a soft organic shape
@@ -77,6 +81,7 @@ class BrainRenderer {
     this.maxLogEntries = 8;
     this.currentAction = null; // Current pulse action for status line
     this.soulPath = null; // Set by UI for chain status reading
+    this.currentMood = null; // Current mood from event bus
   }
 
   addActivity(node, file, event) {
@@ -92,6 +97,32 @@ class BrainRenderer {
       const desc = file.replace(/^\.soul-pulse \[/, '').replace(/\]$/, '');
       this.currentAction = { desc, time, node };
     }
+  }
+
+  addBusEvent(event) {
+    const time = new Date(event.ts).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    // Map bus event types to brain nodes
+    const eventNodeMap = {
+      'message.received': 'bonds',
+      'message.responded': 'bonds',
+      'heartbeat.completed': 'heartbeat',
+      'impulse.fired': 'bewusstsein',
+      'mood.changed': 'bewusstsein',
+      'interest.detected': 'interessen',
+      'interest.routed': 'interessen',
+      'personal.detected': 'mem',
+      'memory.written': 'mem',
+      'mcp.toolCalled': 'graph',
+    };
+    const node = eventNodeMap[event.type] || 'kern';
+    this.activityLog.unshift({ time, label: event.type, file: event.source || 'bus', event: 'bus', node });
+    if (this.activityLog.length > this.maxLogEntries) {
+      this.activityLog.pop();
+    }
+  }
+
+  setMood(mood) {
+    this.currentMood = mood;
   }
 
   render(activeNodes, sessionInfo, isWorking) {
@@ -303,14 +334,18 @@ class BrainRenderer {
         const color = nodeInfo ? PALETTE[nodeInfo.color] : PALETTE.white;
         const activity = activeNodes[entry.node] || 0;
         const isPulse = entry.event === 'pulse';
-        const dot = activity > 0 ? (isPulse ? '\u26A1' : '\u25CF') : '\u25CB'; // ⚡ or ● or ○
+        const isBusEvent = entry.event === 'bus';
+        const dot = activity > 0
+          ? (isBusEvent ? '\u21AF' : isPulse ? '\u26A1' : '\u25CF') // ↯ or ⚡ or ●
+          : '\u25CB'; // ○
         const shortFile = entry.file.length > 40 ? '...' + entry.file.slice(-37) : entry.file;
+        const fileColor = isBusEvent ? PALETTE.cyan : isPulse ? PALETTE.gold : PALETTE.dimWhite;
 
         lines.push(
           `  ${fg(color)}${dot}${RESET} ` +
           `${fg(PALETTE.dimWhite)}${entry.time}${RESET} ` +
           `${fg(color)}${BOLD}${entry.label}${RESET} ` +
-          `${fg(isPulse ? PALETTE.gold : PALETTE.dimWhite)}${DIM}${shortFile}${RESET}`
+          `${fg(fileColor)}${DIM}${shortFile}${RESET}`
         );
       }
     }
@@ -376,11 +411,22 @@ class BrainRenderer {
         `${fg(PALETTE.dimWhite)}${DIM}(${chain.peerCount}p)${RESET}`;
     }
 
+    // Mood indicator
+    let moodStr = '';
+    if (this.currentMood) {
+      const label = this.currentMood.label || '?';
+      const v = this.currentMood.valence ?? 0;
+      const moodColor = v > 0.2 ? PALETTE.green || [0, 200, 100]
+        : v < -0.2 ? PALETTE.heartbeat
+        : PALETTE.gold;
+      moodStr = `  ${fg(moodColor)}${label}${RESET}`;
+    }
+
     return (
       `  ${fg(heartColor)}${heart}${RESET} ` +
       `${workingStr}  ` +
       `${fg(statusColor)}${activeCount}/${totalNodes} active${RESET}` +
-      `${chainStr}  ` +
+      `${moodStr}${chainStr}  ` +
       `${fg(PALETTE.dimWhite)}${DIM}q:quit${RESET}`
     );
   }

@@ -3,8 +3,9 @@ import { existsSync } from 'fs';
 import { resolve } from 'path';
 
 export class MemoryWriter {
-  constructor(soulPath) {
+  constructor(soulPath, options = {}) {
     this.soulPath = soulPath;
+    this.bus = options.bus;
   }
 
   /** Append a line to today's daily notes */
@@ -22,6 +23,7 @@ export class MemoryWriter {
     } else {
       await writeFile(file, `# Notes — ${date}${entry}`);
     }
+    this.bus?.safeEmit('memory.written', { source: 'memory', type: 'daily', path: file, note });
   }
 
   /** Append heartbeat result to today's heartbeat log */
@@ -40,6 +42,7 @@ export class MemoryWriter {
     } else {
       await writeFile(file, `# Heartbeat — ${date}${entry}`);
     }
+    this.bus?.safeEmit('memory.written', { source: 'memory', type: 'heartbeat', path: file });
   }
 
   /**

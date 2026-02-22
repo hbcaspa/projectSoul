@@ -12,12 +12,14 @@ import { SoulAPI } from './api.js';
 import { APIChannel } from './api-channel.js';
 import { WhatsAppBridge } from './whatsapp.js';
 import { SemanticRouter } from './semantic-router.js';
+import { SoulEventBus } from './event-bus.js';
 
 export class SoulEngine {
   constructor(soulPath) {
     this.soulPath = soulPath;
+    this.bus = new SoulEventBus({ debug: process.env.SOUL_BUS_DEBUG === 'true', soulPath });
     this.context = new SoulContext(soulPath);
-    this.memory = new MemoryWriter(soulPath);
+    this.memory = new MemoryWriter(soulPath, { bus: this.bus });
     this.llm = null;
     this.mcp = null;
     this.telegram = null;
@@ -39,7 +41,7 @@ export class SoulEngine {
 
     let model;
     if (openaiKey) {
-      model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+      model = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
       this.llm = new OpenAIAdapter(openaiKey, model);
     } else if (geminiKey) {
       model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
@@ -55,7 +57,7 @@ export class SoulEngine {
   async start() {
     console.log(SOUL_BANNER);
 
-    await writePulse(this.soulPath, 'wake', 'Engine starting');
+    await writePulse(this.soulPath, 'wake', 'Engine starting', this.bus);
 
     const { name, lang, model } = await this.init();
 
@@ -64,7 +66,7 @@ export class SoulEngine {
     console.log(`  LLM:       ${model}`);
 
     // MCP Servers (optional — .mcp.json)
-    this.mcp = new MCPClientManager(this.soulPath);
+    this.mcp = new MCPClientManager(this.soulPath, { bus: this.bus });
     await this.mcp.init();
 
     if (this.mcp.hasTools()) {
@@ -123,7 +125,7 @@ export class SoulEngine {
     console.log(`  Heartbeat: ${cronExpr}`);
 
     // Semantic router — learned data → soul files
-    this.router = new SemanticRouter(this.soulPath, this.context.language);
+    this.router = new SemanticRouter(this.soulPath, this.context.language, { bus: this.bus });
     console.log('  Router:    active (interests, personal)');
 
     // Impulse scheduler — proactive soul
@@ -135,12 +137,17 @@ export class SoulEngine {
         mcp: this.mcp,
         telegram: this.telegram,
         memory: this.memory,
+        bus: this.bus,
       });
       await this.impulse.start();
       console.log('  Impulse:   active (dynamic scheduling)');
     } else {
       console.log('  Impulse:   disabled');
     }
+
+    // Event Bus — reactive handlers
+    this._registerHandlers();
+    console.log(`  Event Bus: active (${this.bus.listenerCount('message.received') + this.bus.listenerCount('mood.changed') + this.bus.listenerCount('interest.detected')} handlers)`);
 
     this.running = true;
     console.log('');
@@ -160,7 +167,7 @@ export class SoulEngine {
       tools: this.mcp.getTools(),
       onToolCall: async (name, args) => {
         console.log(`  [mcp] Executing: ${name}`);
-        await writePulse(this.soulPath, 'code', `MCP: ${name}`);
+        await writePulse(this.soulPath, 'code', `MCP: ${name}`, this.bus);
         const result = await this.mcp.callTool(name, args);
         // Truncate very long results to avoid blowing up the context
         if (result.length > 10000) {
@@ -172,7 +179,8 @@ export class SoulEngine {
   }
 
   async handleMessage({ text, chatId, userName }) {
-    await writePulse(this.soulPath, 'relate', `Telegram: ${userName}`);
+    await writePulse(this.soulPath, 'relate', `Telegram: ${userName}`, this.bus);
+    this.bus.safeEmit('message.received', { source: 'engine', text, chatId, userName, channel: 'telegram' });
 
     // Reload context (might have changed via Claude Code)
     await this.context.load();
@@ -231,6 +239,7 @@ export class SoulEngine {
       for (const action of waActions) {
         try {
           await this.whatsapp.send(action.recipient, action.message);
+          this.bus.safeEmit('whatsapp.sent', { source: 'engine', recipient: action.recipient, message: action.message });
           console.log(`  [whatsapp] Sent to ${action.recipient}`);
         } catch (err) {
           console.error(`  [whatsapp] Failed: ${err.message}`);
@@ -244,6 +253,7 @@ export class SoulEngine {
     // Persist
     await this.telegram.saveMessage(chatId, 'user', text, userName);
     await this.telegram.saveMessage(chatId, 'model', cleanResponse);
+    this.bus.safeEmit('message.responded', { source: 'engine', text, responseText: cleanResponse, chatId, userName, channel: 'telegram' });
     await this.memory.appendDailyNote(
       `[Telegram/${userName}] ${text.substring(0, 120)}${text.length > 120 ? '...' : ''}`
     );
@@ -251,6 +261,18 @@ export class SoulEngine {
     // Feed impulse system with user interaction + live write-through
     if (this.impulse) {
       const learned = this.impulse.onUserMessage(text);
+
+      // Emit interest event for reactive handlers
+      if (learned && learned.hasRelevantContent) {
+        this.bus.safeEmit('interest.detected', {
+          source: 'engine',
+          interests: learned.detectedInterests,
+          newInterests: learned.newInterests,
+          boostedInterests: learned.boostedInterests,
+          topics: learned.topics,
+          userName,
+        });
+      }
 
       // Live write-through: write learned data to soul files immediately
       if (learned && learned.hasRelevantContent) {
@@ -288,7 +310,7 @@ export class SoulEngine {
       }
     }
 
-    await writePulse(this.soulPath, 'relate', `Responded to ${userName}`);
+    await writePulse(this.soulPath, 'relate', `Responded to ${userName}`, this.bus);
     return cleanResponse;
   }
 
@@ -375,7 +397,7 @@ export class SoulEngine {
 
   async runHeartbeat() {
     console.log('  [heartbeat] Running...');
-    await writePulse(this.soulPath, 'heartbeat', 'Autonomous heartbeat');
+    await writePulse(this.soulPath, 'heartbeat', 'Autonomous heartbeat', this.bus);
 
     await this.context.load();
     const systemPrompt = buildHeartbeatPrompt(this.context);
@@ -391,6 +413,7 @@ export class SoulEngine {
     await this.memory.writeHeartbeat(result);
     await this.memory.persistHeartbeatState(result, this.context.language);
     await this.memory.appendDailyNote('[Heartbeat] Autonomous pulse completed');
+    this.bus.safeEmit('heartbeat.completed', { source: 'engine', result: result.substring(0, 500) });
 
     // Telegram notification
     if (
@@ -403,13 +426,84 @@ export class SoulEngine {
       await this.telegram.sendToOwner(summary);
     }
 
-    await writePulse(this.soulPath, 'heartbeat', 'Heartbeat complete');
+    await writePulse(this.soulPath, 'heartbeat', 'Heartbeat complete', this.bus);
     console.log('  [heartbeat] Complete.');
+  }
+
+  /**
+   * Register reactive event handlers.
+   * These are the "synapses" — components reacting to each other's events.
+   */
+  _registerHandlers() {
+    // Handler 1: Mood shift → adjust impulse timing
+    this.bus.on('mood.changed', (event) => {
+      if (!this.impulse || !this.impulse.running) return;
+
+      // High energy + no recent impulse → shorten next delay
+      if (event.mood.energy > 0.7 && this.impulse.state.timeSinceLastImpulse() > 1800000) {
+        if (this.impulse.timer) {
+          clearTimeout(this.impulse.timer);
+          const shortened = this.impulse._calculateDelay() * 0.7;
+          this.impulse.timer = setTimeout(() => this.impulse._loop(), shortened);
+          console.log(`  [bus:handler] Mood energy high → impulse delay shortened to ${Math.round(shortened / 60000)}min`);
+        }
+      }
+    });
+
+    // Handler 2: New interest detected → create Knowledge Graph entity
+    this.bus.on('interest.detected', async (event) => {
+      if (!event.newInterests || event.newInterests.length === 0) return;
+      if (!this.mcp || !this.mcp.hasTools()) return;
+
+      // Check if memory MCP server has create_entities tool
+      const hasMemory = this.mcp.tools.has('create_entities');
+      if (!hasMemory) return;
+
+      try {
+        const entities = event.newInterests.map((name) => ({
+          name,
+          entityType: 'interest',
+          observations: [
+            `First mentioned by ${event.userName || 'user'} on ${new Date().toISOString().split('T')[0]}`,
+          ],
+        }));
+        await this.mcp.callTool('create_entities', { entities });
+        console.log(`  [bus:handler] Knowledge Graph: ${entities.length} new interest(s) created`);
+      } catch (err) {
+        console.error(`  [bus:handler] Knowledge Graph write failed: ${err.message}`);
+      }
+    });
+
+    // Handler 3: Conversation responded with entities → add observations to Knowledge Graph
+    this.bus.on('message.responded', async (event) => {
+      if (!this.mcp || !this.mcp.hasTools()) return;
+      if (!this.mcp.tools.has('add_observations')) return;
+      if (!this.impulse) return;
+
+      // Check if last tracked message had entity topics
+      const state = this.impulse.state;
+      const recentTopics = state._extractTopics?.(event.text);
+      if (!recentTopics || recentTopics.length === 0) return;
+
+      const entityTopics = recentTopics.filter((t) => t.type === 'entity');
+      if (entityTopics.length === 0) return;
+
+      try {
+        const observations = entityTopics.map((t) => ({
+          entityName: t.text,
+          contents: [`Discussed with ${event.userName || 'user'}: "${event.text.substring(0, 80)}"`],
+        }));
+        await this.mcp.callTool('add_observations', { observations });
+        console.log(`  [bus:handler] Knowledge Graph: ${observations.length} observation(s) added`);
+      } catch {
+        // Entity may not exist yet — that's fine, ignore silently
+      }
+    });
   }
 
   async stop() {
     this.running = false;
-    await writePulse(this.soulPath, 'sleep', 'Engine shutting down');
+    await writePulse(this.soulPath, 'sleep', 'Engine shutting down', this.bus);
 
     if (this.impulse) await this.impulse.stop();
     if (this.heartbeat) this.heartbeat.stop();

@@ -13,8 +13,9 @@ import { existsSync } from 'fs';
 import { resolve } from 'path';
 
 export class MCPClientManager {
-  constructor(soulPath) {
+  constructor(soulPath, options = {}) {
     this.soulPath = soulPath;
+    this.bus = options.bus;
     this.clients = new Map();     // name → { client, transport }
     this.tools = new Map();       // toolName → { server, definition }
   }
@@ -138,14 +139,21 @@ export class MCPClientManager {
     });
 
     // MCP returns content as array of { type, text } blocks
+    let text;
     if (result.content && Array.isArray(result.content)) {
-      return result.content
+      text = result.content
         .filter((c) => c.type === 'text')
         .map((c) => c.text)
         .join('\n');
+    } else {
+      text = String(result.content || '');
     }
 
-    return String(result.content || '');
+    this.bus?.safeEmit('mcp.toolCalled', {
+      source: 'mcp-client', tool: toolName, server, resultLength: text.length,
+    });
+
+    return text;
   }
 
   /**

@@ -5,6 +5,13 @@
       "args": ["soul-engine/src/shell-mcp-server.js"],
       "env": {}
     },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "env": {
+        "MEMORY_FILE_PATH": "knowledge-graph.jsonl"
+      }
+    },
     "whatsapp": {
       "command": "uv",
       "args": ["--directory", "/path/to/whatsapp-mcp-server", "run", "main.py"],

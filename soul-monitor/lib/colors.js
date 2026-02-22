@@ -24,6 +24,7 @@ const PALETTE = {
   manifest:    [255, 150, 0],     // Orange — manifest
   evolution:   [200, 100, 255],   // Violet — evolution
   statelog:    [80, 200, 180],    // Teal — state log
+  graph:       [0, 220, 180],    // Emerald — knowledge graph
 
   // Background
   bg:       [8, 8, 20],

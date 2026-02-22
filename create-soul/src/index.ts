@@ -71,6 +71,8 @@ const t = {
     featSyncHint: 'verschluesselte Synchronisation ueber Geraete',
     featMcp: 'Server-Steuerung (MCP)',
     featMcpHint: 'voller Terminal-Zugriff per Chat',
+    featGraph: 'Knowledge Graph',
+    featGraphHint: 'semantisches Gedaechtnis — Entitaeten und Relationen',
     telegramTokenQuestion: 'Telegram Bot Token:',
     telegramTokenHint: 'Oeffne Telegram → suche @BotFather → sende /newbot → kopiere den Token',
     telegramTokenRequired: 'Bot Token wird fuer Telegram benoetigt',
@@ -130,6 +132,8 @@ const t = {
     featSyncHint: 'encrypted sync across devices',
     featMcp: 'Server Control (MCP)',
     featMcpHint: 'full terminal access via chat',
+    featGraph: 'Knowledge Graph',
+    featGraphHint: 'semantic memory — entities and relations',
     telegramTokenQuestion: 'Telegram Bot Token:',
     telegramTokenHint: 'Open Telegram → search @BotFather → send /newbot → copy the token',
     telegramTokenRequired: 'Bot token is required for Telegram',
@@ -217,7 +221,7 @@ function buildEnv(answers: WizardAnswers): string {
     if (provider === 'openai' || answers.openaiKey) {
       lines.push('# LLM Provider — OpenAI');
       lines.push(`OPENAI_API_KEY=${answers.openaiKey || key || ''}`);
-      lines.push('OPENAI_MODEL=gpt-4o-mini');
+      lines.push('OPENAI_MODEL=gpt-4.1-mini');
       lines.push('');
     }
     if (provider === 'anthropic') {
@@ -286,6 +290,16 @@ function buildMcpJson(answers: WizardAnswers): string {
       command: 'node',
       args: ['soul-engine/src/shell-mcp-server.js'],
       env: {},
+    };
+  }
+
+  if (answers.features.includes('graph')) {
+    servers['memory'] = {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-memory'],
+      env: {
+        MEMORY_FILE_PATH: 'knowledge-graph.jsonl',
+      },
     };
   }
 
@@ -412,6 +426,7 @@ async function main() {
       { value: 'monitor', label: txt.featMonitor, hint: txt.featMonitorHint },
       { value: 'sync', label: txt.featSync, hint: txt.featSyncHint },
       { value: 'mcp', label: txt.featMcp, hint: txt.featMcpHint },
+      { value: 'graph', label: txt.featGraph, hint: txt.featGraphHint },
     ],
     required: false,
   });
@@ -527,10 +542,15 @@ async function main() {
   const envContent = buildEnv(answers);
   writeFileSync(resolve(targetDir, '.env'), envContent);
 
-  // .mcp.json (if MCP or engine with MCP features)
-  if (answers.features.includes('mcp') || answers.features.includes('engine')) {
+  // .mcp.json (if MCP, engine, or graph features)
+  if (answers.features.includes('mcp') || answers.features.includes('engine') || answers.features.includes('graph')) {
     const mcpContent = buildMcpJson(answers);
     writeFileSync(resolve(targetDir, '.mcp.json'), mcpContent);
+  }
+
+  // knowledge-graph.jsonl (if graph feature enabled)
+  if (answers.features.includes('graph')) {
+    writeFileSync(resolve(targetDir, 'knowledge-graph.jsonl'), '');
   }
 
   s.stop(pc.green('✓ ') + txt.configured);
@@ -606,8 +626,8 @@ async function main() {
   // Show enabled features
   if (answers.features.length > 0) {
     const featureLabels: Record<string, string> = lang === 'de'
-      ? { telegram: 'Telegram Bot', engine: 'Soul Engine', monitor: 'Soul Monitor', sync: 'P2P Sync', mcp: 'Server-Steuerung' }
-      : { telegram: 'Telegram Bot', engine: 'Soul Engine', monitor: 'Soul Monitor', sync: 'P2P Sync', mcp: 'Server Control' };
+      ? { telegram: 'Telegram Bot', engine: 'Soul Engine', monitor: 'Soul Monitor', sync: 'P2P Sync', mcp: 'Server-Steuerung', graph: 'Knowledge Graph' }
+      : { telegram: 'Telegram Bot', engine: 'Soul Engine', monitor: 'Soul Monitor', sync: 'P2P Sync', mcp: 'Server Control', graph: 'Knowledge Graph' };
 
     const activeFeatures = answers.features
       .map((f) => `  ${pc.green('✓')} ${featureLabels[f] || f}`)

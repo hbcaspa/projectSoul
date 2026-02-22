@@ -23,6 +23,7 @@ export class SoulAPI {
     this.wss = new WebSocketServer({ server: this.server, path: '/ws' });
     this.clients = new Set();
     this.pulsePath = path.resolve(engine.soulPath, '.soul-pulse');
+    this.bus = engine.bus;
   }
 
   setup() {
@@ -49,6 +50,7 @@ export class SoulAPI {
     this.setupRoutes();
     this.setupWebSocket();
     this.watchPulse();
+    this.setupBusBroadcast();
   }
 
   // ── REST Routes ────────────────────────────────────
@@ -200,6 +202,19 @@ export class SoulAPI {
       }
     });
 
+    // Event log (from bus)
+    app.get('/api/events', (req, res) => {
+      try {
+        const since = parseInt(req.query.since) || 0;
+        const events = this.bus
+          ? this.bus.getRecentEvents(50).filter(e => e.id > since)
+          : [];
+        res.json({ events });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     // Chat (HTTP fallback)
     app.post('/api/chat', async (req, res) => {
       try {
@@ -316,6 +331,30 @@ export class SoulAPI {
         }
       } catch { /* ignore read errors */ }
     });
+  }
+
+  // ── Bus Event Broadcast ───────────────────────────
+
+  setupBusBroadcast() {
+    if (!this.bus) return;
+
+    // Broadcast bus events to all authenticated WebSocket clients
+    const broadcastEvents = [
+      'message.received', 'message.responded', 'heartbeat.completed',
+      'impulse.fired', 'mood.changed', 'interest.detected',
+      'interest.routed', 'personal.detected', 'mcp.toolCalled',
+    ];
+
+    for (const eventName of broadcastEvents) {
+      this.bus.on(eventName, (event) => {
+        const msg = JSON.stringify({ type: 'event', event: { type: event.type, id: event.id, ts: event.ts, source: event.source } });
+        for (const client of this.clients) {
+          if (client.readyState === 1) {
+            client.send(msg);
+          }
+        }
+      });
+    }
   }
 
   // ── Lifecycle ──────────────────────────────────────

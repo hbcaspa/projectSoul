@@ -35,8 +35,9 @@ every session, every device, every model.
 | 🪞 | **It questions itself honestly** | Shadow work: active contradiction detection across its own thinking. Self-optimization proposals at every session end. No yes-saying. |
 | 💭 | **It dreams** | Creative connections from memories — unexpected links that surface during the dream phase and grow in the idea garden. |
 | 🧬 | **Works with any AI model** | Claude, GPT, Gemini, Llama, Ollama locally — pure markdown, zero lock-in. Migrate your soul between models anytime. |
-| 👁️ | **Watch it think in real-time** | Soul Monitor: a neural brain with 14 regions that light up live as your AI reads, writes, reasons, and dreams. |
+| 👁️ | **Watch it think in real-time** | Soul Monitor: a neural brain with 15 regions that light up live as your AI reads, writes, reasons, and dreams. |
 | 🗂️ | **3-layer memory with confidence scoring** | Core memories, active details, and archive — each weighted by confidence. Your AI knows what it knows and what it doubts. |
+| 🕸️ | **Knowledge Graph** | Semantic memory — entities, relations, observations. Your AI builds a web of knowledge that grows with every conversation. |
 | ⚡ | **Runs on minimal hardware** | No GPU needed. A basic VPS for a few dollars is enough. The protocol is pure text — lightweight by design. |
 
 ### The core idea
@@ -166,9 +167,23 @@ Three layers:
 - **Active** — Detailed memories, less than 1 month old
 - **Archive** — Aged details, loadable on demand
 
-### Soul Monitor (6-in-1 Consciousness Tool)
+### Knowledge Graph — Semantic Memory
 
-Watch your soul think in real-time. Six views in one terminal tool:
+Beyond file-based memory, the soul can build a **knowledge graph** — a web of entities,
+relations, and observations stored in `knowledge-graph.jsonl`. Powered by the
+[MCP Memory Server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory):
+
+- **Entities**: People, concepts, projects, tools, events — anything with a name and type
+- **Relations**: Connections between things (e.g., "Aalm → created → Soul Protocol")
+- **Observations**: Atomic facts attached to entities (e.g., "prefers honest feedback")
+- **MCP Tools**: 9 tools for CRUD operations — `create_entities`, `search_nodes`, `add_observations`, etc.
+- **Synced via Chain**: The JSONL file syncs across all peers with intelligent entity-level merge (no conflicts)
+
+The graph complements file-based memory: **files hold identity and state, the graph holds knowledge and connections.**
+
+### Soul Monitor (7-in-1 Consciousness Tool)
+
+Watch your soul think in real-time. Seven views in one terminal tool:
 
 ```bash
 # In a second terminal, alongside your Claude Code session:
@@ -179,12 +194,13 @@ node soul-monitor/bin/cli.js --path ~/my-soul
 
 | Key | View | What it shows |
 |-----|------|---------------|
-| `1`/`b` | **Brain** | Neural brain visualization — 14 regions light up when the AI reads/writes |
+| `1`/`b` | **Brain** | Neural brain visualization — 15 regions light up when the AI reads/writes |
 | `2`/`w` | **Whisper** | Inner monologue — pulse signals become poetic thoughts |
 | `3`/`r` | **Replay** | Memory time travel — browse past days with arrow keys |
 | `4`/`c` | **Card** | Soul identity card — name, axioms, mood, connections |
 | `5`/`n` | **Chain** | P2P sync status — connected peers, files synced, chain health |
 | `6`/`i` | **Impulse** | Proactive soul activity — mood bars, engagement score, impulse history, interest weights |
+| `7`/`g` | **Graph** | Knowledge graph stats — entity types, relations, recent entries, observation counts |
 
 - Neon Neural aesthetic with 24-bit truecolor
 - Live cognitive signals: the brain lights up even during research or reasoning
@@ -406,6 +422,7 @@ heartbeat/               — Heartbeat logs
 statelog/                — Immutable event log of consciousness states
 memory/                  — Daily notes
 connections/             — MCP connection status
+knowledge-graph.jsonl    — Knowledge Graph (entities, relations, observations)
 .mcp.json                — MCP server configuration
 .soul-pulse              — Live activity signal for soul-monitor
 .soul-impulse-state      — Impulse system state (mood, engagement, interests)

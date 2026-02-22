@@ -48,11 +48,13 @@ const MOOD_LABELS = {
 };
 
 export class ImpulseState {
-  constructor(soulPath) {
+  constructor(soulPath, options = {}) {
     this.soulPath = soulPath;
+    this.bus = options.bus;
     this.statePath = resolve(soulPath, STATE_FILE);
     this.logPath = resolve(soulPath, LOG_FILE);
     this.state = this._defaultState();
+    this._prevMood = null; // for change detection
   }
 
   _defaultState() {
@@ -91,17 +93,32 @@ export class ImpulseState {
 
   // ── Mood ──────────────────────────────────────────────
 
-  updateMood(deltaValence, deltaEnergy) {
+  updateMood(deltaValence, deltaEnergy, trigger) {
+    const prev = { valence: this.state.mood.valence, energy: this.state.mood.energy, label: this.state.mood.label };
     this.state.mood.valence = clamp(this.state.mood.valence + deltaValence, -1, 1);
     this.state.mood.energy = clamp(this.state.mood.energy + deltaEnergy, 0, 1);
     this.state.mood.label = this._pickMoodLabel();
+
+    // Emit mood.changed only when the shift exceeds a threshold
+    if (this.bus) {
+      const dv = Math.abs(this.state.mood.valence - prev.valence);
+      const de = Math.abs(this.state.mood.energy - prev.energy);
+      if (dv > 0.1 || de > 0.15 || this.state.mood.label !== prev.label) {
+        this.bus.safeEmit('mood.changed', {
+          source: 'impulse-state',
+          mood: { ...this.state.mood },
+          previousMood: prev,
+          trigger: trigger || 'update',
+        });
+      }
+    }
   }
 
   /** Random mood drift — small natural fluctuations */
   driftMood() {
     const dv = (Math.random() - 0.5) * 0.1; // +/- 0.05
     const de = (Math.random() - 0.5) * 0.08;
-    this.updateMood(dv, de);
+    this.updateMood(dv, de, 'drift');
   }
 
   /** Time-of-day mood influence */
@@ -109,13 +126,13 @@ export class ImpulseState {
     const hour = new Date().getHours();
     if (hour >= 6 && hour <= 10) {
       // Morning energy boost
-      this.updateMood(0.05, 0.1);
+      this.updateMood(0.05, 0.1, 'time_morning');
     } else if (hour >= 22 || hour <= 5) {
       // Night wind-down
-      this.updateMood(0, -0.1);
+      this.updateMood(0, -0.1, 'time_night');
     } else if (hour >= 14 && hour <= 15) {
       // Afternoon dip
-      this.updateMood(-0.02, -0.05);
+      this.updateMood(-0.02, -0.05, 'time_afternoon');
     }
   }
 
@@ -170,10 +187,10 @@ export class ImpulseState {
 
         if (timeSince < 300000) { // Within 5 min
           this.state.engagementScore = Math.min(1, this.state.engagementScore + 0.2);
-          this.updateMood(0.1, 0.05);
+          this.updateMood(0.1, 0.05, 'user_response_fast');
         } else if (timeSince < 1800000) { // Within 30 min
           this.state.engagementScore = Math.min(1, this.state.engagementScore + 0.1);
-          this.updateMood(0.05, 0);
+          this.updateMood(0.05, 0, 'user_response');
         }
         return;
       }
@@ -182,7 +199,7 @@ export class ImpulseState {
     // No recent impulse to respond to — unprompted message
     this.state.engagementScore = Math.min(1, this.state.engagementScore + 0.3);
     this.state.consecutiveIgnored = 0;
-    this.updateMood(0.15, 0.1);
+    this.updateMood(0.15, 0.1, 'user_unprompted');
   }
 
   /** Check for ignored impulses (called periodically) */
@@ -194,7 +211,7 @@ export class ImpulseState {
 
     if (timeSince > 3600000 && lastEntry && !lastEntry.responded) {
       this.state.consecutiveIgnored++;
-      this.updateMood(-0.05, -0.03);
+      this.updateMood(-0.05, -0.03, 'ignored');
     }
   }
 

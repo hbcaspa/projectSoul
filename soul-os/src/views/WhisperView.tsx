@@ -6,63 +6,47 @@ export default function WhisperView() {
 
   return (
     <div className="h-full flex flex-col" style={{ backgroundColor: "var(--bg-base)" }}>
-      {/* Header */}
-      <div className="px-6 pt-6 pb-3 flex-shrink-0">
-        <h2 className="text-sm uppercase tracking-wider" style={{ color: "var(--traeume)", opacity: 0.7 }}>
-          Inner Monologue
-        </h2>
-      </div>
-
-      {/* Whisper stream */}
-      <div className="flex-1 overflow-auto px-6 pb-6">
+      <div className="flex-1 overflow-auto px-8 py-6">
         {stream.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-sm italic" style={{ color: "var(--text-dim)", opacity: 0.5 }}>
-              Silence. The thoughts will come...
-            </p>
+          <div className="flex flex-col items-center justify-center h-full">
+            <div
+              className="w-20 h-20 rounded-3xl flex items-center justify-center mb-5"
+              style={{
+                background: "linear-gradient(135deg, rgba(100,100,255,0.06), rgba(139,128,240,0.03))",
+                border: "1px solid rgba(100,100,255,0.08)",
+                boxShadow: "0 4px 24px rgba(100,100,255,0.06)",
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="w-9 h-9" style={{ color: "var(--traeume)", opacity: 0.4 }}>
+                <path d="M2 12c1.5-3 3-4.5 4.5-4.5S9 10.5 10 12s2 4.5 3.5 4.5S16 15 17.5 12 20 7.5 22 12" />
+              </svg>
+            </div>
+            <p className="text-base font-light" style={{ color: "var(--text-dim)" }}>Silence</p>
+            <p className="text-xs mt-1.5" style={{ color: "var(--text-muted)" }}>The thoughts will come...</p>
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
             {stream.map((entry, i) => {
               const node = NODES[entry.type] || NODES.bewusstsein;
               const color = node?.color || "var(--text)";
-              const opacity = Math.max(0.2, 1 - i * 0.06);
+              const opacity = Math.max(0.15, 1 - i * 0.04);
               const isLatest = i === 0;
 
               return (
                 <div
                   key={`${entry.time}-${i}`}
-                  className="flex gap-3 items-start transition-opacity duration-500"
-                  style={{ opacity }}
+                  className="flex gap-4 items-start py-2.5 rounded-xl px-4 transition-all duration-500"
+                  style={{
+                    opacity,
+                    background: isLatest ? "linear-gradient(135deg, rgba(139,128,240,0.05), rgba(255,255,255,0.01))" : "transparent",
+                    border: isLatest ? "1px solid rgba(139,128,240,0.08)" : "1px solid transparent",
+                  }}
                 >
-                  {/* Time */}
-                  <span
-                    className="text-xs flex-shrink-0 pt-0.5"
-                    style={{
-                      color: "var(--text-dim)",
-                      fontVariantNumeric: "tabular-nums",
-                      minWidth: "56px",
-                    }}
-                  >
+                  <span className="text-xs flex-shrink-0 pt-0.5 font-mono" style={{ color: "var(--text-dim)", fontVariantNumeric: "tabular-nums", minWidth: "55px", opacity: 0.6 }}>
                     {entry.time}
                   </span>
-
-                  {/* Type indicator */}
-                  <span
-                    className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
-                    style={{
-                      backgroundColor: color,
-                      boxShadow: isLatest ? `0 0 8px ${color}` : "none",
-                    }}
-                  />
-
-                  {/* Whisper text */}
-                  <p
-                    className={`text-sm leading-relaxed ${isLatest ? "font-medium" : ""}`}
-                    style={{
-                      color: isLatest ? "var(--text-bright)" : "var(--text)",
-                    }}
-                  >
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-[5px]" style={{ backgroundColor: color, boxShadow: isLatest ? `0 0 10px ${color}60` : "none" }} />
+                  <p className={`text-sm leading-relaxed ${isLatest ? "font-medium" : ""}`} style={{ color: isLatest ? "var(--text-bright)" : "var(--text)" }}>
                     {entry.text}
                   </p>
                 </div>

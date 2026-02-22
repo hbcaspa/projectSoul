@@ -408,13 +408,21 @@ function App() {
 
               {/* ── Floating Dock ────────────────────────────── */}
               <div
-                className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-2 py-1.5 rounded-xl frosted z-30"
+                className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-3 py-2 rounded-2xl frosted z-30"
                 style={{
-                  backgroundColor: "rgba(22, 24, 48, 0.85)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+                  background: "linear-gradient(135deg, rgba(22, 24, 48, 0.85), rgba(16, 18, 36, 0.9))",
+                  border: "1px solid rgba(255,255,255,0.07)",
+                  boxShadow: "0 8px 40px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
                 }}
               >
+                {/* Logo */}
+                <img
+                  src="/logo.png"
+                  alt=""
+                  className="w-6 h-6 mr-1"
+                  style={{ filter: "drop-shadow(0 0 8px rgba(139,128,240,0.3))", opacity: 0.7 }}
+                />
+                <div className="w-px h-5 mx-1" style={{ backgroundColor: "rgba(255,255,255,0.06)" }} />
                 {PANELS.map((item, i) => {
                   const isActive = openPanel === item.id;
                   return (
@@ -422,17 +430,17 @@ function App() {
                       key={item.id}
                       onClick={() => togglePanel(item.id)}
                       title={`${item.label} (${i + 1})`}
-                      className="relative w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-150 cursor-default"
+                      className="relative w-8 h-8 flex items-center justify-center rounded-xl transition-all duration-200 cursor-default"
                       style={{
-                        backgroundColor: isActive ? "var(--accent-glow)" : "transparent",
+                        backgroundColor: isActive ? `color-mix(in srgb, ${item.color} 12%, transparent)` : "transparent",
                         color: isActive ? item.color : "var(--text-dim)",
-                        boxShadow: isActive ? `0 0 10px ${item.color}30` : "none",
+                        boxShadow: isActive ? `0 0 12px ${item.color}20` : "none",
                       }}
                     >
                       {item.icon}
                       <span
                         className="absolute -top-0.5 right-0 text-[7px] font-mono leading-none"
-                        style={{ color: "var(--text-dim)", opacity: 0.35 }}
+                        style={{ color: "var(--text-dim)", opacity: 0.25 }}
                       >
                         {i + 1}
                       </span>
@@ -446,34 +454,38 @@ function App() {
                 <>
                   <div
                     className="absolute inset-0 z-20"
-                    style={{ backgroundColor: "rgba(13, 15, 26, 0.5)" }}
+                    style={{ backgroundColor: "rgba(13, 15, 26, 0.6)" }}
                     onClick={() => setOpenPanel(null)}
                   />
                   <div
-                    className="absolute inset-3 rounded-xl overflow-hidden frosted z-20"
+                    className="absolute inset-3 rounded-2xl overflow-hidden frosted z-20"
                     style={{
-                      backgroundColor: "rgba(22, 24, 48, 0.95)",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
-                      bottom: "40px",
+                      background: "linear-gradient(135deg, rgba(22, 24, 48, 0.95), rgba(16, 18, 36, 0.92))",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      boxShadow: "0 24px 64px rgba(0,0,0,0.6), 0 4px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
+                      bottom: "44px",
                     }}
                   >
-                    <div className="flex items-center justify-between px-4 h-9 border-b border-white/5 flex-shrink-0">
+                    <div className="flex items-center justify-between px-5 h-10 border-b flex-shrink-0" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
                       <div className="flex items-center gap-2">
-                        <span style={{ color: panelDef.color }}>{panelDef.icon}</span>
-                        <span className="text-sm font-medium" style={{ color: panelDef.color }}>
+                        <span style={{ color: panelDef.color, opacity: 0.8 }}>{panelDef.icon}</span>
+                        <span className="text-xs font-medium tracking-wide" style={{ color: panelDef.color }}>
                           {panelDef.label}
                         </span>
                       </div>
                       <button
                         onClick={() => setOpenPanel(null)}
-                        className="text-[10px] px-2 py-0.5 rounded border cursor-default transition-colors hover:border-white/20"
-                        style={{ color: "var(--text-dim)", borderColor: "rgba(255,255,255,0.08)" }}
+                        className="text-[9px] px-2.5 py-0.5 rounded-lg cursor-default transition-all"
+                        style={{
+                          color: "var(--text-dim)",
+                          backgroundColor: "rgba(255,255,255,0.04)",
+                          border: "1px solid rgba(255,255,255,0.06)",
+                        }}
                       >
                         ESC
                       </button>
                     </div>
-                    <div className="overflow-auto" style={{ height: "calc(100% - 36px)" }}>
+                    <div className="overflow-auto" style={{ height: "calc(100% - 40px)" }}>
                       <PanelComponent />
                     </div>
                   </div>

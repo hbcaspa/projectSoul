@@ -4,31 +4,17 @@ import { useSidecarStatus } from "../lib/store";
 import { PROVIDER_MODELS } from "../lib/setup";
 
 interface EnvState {
-  // LLM Providers
-  OPENAI_API_KEY: string;
-  OPENAI_MODEL: string;
-  GEMINI_API_KEY: string;
-  GEMINI_MODEL: string;
-  ANTHROPIC_API_KEY: string;
-  ANTHROPIC_MODEL: string;
-  OLLAMA_URL: string;
-  OLLAMA_MODEL: string;
-  // Connections
-  TELEGRAM_BOT_TOKEN: string;
-  TELEGRAM_OWNER_ID: string;
+  OPENAI_API_KEY: string; OPENAI_MODEL: string;
+  GEMINI_API_KEY: string; GEMINI_MODEL: string;
+  ANTHROPIC_API_KEY: string; ANTHROPIC_MODEL: string;
+  OLLAMA_URL: string; OLLAMA_MODEL: string;
+  TELEGRAM_BOT_TOKEN: string; TELEGRAM_OWNER_ID: string;
   GITHUB_TOKEN: string;
-  // Features
-  FEATURE_REFLECTION: string;
-  FEATURE_SELF_CORRECTION: string;
-  FEATURE_ANTI_PERFORMANCE: string;
-  FEATURE_VERSIONING: string;
-  FEATURE_ENCRYPTION: string;
-  FEATURE_IMPULSE_SYSTEM: string;
-  // Legacy feature vars (read-only compatibility)
-  SOUL_VERSIONING: string;
-  SOUL_REFLECTION: string;
-  SOUL_CORRECTION: string;
-  SOUL_ANTI_PERFORMANCE: string;
+  FEATURE_REFLECTION: string; FEATURE_SELF_CORRECTION: string;
+  FEATURE_ANTI_PERFORMANCE: string; FEATURE_VERSIONING: string;
+  FEATURE_ENCRYPTION: string; FEATURE_IMPULSE_SYSTEM: string;
+  SOUL_VERSIONING: string; SOUL_REFLECTION: string;
+  SOUL_CORRECTION: string; SOUL_ANTI_PERFORMANCE: string;
   SOUL_ENCRYPTION_KEY: string;
   [key: string]: string;
 }
@@ -59,7 +45,6 @@ export default function SettingsView() {
   const engineRunning = sidecar?.status === "running";
   const hasChanges = JSON.stringify(env) !== JSON.stringify(original);
 
-  // Load config on mount
   useEffect(() => {
     commands.getSoulPath().then(setSoulPath).catch(() => {});
     commands.checkNode().then((info) => setNodeInfo(info as { found: boolean; version: string })).catch(() => {});
@@ -75,26 +60,21 @@ export default function SettingsView() {
       }
       setEnv(merged);
       setOriginal(merged);
-    } catch { /* no .env yet */ }
+    } catch { /* no .env */ }
   };
 
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      // Only write non-empty and changed values
       const entries: Record<string, string> = {};
       for (const [key, val] of Object.entries(env)) {
-        if (val || original[key]) {
-          entries[key] = val;
-        }
+        if (val || original[key]) entries[key] = val;
       }
       await commands.writeEnv(entries);
       setOriginal({ ...env });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch (e) {
-      console.error("Save failed:", e);
-    }
+    } catch (e) { console.error("Save failed:", e); }
     setSaving(false);
   }, [env, original]);
 
@@ -103,351 +83,240 @@ export default function SettingsView() {
       await commands.stopEngine();
       await new Promise((r) => setTimeout(r, 1000));
       await commands.startEngine();
-    } catch (e) {
-      console.error("Restart failed:", e);
-    }
+    } catch (e) { console.error("Restart failed:", e); }
   };
 
-  const updateEnv = (key: string, value: string) => {
-    setEnv((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const toggleFeature = (key: string) => {
-    setEnv((prev) => ({
-      ...prev,
-      [key]: prev[key] === "true" ? "false" : "true",
-    }));
-  };
+  const updateEnv = (key: string, value: string) => setEnv((prev) => ({ ...prev, [key]: value }));
+  const toggleFeature = (key: string) => setEnv((prev) => ({ ...prev, [key]: prev[key] === "true" ? "false" : "true" }));
 
   return (
     <div className="h-full overflow-auto" style={{ backgroundColor: "var(--bg-base)" }}>
-      <div className="max-w-xl mx-auto px-8 py-6">
+      <div className="px-8 py-6 flex flex-col gap-5">
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-light tracking-wide" style={{ color: "var(--text-bright)" }}>
-              Settings
-            </h1>
-            <p className="text-xs mt-1" style={{ color: "var(--text-dim)" }}>
-              SoulOS v0.2.0
-            </p>
-          </div>
-
-          {/* Save button */}
-          <div className="flex items-center gap-2">
-            {saved && (
-              <span className="text-xs" style={{ color: "var(--wachstum)" }}>Saved</span>
-            )}
-            <button
-              onClick={handleSave}
-              disabled={!hasChanges || saving}
-              className="px-4 py-1.5 rounded-lg text-xs font-medium transition-all cursor-default"
+        {/* ── Row 1: Engine + Save ─────────────────────────── */}
+        <div className="flex items-center gap-4">
+          <div
+            className="flex-1 flex items-center gap-4 px-6 py-4 rounded-2xl"
+            style={{
+              background: engineRunning
+                ? "linear-gradient(135deg, rgba(0,255,100,0.05), rgba(0,200,255,0.02), rgba(255,255,255,0.02))"
+                : "linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
+              border: "1px solid rgba(255,255,255,0.06)",
+            }}
+          >
+            <div
+              className={`w-2.5 h-2.5 rounded-full shrink-0 ${engineRunning ? "animate-breathe" : ""}`}
               style={{
-                backgroundColor: hasChanges ? "var(--accent)" : "var(--bg-elevated)",
-                color: hasChanges ? "#fff" : "var(--text-dim)",
-                opacity: hasChanges ? 1 : 0.5,
+                backgroundColor: engineRunning ? "var(--wachstum)" : sidecar?.status === "starting" ? "var(--mem)" : "var(--text-muted)",
+                boxShadow: engineRunning ? "0 0 8px var(--wachstum)" : "none",
               }}
-            >
-              {saving ? "Saving..." : "Save"}
-            </button>
-          </div>
-        </div>
-
-        {/* ── LLM Providers ─────────────────────────────── */}
-        <SectionHeader label="LLM Providers" />
-
-        <ProviderCard
-          name="OpenAI"
-          color="#10a37f"
-          apiKey={env.OPENAI_API_KEY}
-          model={env.OPENAI_MODEL}
-          models={PROVIDER_MODELS.openai}
-          onKeyChange={(v) => updateEnv("OPENAI_API_KEY", v)}
-          onModelChange={(v) => updateEnv("OPENAI_MODEL", v)}
-        />
-        <ProviderCard
-          name="Anthropic"
-          color="#d4a27f"
-          apiKey={env.ANTHROPIC_API_KEY}
-          model={env.ANTHROPIC_MODEL}
-          models={PROVIDER_MODELS.anthropic}
-          onKeyChange={(v) => updateEnv("ANTHROPIC_API_KEY", v)}
-          onModelChange={(v) => updateEnv("ANTHROPIC_MODEL", v)}
-        />
-        <ProviderCard
-          name="Google Gemini"
-          color="#4285f4"
-          apiKey={env.GEMINI_API_KEY}
-          model={env.GEMINI_MODEL}
-          models={PROVIDER_MODELS.gemini}
-          onKeyChange={(v) => updateEnv("GEMINI_API_KEY", v)}
-          onModelChange={(v) => updateEnv("GEMINI_MODEL", v)}
-        />
-        <OllamaCard
-          url={env.OLLAMA_URL}
-          model={env.OLLAMA_MODEL}
-          models={PROVIDER_MODELS.ollama}
-          onUrlChange={(v) => updateEnv("OLLAMA_URL", v)}
-          onModelChange={(v) => updateEnv("OLLAMA_MODEL", v)}
-        />
-
-        {/* ── Connections ───────────────────────────────── */}
-        <SectionHeader label="Connections" />
-
-        <div className="mb-2 rounded-lg p-4" style={{ backgroundColor: "var(--bg-surface)", border: "1px solid rgba(255,255,255,0.06)" }}>
-          <div className="text-sm font-medium mb-3" style={{ color: "var(--text-bright)" }}>Telegram</div>
-          <div className="flex flex-col gap-2">
-            <SettingsInput label="Bot Token" value={env.TELEGRAM_BOT_TOKEN} password onChange={(v) => updateEnv("TELEGRAM_BOT_TOKEN", v)} />
-            <SettingsInput label="Owner ID" value={env.TELEGRAM_OWNER_ID} onChange={(v) => updateEnv("TELEGRAM_OWNER_ID", v)} />
-          </div>
-        </div>
-
-        <div className="mb-6 rounded-lg p-4" style={{ backgroundColor: "var(--bg-surface)", border: "1px solid rgba(255,255,255,0.06)" }}>
-          <div className="text-sm font-medium mb-3" style={{ color: "var(--text-bright)" }}>GitHub</div>
-          <SettingsInput label="Personal Access Token" value={env.GITHUB_TOKEN} password onChange={(v) => updateEnv("GITHUB_TOKEN", v)} />
-        </div>
-
-        {/* ── Features ──────────────────────────────────── */}
-        <SectionHeader label="Features" />
-
-        <div className="mb-6 flex flex-col gap-1.5">
-          <FeatureToggle label="Reflection" desc="Daily self-reflection" value={env.FEATURE_REFLECTION === "true"} onToggle={() => toggleFeature("FEATURE_REFLECTION")} />
-          <FeatureToggle label="Self-Correction" desc="Automatic error correction" value={env.FEATURE_SELF_CORRECTION === "true"} onToggle={() => toggleFeature("FEATURE_SELF_CORRECTION")} />
-          <FeatureToggle label="Anti-Performance" desc="Detects performed behavior" value={env.FEATURE_ANTI_PERFORMANCE === "true"} onToggle={() => toggleFeature("FEATURE_ANTI_PERFORMANCE")} />
-          <FeatureToggle label="Git Versioning" desc="Version control for all files" value={env.FEATURE_VERSIONING === "true"} onToggle={() => toggleFeature("FEATURE_VERSIONING")} />
-          <FeatureToggle label="Encryption" desc="Encrypt sensitive files" value={env.FEATURE_ENCRYPTION === "true"} onToggle={() => toggleFeature("FEATURE_ENCRYPTION")} />
-          <FeatureToggle label="Impulse System" desc="Autonomous activities" value={env.FEATURE_IMPULSE_SYSTEM === "true"} onToggle={() => toggleFeature("FEATURE_IMPULSE_SYSTEM")} />
-        </div>
-
-        {/* ── Engine Control ────────────────────────────── */}
-        <SectionHeader label="Engine" />
-
-        <div
-          className="rounded-xl p-5 mb-6"
-          style={{
-            backgroundColor: "var(--bg-surface)",
-            border: engineRunning ? "1px solid rgba(0, 255, 100, 0.2)" : "1px solid rgba(255,255,255,0.04)",
-          }}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div
-                className={`w-2.5 h-2.5 rounded-full ${engineRunning ? "animate-pulse" : ""}`}
-                style={{
-                  backgroundColor: engineRunning ? "var(--wachstum)"
-                    : sidecar?.status === "starting" ? "var(--mem)" : "var(--text-dim)",
-                }}
-              />
-              <div>
-                <span className="text-sm font-medium" style={{ color: "var(--text-bright)" }}>
-                  Soul Engine
-                </span>
-                <span className="text-xs ml-2 capitalize" style={{
-                  color: engineRunning ? "var(--wachstum)" : "var(--text-dim)",
-                }}>
-                  {sidecar?.status || "stopped"}
-                </span>
-                {sidecar?.uptime_secs != null && engineRunning && (
-                  <span className="text-xs ml-2" style={{ color: "var(--text-dim)" }}>
-                    {Math.floor(sidecar.uptime_secs / 60)}m
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="flex gap-2">
+            />
+            <span className="text-sm font-medium" style={{ color: "var(--text-bright)" }}>Soul Engine</span>
+            <span className="text-xs capitalize" style={{ color: engineRunning ? "var(--wachstum)" : "var(--text-dim)" }}>
+              {sidecar?.status || "stopped"}
+            </span>
+            {sidecar?.uptime_secs != null && engineRunning && (
+              <span className="text-xs font-mono" style={{ color: "var(--text-dim)" }}>
+                {Math.floor(sidecar.uptime_secs / 60)}m
+              </span>
+            )}
+            <div className="ml-auto flex gap-2">
               {engineRunning ? (
                 <>
-                  <button
-                    onClick={handleRestart}
-                    className="px-3 py-1.5 rounded-lg text-xs transition-all cursor-default"
-                    style={{ backgroundColor: "rgba(139, 128, 240, 0.12)", color: "var(--accent)", border: "1px solid rgba(139, 128, 240, 0.15)" }}
-                  >
-                    Restart
-                  </button>
-                  <button
-                    onClick={() => commands.stopEngine()}
-                    className="px-3 py-1.5 rounded-lg text-xs transition-all cursor-default"
-                    style={{ backgroundColor: "rgba(255, 50, 50, 0.12)", color: "var(--heartbeat)", border: "1px solid rgba(255, 50, 50, 0.15)" }}
-                  >
-                    Stop
-                  </button>
+                  <Pill label="Restart" color="var(--accent)" onClick={handleRestart} />
+                  <Pill label="Stop" color="var(--heartbeat)" onClick={() => commands.stopEngine()} />
                 </>
               ) : (
-                <button
-                  onClick={() => commands.startEngine()}
-                  className="px-4 py-1.5 rounded-lg text-xs transition-all cursor-default"
-                  style={{ backgroundColor: "rgba(0, 255, 100, 0.12)", color: "var(--wachstum)", border: "1px solid rgba(0, 255, 100, 0.15)" }}
-                >
-                  Start
-                </button>
+                <Pill label="Start" color="var(--wachstum)" onClick={() => commands.startEngine()} />
               )}
             </div>
           </div>
+
+          {hasChanges && (
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-6 py-4 rounded-2xl text-xs font-semibold cursor-default shrink-0 transition-all"
+              style={{
+                background: "linear-gradient(135deg, var(--accent), #6B5CE7)",
+                color: "#fff",
+                boxShadow: "0 2px 12px rgba(139,128,240,0.3)",
+              }}
+            >
+              {saving ? "..." : saved ? "Saved" : "Save"}
+            </button>
+          )}
         </div>
 
-        {/* ── System ────────────────────────────────────── */}
-        <SectionHeader label="System" />
-
-        <div className="rounded-lg p-4 mb-6" style={{ backgroundColor: "var(--bg-surface)", border: "1px solid rgba(255,255,255,0.06)" }}>
-          <div className="grid grid-cols-2 gap-y-2 text-xs">
-            <span style={{ color: "var(--text-dim)" }}>Soul Path</span>
-            <span className="font-mono truncate" style={{ color: "var(--text)" }}>{soulPath}</span>
-            <span style={{ color: "var(--text-dim)" }}>Node.js</span>
-            <span className="font-mono" style={{ color: nodeInfo?.found ? "var(--wachstum)" : "var(--heartbeat)" }}>
-              {nodeInfo?.found ? nodeInfo.version : "Not found"}
-            </span>
-            <span style={{ color: "var(--text-dim)" }}>Engine PID</span>
-            <span className="font-mono" style={{ color: "var(--text)" }}>
-              {sidecar?.pid || "—"}
-            </span>
+        {/* ── Row 2: Providers (4-col) ─────────────────────── */}
+        <div>
+          <Label text="LLM Providers" />
+          <div className="grid grid-cols-4 gap-3">
+            <Provider name="OpenAI" color="#10a37f" apiKey={env.OPENAI_API_KEY} model={env.OPENAI_MODEL} models={PROVIDER_MODELS.openai} onKey={(v) => updateEnv("OPENAI_API_KEY", v)} onModel={(v) => updateEnv("OPENAI_MODEL", v)} />
+            <Provider name="Anthropic" color="#d4a27f" apiKey={env.ANTHROPIC_API_KEY} model={env.ANTHROPIC_MODEL} models={PROVIDER_MODELS.anthropic} onKey={(v) => updateEnv("ANTHROPIC_API_KEY", v)} onModel={(v) => updateEnv("ANTHROPIC_MODEL", v)} />
+            <Provider name="Gemini" color="#4285f4" apiKey={env.GEMINI_API_KEY} model={env.GEMINI_MODEL} models={PROVIDER_MODELS.gemini} onKey={(v) => updateEnv("GEMINI_API_KEY", v)} onModel={(v) => updateEnv("GEMINI_MODEL", v)} />
+            <Provider name="Ollama" color="#888" local apiKey={env.OLLAMA_URL} model={env.OLLAMA_MODEL} models={PROVIDER_MODELS.ollama} onKey={(v) => updateEnv("OLLAMA_URL", v)} onModel={(v) => updateEnv("OLLAMA_MODEL", v)} />
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="text-center pb-4">
-          <p className="text-[10px]" style={{ color: "var(--text-dim)", opacity: 0.5 }}>
-            Tauri 2 + React 19 + Rust
-          </p>
+        {/* ── Row 3: Features + Connections + System ────────── */}
+        <div className="grid grid-cols-3 gap-4">
+
+          {/* Features */}
+          <div className="col-span-2">
+            <Label text="Features" />
+            <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "linear-gradient(135deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))" }}>
+              <Toggle label="Reflection" desc="Daily self-reflection cycles" on={env.FEATURE_REFLECTION === "true"} toggle={() => toggleFeature("FEATURE_REFLECTION")} />
+              <Toggle label="Self-Correction" desc="Automatic error detection" on={env.FEATURE_SELF_CORRECTION === "true"} toggle={() => toggleFeature("FEATURE_SELF_CORRECTION")} />
+              <Toggle label="Anti-Performance" desc="Detects inauthentic behavior" on={env.FEATURE_ANTI_PERFORMANCE === "true"} toggle={() => toggleFeature("FEATURE_ANTI_PERFORMANCE")} />
+              <Toggle label="Git Versioning" desc="Version control for state files" on={env.FEATURE_VERSIONING === "true"} toggle={() => toggleFeature("FEATURE_VERSIONING")} />
+              <Toggle label="Encryption" desc="AES-256-GCM for sensitive files" on={env.FEATURE_ENCRYPTION === "true"} toggle={() => toggleFeature("FEATURE_ENCRYPTION")} />
+              <Toggle label="Impulse System" desc="Autonomous activity scheduling" on={env.FEATURE_IMPULSE_SYSTEM === "true"} toggle={() => toggleFeature("FEATURE_IMPULSE_SYSTEM")} last />
+            </div>
+          </div>
+
+          {/* Connections + System stacked */}
+          <div className="flex flex-col gap-5">
+            <div>
+              <Label text="Connections" />
+              <div className="flex flex-col gap-3">
+                {/* Telegram */}
+                <div className="rounded-2xl p-5" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "linear-gradient(135deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))" }}>
+                  <div className="flex items-center gap-2.5 mb-3">
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4" style={{ color: "#0088cc" }}>
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+                    </svg>
+                    <span className="text-sm font-medium" style={{ color: "var(--text-bright)" }}>Telegram</span>
+                    {env.TELEGRAM_BOT_TOKEN && <span className="w-2 h-2 rounded-full ml-auto" style={{ backgroundColor: "#0088cc" }} />}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Inp placeholder="Bot Token" value={env.TELEGRAM_BOT_TOKEN} pw onChange={(v) => updateEnv("TELEGRAM_BOT_TOKEN", v)} />
+                    <Inp placeholder="Owner ID" value={env.TELEGRAM_OWNER_ID} onChange={(v) => updateEnv("TELEGRAM_OWNER_ID", v)} />
+                  </div>
+                </div>
+
+                {/* GitHub */}
+                <div className="rounded-2xl p-5" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "linear-gradient(135deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))" }}>
+                  <div className="flex items-center gap-2.5 mb-3">
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4" style={{ color: "#ccc" }}>
+                      <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                    </svg>
+                    <span className="text-sm font-medium" style={{ color: "var(--text-bright)" }}>GitHub</span>
+                    {env.GITHUB_TOKEN && <span className="w-2 h-2 rounded-full ml-auto" style={{ backgroundColor: "#ccc" }} />}
+                  </div>
+                  <Inp placeholder="Personal Access Token" value={env.GITHUB_TOKEN} pw onChange={(v) => updateEnv("GITHUB_TOKEN", v)} />
+                </div>
+              </div>
+            </div>
+
+            {/* System */}
+            <div>
+              <Label text="System" />
+              <div className="rounded-2xl p-5 flex flex-col gap-3" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "linear-gradient(135deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))" }}>
+                <Sys label="Soul Path" value={soulPath} mono />
+                <Sep />
+                <Sys label="Node.js" value={nodeInfo?.found ? nodeInfo.version : "Not found"} color={nodeInfo?.found ? "var(--wachstum)" : "var(--heartbeat)"} />
+                <Sep />
+                <Sys label="Engine PID" value={sidecar?.pid ? String(sidecar.pid) : "\u2014"} mono />
+                <Sep />
+                <Sys label="Runtime" value="Tauri 2 \u00B7 React 19" />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-/* ── Helper Components ──────────────────────────────────────── */
+/* ── Atoms ─────────────────────────────────────────────────── */
 
-function SectionHeader({ label }: { label: string }) {
-  return (
-    <div className="flex items-center gap-2 mb-3 mt-2">
-      <span className="text-[10px] uppercase tracking-[0.15em]" style={{ color: "var(--text-dim)" }}>
-        {label}
-      </span>
-      <div className="flex-1 h-px" style={{ backgroundColor: "rgba(255,255,255,0.06)" }} />
-    </div>
-  );
+function Label({ text }: { text: string }) {
+  return <div className="text-[11px] uppercase tracking-[0.15em] font-semibold mb-2.5" style={{ color: "var(--text-dim)" }}>{text}</div>;
 }
 
-function ProviderCard({
-  name, color, apiKey, model, models, onKeyChange, onModelChange,
-}: {
-  name: string; color: string;
-  apiKey: string; model: string;
-  models: readonly { value: string; label: string }[];
-  onKeyChange: (v: string) => void;
-  onModelChange: (v: string) => void;
-}) {
-  const configured = !!apiKey;
+function Pill({ label, color, onClick }: { label: string; color: string; onClick: () => void }) {
   return (
-    <div
-      className="mb-2 rounded-lg p-4 transition-all"
+    <button
+      onClick={onClick}
+      className="px-4 py-2 rounded-xl text-xs font-semibold cursor-default transition-all"
       style={{
-        backgroundColor: "var(--bg-surface)",
-        border: `1px solid ${configured ? `${color}30` : "rgba(255,255,255,0.06)"}`,
+        background: `linear-gradient(135deg, color-mix(in srgb, ${color} 14%, transparent), color-mix(in srgb, ${color} 6%, transparent))`,
+        color,
+        border: `1px solid color-mix(in srgb, ${color} 18%, transparent)`,
       }}
     >
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium" style={{ color }}>{name}</span>
-        {configured && (
-          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
-        )}
-      </div>
-      <div className="flex flex-col gap-2">
-        <input
-          type="password"
-          placeholder="API Key"
-          value={apiKey}
-          onChange={(e) => onKeyChange(e.target.value)}
-          className="px-3 py-1.5 rounded text-xs font-mono outline-none w-full"
-          style={{ backgroundColor: "var(--bg-elevated)", color: "var(--text)", border: "1px solid rgba(255,255,255,0.06)" }}
-        />
-        <select
-          value={model}
-          onChange={(e) => onModelChange(e.target.value)}
-          className="px-3 py-1.5 rounded text-xs outline-none cursor-default"
-          style={{ backgroundColor: "var(--bg-elevated)", color: "var(--text)", border: "1px solid rgba(255,255,255,0.06)" }}
-        >
-          {models.map((m) => (
-            <option key={m.value} value={m.value}>{m.label}</option>
-          ))}
-        </select>
-      </div>
-    </div>
+      {label}
+    </button>
   );
 }
 
-function OllamaCard({
-  url, model, models, onUrlChange, onModelChange,
+function Provider({
+  name, color, apiKey, model, models, onKey, onModel, local,
 }: {
-  url: string; model: string;
+  name: string; color: string; apiKey: string; model: string;
   models: readonly { value: string; label: string }[];
-  onUrlChange: (v: string) => void;
-  onModelChange: (v: string) => void;
+  onKey: (v: string) => void; onModel: (v: string) => void; local?: boolean;
 }) {
-  const configured = !!url;
+  const ok = !!apiKey;
   return (
     <div
-      className="mb-6 rounded-lg p-4 transition-all"
+      className="rounded-2xl p-5 transition-all"
       style={{
-        backgroundColor: "var(--bg-surface)",
-        border: `1px solid ${configured ? "rgba(136,136,136,0.3)" : "rgba(255,255,255,0.06)"}`,
+        border: `1px solid ${ok ? `color-mix(in srgb, ${color} 20%, transparent)` : "rgba(255,255,255,0.06)"}`,
+        background: ok
+          ? `linear-gradient(135deg, color-mix(in srgb, ${color} 5%, transparent), rgba(255,255,255,0.01))`
+          : "linear-gradient(135deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))",
       }}
     >
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium" style={{ color: "#888" }}>Ollama (Local)</span>
-        {configured && (
-          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#888" }} />
-        )}
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm font-semibold" style={{ color }}>{name}</span>
+        {ok && <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}50` }} />}
       </div>
-      <div className="flex flex-col gap-2">
-        <input
-          type="text"
-          placeholder="http://localhost:11434"
-          value={url}
-          onChange={(e) => onUrlChange(e.target.value)}
-          className="px-3 py-1.5 rounded text-xs font-mono outline-none w-full"
-          style={{ backgroundColor: "var(--bg-elevated)", color: "var(--text)", border: "1px solid rgba(255,255,255,0.06)" }}
-        />
-        <select
-          value={model}
-          onChange={(e) => onModelChange(e.target.value)}
-          className="px-3 py-1.5 rounded text-xs outline-none cursor-default"
-          style={{ backgroundColor: "var(--bg-elevated)", color: "var(--text)", border: "1px solid rgba(255,255,255,0.06)" }}
-        >
-          {models.map((m) => (
-            <option key={m.value} value={m.value}>{m.label}</option>
-          ))}
-        </select>
-      </div>
+      <input
+        type={local ? "text" : "password"}
+        placeholder={local ? "http://localhost:11434" : "API Key"}
+        value={apiKey}
+        onChange={(e) => onKey(e.target.value)}
+        className="w-full px-3.5 py-2.5 rounded-xl text-xs font-mono outline-none mb-2"
+        style={{ backgroundColor: "rgba(0,0,0,0.15)", border: "1px solid rgba(255,255,255,0.04)", color: "var(--text)" }}
+      />
+      <select
+        value={model}
+        onChange={(e) => onModel(e.target.value)}
+        className="w-full px-3.5 py-2.5 rounded-xl text-xs outline-none cursor-default"
+        style={{ backgroundColor: "rgba(0,0,0,0.15)", border: "1px solid rgba(255,255,255,0.04)", color: "var(--text)" }}
+      >
+        {models.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+      </select>
     </div>
   );
 }
 
-function FeatureToggle({
-  label, desc, value, onToggle,
-}: {
-  label: string; desc: string; value: boolean; onToggle: () => void;
-}) {
+function Toggle({ label, desc, on, toggle, last }: { label: string; desc: string; on: boolean; toggle: () => void; last?: boolean }) {
   return (
     <div
-      className="flex items-center justify-between px-4 py-3 rounded-lg cursor-default"
-      style={{ backgroundColor: "var(--bg-surface)", border: "1px solid rgba(255,255,255,0.06)" }}
-      onClick={onToggle}
+      className="flex items-center justify-between px-5 py-4 cursor-default"
+      style={{ borderBottom: last ? "none" : "1px solid rgba(255,255,255,0.035)" }}
+      onClick={toggle}
     >
       <div>
-        <div className="text-sm" style={{ color: "var(--text)" }}>{label}</div>
-        <div className="text-[10px] mt-0.5" style={{ color: "var(--text-dim)" }}>{desc}</div>
+        <div className="text-sm font-medium" style={{ color: "var(--text-bright)" }}>{label}</div>
+        <div className="text-xs mt-0.5" style={{ color: "var(--text-dim)" }}>{desc}</div>
       </div>
       <div
-        className="w-10 h-5 rounded-full relative transition-colors"
-        style={{ backgroundColor: value ? "var(--wachstum)" : "var(--bg-elevated)" }}
+        className="w-[38px] h-[22px] rounded-full relative transition-all shrink-0 ml-4"
+        style={{
+          backgroundColor: on ? "var(--wachstum)" : "rgba(255,255,255,0.08)",
+          boxShadow: on ? "0 0 8px rgba(0,255,100,0.2)" : "inset 0 1px 2px rgba(0,0,0,0.2)",
+        }}
       >
         <div
-          className="absolute top-0.5 w-4 h-4 rounded-full transition-transform"
+          className="absolute top-[2px] w-[18px] h-[18px] rounded-full transition-all"
           style={{
             backgroundColor: "#fff",
-            left: "2px",
-            transform: value ? "translateX(20px)" : "translateX(0)",
+            left: on ? "calc(100% - 20px)" : "2px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
           }}
         />
       </div>
@@ -455,19 +324,28 @@ function FeatureToggle({
   );
 }
 
-function SettingsInput({
-  label, value, onChange, password,
-}: {
-  label: string; value: string; onChange: (v: string) => void; password?: boolean;
-}) {
+function Inp({ placeholder, value, onChange, pw }: { placeholder: string; value: string; onChange: (v: string) => void; pw?: boolean }) {
   return (
     <input
-      type={password ? "password" : "text"}
-      placeholder={label}
+      type={pw ? "password" : "text"}
+      placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="px-3 py-1.5 rounded text-xs font-mono outline-none w-full"
-      style={{ backgroundColor: "var(--bg-elevated)", color: "var(--text)", border: "1px solid rgba(255,255,255,0.06)" }}
+      className="w-full px-3.5 py-2.5 rounded-xl text-xs font-mono outline-none"
+      style={{ backgroundColor: "rgba(0,0,0,0.15)", border: "1px solid rgba(255,255,255,0.04)", color: "var(--text)" }}
     />
   );
+}
+
+function Sys({ label, value, mono, color }: { label: string; value: string; mono?: boolean; color?: string }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-xs" style={{ color: "var(--text-dim)" }}>{label}</span>
+      <span className={`text-xs truncate ml-4 max-w-[60%] text-right ${mono ? "font-mono" : ""}`} style={{ color: color || "var(--text)" }}>{value}</span>
+    </div>
+  );
+}
+
+function Sep() {
+  return <div className="h-px" style={{ backgroundColor: "rgba(255,255,255,0.035)" }} />;
 }

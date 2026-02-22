@@ -1,79 +1,49 @@
 import { useEffect, useState } from "react";
 import { commands } from "../lib/tauri";
 
-interface StateEntry {
-  filename: string;
-  date: string;
-  time: string;
-  type: string;
-}
+interface StateEntry { filename: string; date: string; time: string; type: string; }
 
 function parseEntry(filename: string): StateEntry | null {
-  // Format: YYYY-MM-DD_HH-MM_type.md
   const match = filename.match(/^(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2})_(.+)\.md$/);
   if (!match) return null;
-  return {
-    filename,
-    date: match[1],
-    time: match[2].replace("-", ":"),
-    type: match[3],
-  };
+  return { filename, date: match[1], time: match[2].replace("-", ":"), type: match[3] };
 }
+
+const TYPE_COLORS: Record<string, string> = {
+  start: "var(--wachstum)", ende: "var(--heartbeat)", end: "var(--heartbeat)",
+  heartbeat: "var(--bewusstsein)", reflection: "var(--traeume)", dream: "var(--traeume)", impulse: "var(--manifest)",
+};
 
 export default function ReplayView() {
   const [entries, setEntries] = useState<StateEntry[]>([]);
   const [selectedEntry, setSelectedEntry] = useState<StateEntry | null>(null);
   const [content, setContent] = useState<string>("");
-  const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
-  );
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0]);
 
-  useEffect(() => {
-    loadEntries();
-  }, []);
+  useEffect(() => { loadEntries(); }, []);
 
   const loadEntries = async () => {
     try {
       const files = await commands.listDirectory("zustandslog");
-      const parsed = files
-        .map(parseEntry)
-        .filter((e): e is StateEntry => e !== null);
+      const parsed = files.map(parseEntry).filter((e): e is StateEntry => e !== null);
       setEntries(parsed);
-      if (parsed.length > 0) {
-        // Select most recent date
-        setSelectedDate(parsed[0].date);
-        selectEntry(parsed[0]);
-      }
+      if (parsed.length > 0) { setSelectedDate(parsed[0].date); selectEntry(parsed[0]); }
     } catch {
-      // zustandslog not accessible, try statelog (English)
       try {
         const files = await commands.listDirectory("statelog");
-        const parsed = files
-          .map(parseEntry)
-          .filter((e): e is StateEntry => e !== null);
+        const parsed = files.map(parseEntry).filter((e): e is StateEntry => e !== null);
         setEntries(parsed);
-        if (parsed.length > 0) {
-          setSelectedDate(parsed[0].date);
-          selectEntry(parsed[0]);
-        }
-      } catch {
-        // No state log available
-      }
+        if (parsed.length > 0) { setSelectedDate(parsed[0].date); selectEntry(parsed[0]); }
+      } catch { /* no log */ }
     }
   };
 
   const selectEntry = async (entry: StateEntry) => {
     setSelectedEntry(entry);
-    try {
-      const text = await commands.readSoulFile(`zustandslog/${entry.filename}`);
-      setContent(text);
-    } catch {
-      try {
-        const text = await commands.readSoulFile(`statelog/${entry.filename}`);
-        setContent(text);
-      } catch (e) {
-        setContent(`Error loading: ${e}`);
-      }
+    try { setContent(await commands.readSoulFile(`zustandslog/${entry.filename}`)); }
+    catch {
+      try { setContent(await commands.readSoulFile(`statelog/${entry.filename}`)); }
+      catch (e) { setContent(`Error loading: ${e}`); }
     }
   };
 
@@ -82,81 +52,43 @@ export default function ReplayView() {
 
   return (
     <div className="h-full flex flex-col" style={{ backgroundColor: "var(--bg-base)" }}>
-      {/* Header with date selector */}
-      <div className="flex items-center gap-4 px-6 py-4 border-b border-white/5 flex-shrink-0">
-        <h2 className="text-sm uppercase tracking-wider" style={{ color: "var(--statelog)", opacity: 0.7 }}>
-          State Replay
-        </h2>
-        <select
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className="px-3 py-1 rounded-md text-sm"
-          style={{
-            backgroundColor: "var(--bg-surface)",
-            color: "var(--text)",
-            border: "1px solid rgba(255,255,255,0.1)",
-          }}
-        >
-          {uniqueDates.map((date) => (
-            <option key={date} value={date}>{date}</option>
-          ))}
+      <div className="flex items-center gap-4 px-8 py-3.5 flex-shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+        <select value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="glass-inset px-4 py-2.5 text-xs cursor-default" style={{ color: "var(--text)", borderRadius: "var(--radius-lg)" }}>
+          {uniqueDates.map((date) => <option key={date} value={date}>{date}</option>)}
         </select>
-        <span className="text-xs" style={{ color: "var(--text-dim)" }}>
-          {filteredEntries.length} snapshots
-        </span>
-        <span className="text-xs ml-auto" style={{ color: "var(--text-dim)" }}>
-          {entries.length} total
-        </span>
+        <span className="text-xs" style={{ color: "var(--text-dim)" }}>{filteredEntries.length} snapshot{filteredEntries.length !== 1 ? "s" : ""}</span>
+        <span className="text-xs ml-auto font-mono" style={{ color: "var(--text-muted)" }}>{entries.length} total</span>
       </div>
 
       <div className="flex-1 flex min-h-0">
-        {/* Timeline */}
-        <div
-          className="w-48 border-r border-white/5 overflow-auto p-3"
-          style={{ backgroundColor: "var(--bg-surface)" }}
-        >
+        <div className="w-52 overflow-auto py-4 px-3" style={{ borderRight: "1px solid rgba(255,255,255,0.04)" }}>
           {filteredEntries.length === 0 ? (
-            <p className="text-xs p-2" style={{ color: "var(--text-dim)" }}>
-              No snapshots for this date
-            </p>
+            <p className="text-xs px-3 py-2" style={{ color: "var(--text-muted)" }}>No snapshots</p>
           ) : (
-            filteredEntries.map((entry) => (
-              <button
-                key={entry.filename}
-                onClick={() => selectEntry(entry)}
-                className="w-full text-left px-3 py-2 rounded-md text-xs mb-1 transition-colors"
-                style={{
-                  backgroundColor:
-                    selectedEntry?.filename === entry.filename
-                      ? "rgba(80, 200, 180, 0.15)"
-                      : "transparent",
-                  color:
-                    selectedEntry?.filename === entry.filename
-                      ? "var(--statelog)"
-                      : "var(--text-dim)",
-                }}
-              >
-                <div className="font-mono">{entry.time}</div>
-                <div className="opacity-70">{entry.type}</div>
-              </button>
-            ))
+            <div className="flex flex-col gap-1">
+              {filteredEntries.map((entry) => {
+                const isActive = selectedEntry?.filename === entry.filename;
+                const color = TYPE_COLORS[entry.type] || "var(--statelog)";
+                return (
+                  <button key={entry.filename} onClick={() => selectEntry(entry)} className="w-full text-left px-4 py-3 rounded-xl text-xs transition-all cursor-default" style={{ background: isActive ? `linear-gradient(135deg, color-mix(in srgb, ${color} 10%, transparent), rgba(255,255,255,0.01))` : "transparent", border: isActive ? `1px solid color-mix(in srgb, ${color} 15%, transparent)` : "1px solid transparent" }}>
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: isActive ? color : "var(--text-dim)", opacity: isActive ? 1 : 0.3, boxShadow: isActive ? `0 0 8px ${color}40` : "none" }} />
+                      <span className="font-mono" style={{ color: isActive ? color : "var(--text-dim)" }}>{entry.time}</span>
+                    </div>
+                    <div className="ml-5 mt-1 capitalize" style={{ color: isActive ? "var(--text)" : "var(--text-dim)", opacity: 0.7 }}>{entry.type}</div>
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-8">
           {content ? (
-            <pre
-              className="text-sm leading-relaxed whitespace-pre-wrap font-mono"
-              style={{ color: "var(--text)" }}
-            >
-              {content}
-            </pre>
+            <pre className="text-xs leading-relaxed whitespace-pre-wrap font-mono" style={{ color: "var(--text)" }}>{content}</pre>
           ) : (
             <div className="flex items-center justify-center h-full">
-              <p className="text-sm" style={{ color: "var(--text-dim)" }}>
-                Select a snapshot to view
-              </p>
+              <p className="text-sm" style={{ color: "var(--text-muted)" }}>Select a snapshot</p>
             </div>
           )}
         </div>

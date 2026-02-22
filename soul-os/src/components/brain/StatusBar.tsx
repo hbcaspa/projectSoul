@@ -18,41 +18,42 @@ export default function StatusBar({ activeNodes, isWorking, currentPulse, mood }
     ? "var(--wachstum)"
     : moodValence < -0.2
       ? "var(--heartbeat)"
-      : "var(--mem)";
+      : "var(--bewusstsein)";
 
   return (
     <div
-      className="flex items-center gap-4 px-4 text-xs border-t border-white/5 flex-shrink-0"
+      className="flex items-center gap-4 px-5 text-[10px] border-t flex-shrink-0"
       style={{
         height: "var(--statusbar-height)",
-        backgroundColor: "var(--bg-surface)",
+        backgroundColor: "rgba(22, 24, 48, 0.6)",
+        borderColor: "rgba(255,255,255,0.04)",
       }}
     >
       {/* Heartbeat */}
       <div className="flex items-center gap-1.5">
         <span
           className={isWorking ? "animate-pulse" : ""}
-          style={{ color: isWorking ? "var(--heartbeat)" : "var(--text-dim)" }}
+          style={{ color: isWorking ? "var(--heartbeat)" : "var(--text-dim)", fontSize: "9px" }}
         >
           {isWorking ? "\u2665" : "\u2661"}
         </span>
         <span
-          className="font-medium"
+          className="font-medium tracking-wider uppercase"
           style={{ color: isWorking ? "var(--bewusstsein)" : "var(--text-dim)" }}
         >
-          {isWorking ? "ACTIVE" : "IDLE"}
+          {isWorking ? "Active" : "Idle"}
         </span>
       </div>
 
-      {/* Active node count */}
-      <span style={{ color: activeCount > 0 ? "var(--bewusstsein)" : "var(--text-dim)" }}>
-        {activeCount}/{totalNodes} nodes
+      {/* Node count */}
+      <span className="font-mono" style={{ color: activeCount > 0 ? "var(--bewusstsein)" : "var(--text-dim)", opacity: 0.6 }}>
+        {activeCount}/{totalNodes}
       </span>
 
       {/* Current action */}
       {currentPulse && (
-        <span className="truncate" style={{ color: "var(--accent)", maxWidth: "300px" }}>
-          {"\u25B6"} {currentPulse.label}
+        <span className="truncate" style={{ color: "var(--accent)", maxWidth: "300px", opacity: 0.7 }}>
+          {currentPulse.label}
         </span>
       )}
 
@@ -60,11 +61,11 @@ export default function StatusBar({ activeNodes, isWorking, currentPulse, mood }
 
       {/* Mood */}
       {moodLabel && (
-        <span style={{ color: moodColor }}>{moodLabel}</span>
+        <span className="capitalize" style={{ color: moodColor, opacity: 0.7 }}>{moodLabel}</span>
       )}
 
       {/* Version */}
-      <span style={{ color: "var(--text-dim)", opacity: 0.5 }}>SoulOS v0.1</span>
+      <span className="font-mono" style={{ color: "var(--text-dim)", opacity: 0.25 }}>v0.2</span>
     </div>
   );
 }

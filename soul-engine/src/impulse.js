@@ -19,6 +19,7 @@ export class ImpulseScheduler {
     this.memory = memory;
     this.bus = bus;
     this.state = new ImpulseState(soulPath, { bus });
+    this.consolidator = null; // Set by engine after construction
     this.timer = null;
     this.tickTimer = null;
     this.running = false;
@@ -305,6 +306,17 @@ export class ImpulseScheduler {
           this.state.getTopInterests(5),
           this.state.dailyCount,
         );
+      }
+
+      // Seed consolidation check (piggybacks on the 2-min tick)
+      if (this.consolidator) {
+        const action = this.consolidator.shouldConsolidate();
+        if (action === 'deep') {
+          console.log('  [impulse/tick] Triggering deep seed consolidation');
+          await this.consolidator.consolidateDeep();
+        } else if (action === 'fast') {
+          await this.consolidator.consolidateFast();
+        }
       }
     } catch (err) {
       // Tick is best-effort, never crash

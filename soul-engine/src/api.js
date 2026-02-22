@@ -47,10 +47,57 @@ export class SoulAPI {
       next();
     });
 
+    this.setupWebhook();
     this.setupRoutes();
     this.setupWebSocket();
     this.watchPulse();
     this.setupBusBroadcast();
+  }
+
+  // ── WhatsApp Webhook (no auth — internal only) ───
+
+  setupWebhook() {
+    // Auto-reply set: JIDs that get automatic responses
+    this.autoReplyJIDs = new Set();
+
+    // Webhook from whatsapp-bridge — receives incoming messages
+    this.app.post('/webhook/whatsapp', async (req, res) => {
+      const { chat_jid, sender, content, timestamp } = req.body;
+      if (!content || !chat_jid) return res.status(400).json({ error: 'missing fields' });
+
+      console.log(`  [webhook] WhatsApp from ${sender}: ${content.substring(0, 80)}`);
+
+      // Only auto-reply if JID is in the set
+      if (!this.autoReplyJIDs.has(chat_jid)) {
+        return res.json({ handled: false, reason: 'auto-reply not enabled for this chat' });
+      }
+
+      // Process through LLM and respond
+      try {
+        const response = await this.engine.handleWhatsAppMessage({ text: content, chatJid: chat_jid, sender });
+        res.json({ handled: true, response: response.substring(0, 200) });
+      } catch (err) {
+        console.error(`  [webhook] Auto-reply failed: ${err.message}`);
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Enable/disable auto-reply (auth required — goes through /api middleware)
+    this.app.post('/api/autoreply/enable', (req, res) => {
+      const { jid } = req.body;
+      if (!jid) return res.status(400).json({ error: 'jid required' });
+      this.autoReplyJIDs.add(jid);
+      console.log(`  [autoreply] Enabled for ${jid}`);
+      res.json({ enabled: true, jid });
+    });
+
+    this.app.post('/api/autoreply/disable', (req, res) => {
+      const { jid } = req.body;
+      if (!jid) return res.status(400).json({ error: 'jid required' });
+      this.autoReplyJIDs.delete(jid);
+      console.log(`  [autoreply] Disabled for ${jid}`);
+      res.json({ enabled: false, jid });
+    });
   }
 
   // ── REST Routes ────────────────────────────────────

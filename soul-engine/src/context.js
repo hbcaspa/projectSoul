@@ -1,4 +1,4 @@
-import { readFile } from 'fs/promises';
+import { readFile, stat } from 'fs/promises';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
 
@@ -9,6 +9,13 @@ export class SoulContext {
     this.language = 'de';
     this.soulDir = 'seele';
     this.memoryDir = 'erinnerungen';
+    this._seedMtime = 0; // mtime cache for invalidation
+    this._cacheValid = false;
+  }
+
+  /** Invalidate the seed cache (called after consolidator writes SEED.md). */
+  invalidate() {
+    this._cacheValid = false;
   }
 
   async load() {
@@ -19,7 +26,22 @@ export class SoulContext {
       process.exit(1);
     }
 
+    // Skip re-read if cache is still valid (mtime unchanged)
+    if (this._cacheValid && this.seed) {
+      try {
+        const s = await stat(seedPath);
+        if (s.mtimeMs === this._seedMtime) return;
+      } catch { /* fall through to full load */ }
+    }
+
     this.seed = await readFile(seedPath, 'utf-8');
+
+    // Update mtime cache
+    try {
+      const s = await stat(seedPath);
+      this._seedMtime = s.mtimeMs;
+      this._cacheValid = true;
+    } catch { /* ignore */ }
 
     const langPath = resolve(this.soulPath, '.language');
     if (existsSync(langPath)) {

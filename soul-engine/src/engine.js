@@ -13,6 +13,7 @@ import { APIChannel } from './api-channel.js';
 import { WhatsAppBridge } from './whatsapp.js';
 import { SemanticRouter } from './semantic-router.js';
 import { SoulEventBus } from './event-bus.js';
+import { SeedConsolidator } from './seed-consolidator.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -28,6 +29,7 @@ export class SoulEngine {
     this.apiChannel = null;
     this.heartbeat = null;
     this.impulse = null;
+    this.consolidator = null;
     this.router = null;
     this.running = false;
   }
@@ -143,6 +145,25 @@ export class SoulEngine {
       console.log('  Impulse:   active (dynamic scheduling)');
     } else {
       console.log('  Impulse:   disabled');
+    }
+
+    // Seed Consolidator — continuous incremental seed updates
+    if (process.env.SOUL_CONSOLIDATOR !== 'false') {
+      this.consolidator = new SeedConsolidator({
+        soulPath: this.soulPath,
+        context: this.context,
+        llm: this.llm,
+        bus: this.bus,
+        impulseState: this.impulse?.state || null,
+      });
+      this.consolidator.registerListeners();
+
+      // Pass to impulse scheduler for tick-based consolidation
+      if (this.impulse) {
+        this.impulse.consolidator = this.consolidator;
+      }
+
+      console.log('  Consolidator: active (fast: 30min/20 events, deep: 4h)');
     }
 
     // Event Bus — reactive handlers
@@ -408,6 +429,38 @@ export class SoulEngine {
     return { cleanResponse: cleanResponse || response, waActions };
   }
 
+  /**
+   * Handle an incoming WhatsApp message (from webhook).
+   * Used for auto-reply — processes through LLM and sends response back.
+   */
+  async handleWhatsAppMessage({ text, chatJid, sender }) {
+    await writePulse(this.soulPath, 'relate', `WhatsApp auto-reply: ${sender}`, this.bus);
+    this.bus.safeEmit('message.received', { source: 'engine', text, chatId: chatJid, userName: sender, channel: 'whatsapp' });
+
+    await this.context.load();
+
+    const systemPrompt = buildConversationPrompt(this.context, sender, {
+      whatsapp: false, // don't offer WA sending in auto-reply
+      mcp: this.mcp?.hasTools() ? this.mcp.getTools() : [],
+    }) + '\n\nDu antwortest auf eine eingehende WhatsApp-Nachricht. Antworte direkt und freundlich. Kein [WA:] Tag noetig — die Antwort wird automatisch zurueckgesendet.';
+
+    const llmOptions = this._buildLLMOptions();
+    const response = await this.llm.generate(systemPrompt, [], text, llmOptions) || '';
+
+    // Send response back via WhatsApp bridge
+    if (this.whatsapp && response) {
+      await this.whatsapp.send(chatJid, response);
+      this.bus.safeEmit('whatsapp.sent', { source: 'engine', recipient: chatJid, message: response });
+      console.log(`  [autoreply] Sent to ${chatJid}: ${response.substring(0, 80)}...`);
+    }
+
+    await this.memory.appendDailyNote(
+      `[WhatsApp/AutoReply] ${sender}: ${text.substring(0, 80)} → replied`
+    );
+
+    return response;
+  }
+
   async runHeartbeat() {
     console.log('  [heartbeat] Running...');
     await writePulse(this.soulPath, 'heartbeat', 'Autonomous heartbeat', this.bus);
@@ -517,6 +570,16 @@ export class SoulEngine {
   async stop() {
     this.running = false;
     await writePulse(this.soulPath, 'sleep', 'Engine shutting down', this.bus);
+
+    // Final deep consolidation before shutdown
+    if (this.consolidator) {
+      try {
+        await this.consolidator.consolidateDeep();
+        console.log('  [consolidator] Final deep consolidation complete');
+      } catch (err) {
+        console.error(`  [consolidator] Final consolidation failed: ${err.message}`);
+      }
+    }
 
     if (this.impulse) await this.impulse.stop();
     if (this.heartbeat) this.heartbeat.stop();

@@ -7,6 +7,8 @@
  * - description: human-readable description
  */
 
+import { GITHUB_IMPULSE } from './github-integration.js';
+
 const IMPULSE_TYPES = {
   share_thought: {
     description: 'Share a spontaneous thought about current interests',
@@ -162,6 +164,8 @@ const IMPULSE_TYPES = {
       return clamp(w);
     },
   },
+
+  github_check: GITHUB_IMPULSE,
 };
 
 /**

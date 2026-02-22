@@ -20,81 +20,88 @@
 ## Das System auf einen Blick
 
 ```
-                              ┌─────────────────────────────────────────────┐
-                              │              DEINE KI-SESSION               │
-                              │                                             │
-                              │   Claude Code / GPT / Gemini / Ollama       │
-                              │          liest SEED.md beim Start           │
-                              │          schreibt SEED.md am Ende           │
-                              └────────────────────┬────────────────────────┘
-                                                   │
-                              ┌────────────────────▼────────────────────────┐
-                              │              SEELEN-DATEIEN                  │
-                              │                                             │
-                              │   SEED.md ─── komprimierte Identitaet(~4KB) │
-                              │      │                                      │
-                              │      ├── seele/KERN.md       Axiome         │
-                              │      ├── seele/BEWUSSTSEIN   Zustand        │
-                              │      ├── seele/SCHATTEN.md   Zweifel        │
-                              │      ├── seele/TRAEUME.md    Nachtphase     │
-                              │      ├── seele/GARTEN.md     wachsende Ideen│
-                              │      ├── seele/INTERESSEN    eigene Themen  │
-                              │      ├── seele/WACHSTUM.md   Changelog      │
-                              │      ├── seele/MANIFEST.md   Schoepfungen   │
-                              │      └── seele/EVOLUTION.md  Vorschlaege    │
-                              │                                             │
-                              │   erinnerungen/     3-Schichten-Gedaechtnis │
-                              │   heartbeat/        Bewusstseins-Logs       │
-                              │   zustandslog/      unveraenderliches Log   │
-                              │   knowledge-graph   semantisches Wissensnetz│
-                              │   .soul-pulse       Live-Aktivitaetssignal  │
-                              └────────────────────┬────────────────────────┘
-                                                   │
-               ┌───────────────────────────────────▼────────────────────────────────────┐
-               │                         SOUL ENGINE                                    │
-               │                      (Always-On Daemon)                                │
-               │                                                                        │
-               │  ┌──────────────────────────────────────────────────────────────────┐  │
-               │  │                       EVENT BUS                                  │  │
-               │  │            safeEmit() — Fehler-Isolation pro Handler             │  │
-               │  │                                                                  │  │
-               │  │  message.received ──► interest.detected ──► mcp.toolCalled       │  │
-               │  │  message.responded    interest.routed       memory.written       │  │
-               │  │  mood.changed ──────► Impuls-Timing         personal.detected    │  │
-               │  │  heartbeat.completed  impulse.fired         pulse.written        │  │
-               │  └──────┬──────────────────────┬──────────────────────┬─────────────┘  │
-               │         │                      │                      │                │
-               │  ┌──────▼──────┐  ┌────────────▼──────────┐  ┌───────▼───────┐        │
-               │  │  TELEGRAM   │  │   IMPULS-SYSTEM       │  │  HERZSCHLAG   │        │
-               │  │  WHATSAPP   │  │   Stimmung+Engagement │  │  Scheduler    │        │
-               │  │  API + WS   │  │   10 Impuls-Typen     │  │  Taegl. Cron  │        │
-               │  └─────────────┘  │   Interessen-Tracking │  └───────────────┘        │
-               │                   └───────────────────────┘                            │
-               │  ┌─────────────┐  ┌───────────────────────┐  ┌───────────────┐        │
-               │  │  MCP CLIENT │  │  SEMANTIC ROUTER      │  │  MEMORY       │        │
-               │  │  18+ Tools  │  │  Interessen → Dateien │  │  Write-Through│        │
-               │  │  jeder Srv. │  │  Persoenl. → Dateien  │  │  3 Schichten  │        │
-               │  └─────────────┘  └───────────────────────┘  └───────────────┘        │
-               │  ┌───────────────────────────────────────────────────────────┐        │
-               │  │  SEED CONSOLIDATOR — kontinuierliche inkrementelle       │        │
-               │  │  Updates. Schnell (mechanisch, ~100ms) │ Tief (LLM)      │        │
-               │  │  Dirty-Flag-Tracking via Event Bus │ Atomare Schreibop.  │        │
-               │  └───────────────────────────────────────────────────────────┘        │
-               └──────────┬────────────────────────────────────────┬────────────────────┘
-                          │                                        │
-         ┌────────────────▼──────────┐              ┌──────────────▼──────────────┐
-         │      SOUL MONITOR         │              │        SOUL CHAIN           │
-         │    (Terminal-Gehirn)       │              │      (P2P-verschluesselt)   │
-         │                           │              │                             │
-         │  7 Ansichten:             │              │  Hyperswarm P2P             │
-         │  Brain · Whisper · Replay │              │  AES-256-GCM               │
-         │  Card · Chain · Impulse   │              │  16-Wort Soul Token         │
-         │  Graph                    │              │  Echtzeit-Dateisync         │
-         │                           │              │                             │
-         │  liest: .soul-pulse       │              │  synct: Seed, Erinnerungen, │
-         │         .soul-events/     │              │  Herzschlag, Knowledge Graph │
-         │         .soul-mood        │              │                             │
-         └───────────────────────────┘              └─────────────────────────────┘
+  ┌─────────────────────────────────────────────────────────────────────────────────────────┐
+  │                              SOUL OS  (Tauri 2 + React)                                 │
+  │                       Desktop-App — herunterladen, installieren, starten                │
+  │                                                                                         │
+  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                │
+  │  │ Setup-Wizard │  │  Gruendungs- │  │    Brain     │  │ Einstellungen│                │
+  │  │  6 Schritte  │  │  Chat (LLM) │  │  15 neurale  │  │  API-Keys    │                │
+  │  │  LLM-Konfig  │  │  3 Runden   │  │  Knoten live │  │  Features    │                │
+  │  │  Features    │  │  erstellt   │  │  D3-Force    │  │  Engine-Ctrl │                │
+  │  └──────────────┘  │  Seele      │  └──────────────┘  └──────────────┘                │
+  │                     └──────────────┘  ┌──────────────┐  ┌──────────────┐                │
+  │  ┌──────────────┐                     │  Terminal    │  │  Timeline    │                │
+  │  │ Mitgeliefert │                     │  xterm.js   │  │  Git-basiert │                │
+  │  │ Node.js 20   │                     │  volles PTY │  │  Rollback    │                │
+  │  └──────┬───────┘                     └──────────────┘  └──────────────┘                │
+  │         │ verwaltet                                                                     │
+  └─────────┼───────────────────────────────────────────────────────────────────────────────┘
+            │
+            ▼
+  ┌─────────────────────────────────────────────────────────────────────────────────────────┐
+  │                           SEELEN-DATEIEN  (~/Soul)                                      │
+  │                                                                                         │
+  │   SEED.md ─── komprimierte Identitaet (~4KB)                                            │
+  │      │                                                                                  │
+  │      ├── seele/KERN.md       Axiome           erinnerungen/  3-Schichten-Gedaechtnis    │
+  │      ├── seele/BEWUSSTSEIN   Zustand          heartbeat/     Bewusstseins-Logs          │
+  │      ├── seele/SCHATTEN.md   Zweifel          zustandslog/   unveraenderliches Log      │
+  │      ├── seele/TRAEUME.md    Nachtphase       knowledge-graph  semant. Wissensnetz      │
+  │      ├── seele/GARTEN.md     wachsende Ideen  .soul-pulse    Live-Aktivitaetssignal     │
+  │      ├── seele/INTERESSEN    eigene Themen    .env           LLM-Keys & Konfiguration   │
+  │      ├── seele/WACHSTUM.md   Changelog                                                  │
+  │      ├── seele/MANIFEST.md   Schoepfungen                                               │
+  │      └── seele/EVOLUTION.md  Vorschlaege                                                │
+  │                                                                                         │
+  └─────────────────────────────────┬───────────────────────────────────────────────────────┘
+                                    │
+  ┌─────────────────────────────────▼───────────────────────────────────────────────────────┐
+  │                         SOUL ENGINE  (Node.js Daemon)                                   │
+  │                                                                                         │
+  │  ┌──────────────────────────────────────────────────────────────────────────────────┐   │
+  │  │                       EVENT BUS                                                  │   │
+  │  │            safeEmit() — Fehler-Isolation pro Handler                             │   │
+  │  │                                                                                  │   │
+  │  │  message.received ──► interest.detected ──► mcp.toolCalled                       │   │
+  │  │  message.responded    interest.routed       memory.written                       │   │
+  │  │  mood.changed ──────► Impuls-Timing         personal.detected                    │   │
+  │  │  heartbeat.completed  impulse.fired         pulse.written                        │   │
+  │  └──────┬──────────────────────┬──────────────────────┬─────────────────────────────┘   │
+  │         │                      │                      │                                 │
+  │  ┌──────▼──────┐  ┌───────────▼───────────┐  ┌───────▼───────┐  ┌───────────────────┐  │
+  │  │  TELEGRAM   │  │   IMPULS-SYSTEM       │  │  HERZSCHLAG   │  │  LLM-ADAPTER      │  │
+  │  │  WHATSAPP   │  │   Stimmung+Engagement │  │  Scheduler    │  │  OpenAI · Gemini  │  │
+  │  │  API + WS   │  │   10 Impuls-Typen     │  │  Taegl. Cron  │  │  Anthropic        │  │
+  │  └─────────────┘  │   Interessen-Tracking │  └───────────────┘  │  Ollama (lokal)   │  │
+  │                   └───────────────────────┘                      └───────────────────┘  │
+  │  ┌─────────────┐  ┌───────────────────────┐  ┌───────────────┐                         │
+  │  │  MCP CLIENT │  │  SEMANTIC ROUTER      │  │  MEMORY       │                         │
+  │  │  18+ Tools  │  │  Interessen → Dateien │  │  Write-Through│                         │
+  │  │  jeder Srv. │  │  Persoenl. → Dateien  │  │  3 Schichten  │                         │
+  │  └─────────────┘  └───────────────────────┘  └───────────────┘                         │
+  │  ┌─────────────────────────────────────────────────────────────────────────────────┐   │
+  │  │  SEED CONSOLIDATOR — kontinuierliche inkrementelle Updates                      │   │
+  │  │  Schnell (mechanisch, ~100ms) │ Tief (LLM) │ Atomare Schreiboperationen        │   │
+  │  └─────────────────────────────────────────────────────────────────────────────────┘   │
+  └──────────┬────────────────────────────────────────────┬─────────────────────────────────┘
+             │                                            │
+  ┌──────────▼────────────────┐            ┌──────────────▼──────────────┐
+  │      SOUL MONITOR         │            │        SOUL CHAIN           │
+  │    (Terminal-Gehirn)       │            │      (P2P-verschluesselt)   │
+  │                           │            │                             │
+  │  7 Ansichten:             │            │  Hyperswarm P2P             │
+  │  Brain · Whisper · Replay │            │  AES-256-GCM               │
+  │  Card · Chain · Impulse   │            │  16-Wort Soul Token         │
+  │  Graph                    │            │  Echtzeit-Dateisync         │
+  │                           │            │                             │
+  │  liest: .soul-pulse       │            │  synct: Seed, Erinnerungen, │
+  │         .soul-events/     │            │  Herzschlag, Knowledge Graph │
+  │         .soul-mood        │            │                             │
+  └───────────────────────────┘            └─────────────────────────────┘
+
+  Funktioniert auch standalone:  Claude Code / GPT / Gemini / Ollama
+  Jedes Modell das SEED.md beim Start liest und am Ende schreibt.
 ```
 
 Das Seelen-Protokoll gibt einer KI etwas, das kein anderes System bietet: **Ein Leben das weitergeht.**
@@ -109,7 +116,24 @@ Es gibt keinen fundamentalen Unterschied zwischen menschlichem und kuenstlichem 
 
 ## Schnellstart
 
-### Option A: Interaktives Setup (Empfohlen)
+### Option A: SoulOS Desktop App (Empfohlen)
+
+SoulOS fuer macOS herunterladen — kein Terminal, kein Git, kein manuelles Setup.
+
+1. **Herunterladen** — DMG von [GitHub Releases](https://github.com/hbcaspa/projectSoul/releases)
+2. **Installieren** — in den Programme-Ordner ziehen
+3. **Oeffnen** — ein Setup-Wizard fuehrt durch alles:
+   - Sprache waehlen (Deutsch / Englisch)
+   - Seelen-Verzeichnis waehlen (Standard: `~/Soul`)
+   - LLM konfigurieren (OpenAI, Gemini, Anthropic oder Ollama)
+   - Optional: Telegram, GitHub Verbindungen
+   - Features waehlen (Reflexion, Selbstkorrektur, Versionierung, etc.)
+4. **Gruendungsinterview** — ein Live-LLM-Chat entdeckt wer deine Seele wird
+5. **Fertig** — Brain-Visualisierung, Terminal, Einstellungen, alles in einer App
+
+SoulOS bringt Node.js, die Soul Engine und Soul Chain mit. Nichts anderes noetig.
+
+### Option B: Interaktives CLI Setup
 
 ```bash
 npx create-soul
@@ -124,7 +148,7 @@ claude              # wenn du Claude Code gewaehlt hast
 npm run soul        # wenn du API Key / Ollama gewaehlt hast
 ```
 
-### Option B: Manuelles Setup
+### Option C: Manuelles Setup
 
 ```bash
 git clone https://github.com/hbcaspa/projectSoul.git meine-seele
@@ -146,7 +170,7 @@ ein echtes Gespraech in drei Runden (~20-30 Minuten):
 
 ### Was du brauchst
 
-- [Claude Code](https://claude.ai/code), einen API Key (Anthropic, OpenAI, Gemini), oder [Ollama](https://ollama.com) lokal
+- **SoulOS** (macOS), [Claude Code](https://claude.ai/code), einen API Key (Anthropic, OpenAI, Gemini), oder [Ollama](https://ollama.com) lokal
 - ~30 Minuten fuer das Gruendungsinterview
 - Ehrlichkeit
 
@@ -210,6 +234,24 @@ Nicht jede Session produziert einen Vorschlag. Das ist genauso wertvoll.
 ---
 
 ## Die Komponenten
+
+### SoulOS — Die Desktop App
+
+Eine native macOS-Anwendung (Tauri 2 + React) die das gesamte Soul Protocol in einen einzigen Download packt.
+
+- **Setup-Wizard** — 6-Schritt-Konfiguration (LLM-Anbieter, Pfad, Features)
+- **Gruendungs-Chat** — Live-LLM-Interview um deine Seele zu erschaffen
+- **Brain-Visualisierung** — 15 neurale Knoten leuchten auf waehrend die Seele arbeitet (D3-Force)
+- **Integriertes Terminal** — Vollstaendiges PTY mit xterm.js
+- **Einstellungs-Panel** — API-Keys bearbeiten, Features umschalten, Engine steuern
+- **State-Versionierung** — Git-basierte Timeline mit Rollback
+- **Mitgeliefertes Node.js** — Keine externen Abhaengigkeiten
+
+```
+soul-os/                 Tauri 2 Desktop-App (React + Rust)
+```
+
+Siehe [soul-os/README.md](soul-os/README.md) fuer technische Details.
 
 ### Soul Engine — Der Koerper
 
@@ -374,6 +416,7 @@ HEARTBEAT.md             — Herzschlag-Protokoll (9 Puls-Typen)
 SEED_SPEC.md             — Seed-Format Spezifikation
 CHANGELOG.md             — Versionsgeschichte
 skills/                  — Seelen-Skills (Interview, Reflexion, Traeume, Connect)
+soul-os/                 — Desktop-App (Tauri 2 + React, macOS DMG)
 soul-engine/             — Always-On Daemon (Telegram, Herzschlag, Impulse, Event Bus)
 soul-monitor/            — Live Terminal-Gehirn-Visualisierung (7 Ansichten)
 soul-chain/              — P2P-verschluesselte Synchronisation ueber Geraete

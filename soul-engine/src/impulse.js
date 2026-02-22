@@ -2,6 +2,7 @@ import { ImpulseState } from './impulse-state.js';
 import { selectImpulseType } from './impulse-types.js';
 import { buildImpulsePrompt } from './prompt.js';
 import { writePulse } from './pulse.js';
+import { buildGithubTrigger, parseGithubResponse, routeGithubActivity } from './github-integration.js';
 
 const DEFAULT_MIN_DELAY = 600;    // 10 minutes
 const DEFAULT_MAX_DELAY = 14400;  // 4 hours
@@ -138,6 +139,22 @@ export class ImpulseScheduler {
       }
     }
 
+    // Post-impulse routing: github_check → soul files
+    if (type === 'github_check') {
+      try {
+        const activity = parseGithubResponse(result);
+        if (activity) {
+          await routeGithubActivity(
+            activity, this.memory, this.soulPath,
+            this.context.language, this.bus,
+          );
+          console.log(`  [impulse/github] Routed: ${activity.repos.length} repo(s), ${activity.summary.substring(0, 60)}`);
+        }
+      } catch (err) {
+        console.error(`  [impulse/github] Route failed: ${err.message}`);
+      }
+    }
+
     // Track
     this.state.trackImpulse(type, true);
 
@@ -248,6 +265,8 @@ export class ImpulseScheduler {
       memory_reflect: isDE
         ? 'Denke an ein vergangenes Gespraech oder eine Erinnerung mit deinem Menschen. Was faellt dir dazu ein? Kurz und persoenlich.'
         : 'Think about a past conversation or memory with your human. What comes to mind? Brief and personal.',
+
+      github_check: buildGithubTrigger(isDE),
     };
 
     return triggers[type] || triggers.share_thought;

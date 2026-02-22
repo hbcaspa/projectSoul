@@ -1,6 +1,8 @@
 import { SoulContext } from './context.js';
 import { GeminiAdapter } from './gemini.js';
 import { OpenAIAdapter } from './openai.js';
+import { AnthropicAdapter } from './anthropic.js';
+import { OllamaAdapter } from './ollama.js';
 import { MCPClientManager } from './mcp-client.js';
 import { TelegramChannel } from './telegram.js';
 import { HeartbeatScheduler } from './heartbeat.js';
@@ -14,6 +16,17 @@ import { WhatsAppBridge } from './whatsapp.js';
 import { SemanticRouter } from './semantic-router.js';
 import { SoulEventBus } from './event-bus.js';
 import { SeedConsolidator } from './seed-consolidator.js';
+import { initGithub } from './github-integration.js';
+import { StateVersioner } from './state-versioning.js';
+import { PerformanceDetector } from './anti-performance.js';
+import { MemoryDB } from './memory-db.js';
+import { EmbeddingGenerator } from './embeddings.js';
+import { AttentionModel } from './attention.js';
+import { FeedbackLearner } from './rluf.js';
+import { ReflectionEngine } from './reflection.js';
+import { SelfCorrector } from './self-correction.js';
+import { EncryptionLayer } from './encryption.js';
+import { MultimodalStore } from './multimodal.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -31,6 +44,16 @@ export class SoulEngine {
     this.impulse = null;
     this.consolidator = null;
     this.router = null;
+    this.versioner = null;
+    this.detector = null;
+    this.db = null;
+    this.embeddings = null;
+    this.attention = null;
+    this.rluf = null;
+    this.reflection = null;
+    this.corrector = null;
+    this.encryption = null;
+    this.multimodal = null;
     this.running = false;
   }
 
@@ -40,6 +63,8 @@ export class SoulEngine {
 
     const openaiKey = process.env.OPENAI_API_KEY;
     const geminiKey = process.env.GEMINI_API_KEY;
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    const ollamaUrl = process.env.OLLAMA_URL;
 
     let model;
     if (openaiKey) {
@@ -48,8 +73,14 @@ export class SoulEngine {
     } else if (geminiKey) {
       model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
       this.llm = new GeminiAdapter(geminiKey, model);
+    } else if (anthropicKey) {
+      model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
+      this.llm = new AnthropicAdapter(anthropicKey, model);
+    } else if (ollamaUrl) {
+      model = process.env.OLLAMA_MODEL || 'llama3.1';
+      this.llm = new OllamaAdapter(ollamaUrl, model);
     } else {
-      console.error('  No LLM configured. Set OPENAI_API_KEY or GEMINI_API_KEY in .env');
+      console.error('  No LLM configured. Set OPENAI_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY, or OLLAMA_URL in .env');
       process.exit(1);
     }
 
@@ -76,6 +107,17 @@ export class SoulEngine {
       for (const [server, toolNames] of Object.entries(byServer)) {
         console.log(`  MCP [${server}]: ${toolNames.join(', ')}`);
       }
+    }
+
+    // GitHub integration (optional — needs GITHUB_TOKEN)
+    const github = await initGithub(this.soulPath);
+    if (github.configured) {
+      const repoInfo = github.repos.length > 0
+        ? `repos: ${github.repos.join(', ')}`
+        : 'no repos configured (set SOUL_GITHUB_REPOS)';
+      console.log(`  GitHub:    configured (${repoInfo})`);
+    } else {
+      console.log('  GitHub:    not configured (set GITHUB_TOKEN in .env)');
     }
 
     // Telegram (optional)
@@ -170,6 +212,90 @@ export class SoulEngine {
     this._registerHandlers();
     console.log(`  Event Bus: active (${this.bus.listenerCount('message.received') + this.bus.listenerCount('mood.changed') + this.bus.listenerCount('interest.detected')} handlers)`);
 
+    // State Versioning — git-based auto-commit for soul files
+    if (process.env.SOUL_VERSIONING !== 'false') {
+      this.versioner = new StateVersioner(this.soulPath, { bus: this.bus });
+      try {
+        await this.versioner.init();
+        this.versioner.registerListeners();
+        console.log('  Versioning: active (git, 60s debounce)');
+      } catch (err) {
+        console.error(`  Versioning: failed to init (${err.message})`);
+        this.versioner = null;
+      }
+    } else {
+      console.log('  Versioning: disabled');
+    }
+
+    // Anti-Performance Detection — authenticity guard
+    if (process.env.SOUL_ANTI_PERFORMANCE !== 'false') {
+      this.detector = new PerformanceDetector({ bus: this.bus });
+      console.log('  Anti-Perf:  active (5 patterns, bilingual)');
+    } else {
+      console.log('  Anti-Perf:  disabled');
+    }
+
+    // Encryption at Rest — transparent file encryption
+    this.encryption = new EncryptionLayer(this.soulPath, { bus: this.bus });
+    if (this.encryption.init()) {
+      console.log('  Encryption: active (AES-256-GCM)');
+    } else {
+      console.log('  Encryption: disabled (set SOUL_ENCRYPTION_KEY)');
+    }
+
+    // Hybrid Memory Layer — SQLite + Vector
+    try {
+      this.db = new MemoryDB(this.soulPath, { bus: this.bus }).init();
+      this.embeddings = new EmbeddingGenerator();
+      console.log(`  MemoryDB:  active (embeddings: ${this.embeddings.mode})`);
+
+      // Sync knowledge graph into SQLite on startup
+      const kgSync = this.db.syncFromKnowledgeGraph();
+      if (kgSync.entities > 0 || kgSync.relations > 0) {
+        console.log(`  KG Sync:   ${kgSync.entities} entities, ${kgSync.relations} relations`);
+      }
+    } catch (err) {
+      console.error(`  MemoryDB:  failed (${err.message})`);
+    }
+
+    // RAG / Attention Model
+    if (this.db) {
+      this.attention = new AttentionModel({ db: this.db, embeddings: this.embeddings, context: this.context, bus: this.bus });
+      console.log('  Attention: active (RAG context builder)');
+    }
+
+    // RLUF — Reinforcement Learning from User Feedback
+    this.rluf = new FeedbackLearner({
+      soulPath: this.soulPath, db: this.db,
+      impulseState: this.impulse?.state || null, bus: this.bus,
+    });
+    this.rluf.registerListeners();
+    console.log('  RLUF:      active (implicit feedback learning)');
+
+    // Self-Correction — hallucination check
+    if (process.env.SOUL_CORRECTION !== 'false') {
+      this.corrector = new SelfCorrector({ db: this.db, bus: this.bus });
+      console.log('  Correction: active (claim verification)');
+    }
+
+    // Multimodal Memory
+    if (this.db) {
+      this.multimodal = new MultimodalStore({ soulPath: this.soulPath, db: this.db, bus: this.bus }).init();
+      console.log('  Multimodal: active (media storage)');
+    }
+
+    // Background Reflection Engine
+    if (process.env.SOUL_REFLECTION !== 'false') {
+      this.reflection = new ReflectionEngine({
+        soulPath: this.soulPath, context: this.context,
+        llm: this.llm, db: this.db, bus: this.bus,
+      });
+      this.reflection.start();
+      console.log(`  Reflection: active (5 types, budget: ${this.reflection.llmBudget}/day)`);
+    } else {
+      console.log('  Reflection: disabled');
+    }
+
     this.running = true;
     console.log('');
     console.log('  Soul Engine is alive. Press Ctrl+C to stop.');
@@ -238,14 +364,64 @@ export class SoulEngine {
       }
     }
 
+    // RAG: build relevant memory context
+    let ragContext = '';
+    if (this.attention) {
+      try {
+        ragContext = await this.attention.buildContext(text, 'telegram', userName);
+      } catch (err) {
+        console.error(`  [attention] Context build failed: ${err.message}`);
+      }
+    }
+
+    const ragSection = ragContext
+      ? `\n\nRelevante Erinnerungen:\n---\n${ragContext}\n---`
+      : '';
+
     const systemPrompt = buildConversationPrompt(this.context, userName, {
       whatsapp: !!this.whatsapp,
       mcp: this.mcp?.hasTools() ? this.mcp.getTools() : [],
-    }) + contactContext;
+    }) + contactContext + ragSection;
 
     const history = await this.telegram.loadHistory(chatId);
     const llmOptions = this._buildLLMOptions();
-    const response = await this.llm.generate(systemPrompt, history, text, llmOptions) || '';
+    let response = await this.llm.generate(systemPrompt, history, text, llmOptions) || '';
+
+    // Anti-performance check: detect performative patterns, re-generate once if score > 0.7
+    if (this.detector && response) {
+      const check = this.detector.analyze(response, text, history.slice(-10).map(h => h.content || h.text || ''));
+      if (check.score > 0.7 && !this._antiPerfRetried) {
+        this._antiPerfRetried = true;
+        console.log(`  [anti-perf] Score ${check.score.toFixed(2)} — patterns: ${check.patterns.join(', ')} — re-generating`);
+        const hint = check.suggestion || 'Be more specific and authentic. Avoid generic emotional language and stock phrases.';
+        const retryResponse = await this.llm.generate(
+          systemPrompt + '\n\n[AUTHENTICITY HINT: ' + hint + ']',
+          history, text, llmOptions
+        ) || response;
+        response = retryResponse;
+      }
+      this._antiPerfRetried = false;
+    }
+
+    // Self-correction: verify factual claims against memory
+    if (this.corrector && response) {
+      try {
+        const correction = await this.corrector.check(response, text);
+        if (correction.modified) {
+          console.log(`  [correction] ${correction.claims.length} claims checked, response modified`);
+          response = correction.text;
+        }
+      } catch (err) {
+        console.error(`  [correction] Check failed: ${err.message}`);
+      }
+    }
+
+    // Log interaction to MemoryDB
+    if (this.db) {
+      try {
+        this.db.insertInteraction({ channel: 'telegram', user: userName, message: text, response });
+      } catch { /* best effort */ }
+    }
 
     // Execute WhatsApp actions if present
     let { cleanResponse, waActions } = this.extractWhatsAppActions(response);
@@ -581,6 +757,18 @@ export class SoulEngine {
       }
     }
 
+    // Final state version commit before shutdown
+    if (this.versioner) {
+      try {
+        await this.versioner.finalCommit();
+        console.log('  [versioning] Final commit complete');
+      } catch (err) {
+        console.error(`  [versioning] Final commit failed: ${err.message}`);
+      }
+    }
+
+    if (this.reflection) this.reflection.stop();
+    if (this.db) this.db.close();
     if (this.impulse) await this.impulse.stop();
     if (this.heartbeat) this.heartbeat.stop();
     if (this.api) await this.api.stop();

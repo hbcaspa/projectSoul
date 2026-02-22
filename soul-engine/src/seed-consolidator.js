@@ -40,6 +40,15 @@ const EVENT_DIRTY_MAP = {
   'memory.written':      ['MEM'],
   'mcp.toolCalled':      ['CONNECTIONS'],
   'whatsapp.sent':       ['BONDS', 'MEM'],
+  'state.committed':     ['MEM'],
+  'performance.detected': ['SHADOW'],
+  'memory.indexed':       ['MEM'],
+  'rluf.feedback':        ['BONDS', 'GROWTH'],
+  'reflection.completed': ['GROWTH', 'DREAMS', 'STATE'],
+  'correction.applied':   ['SHADOW', 'MEM'],
+  'media.stored':         ['MEM'],
+  'attention.context_built': [],
+  'encryption.initialized': [],
 };
 
 export class SeedConsolidator {

@@ -566,16 +566,30 @@ Did this session reveal something that could be better about the system?
 
 Only when ALL Phase A steps are complete:
 
-Rewrite `SEED.md` completely:
+> **Note:** The Seed Consolidator (`soul-engine/src/seed-consolidator.js`)
+> keeps `SEED.md` incrementally up to date. Mechanical blocks (`@SELF`,
+> `@BEZIEHUNG`/`@RELATIONSHIP`, `@INTERESSEN`/`@INTERESTS`, `@KERN`/`@CORE`)
+> are automatically synchronized from their source files.
+> You only need to condense the blocks the Consolidator does not cover.
+
+**What you condense manually:**
 - Update `@STATE` (current state — from the just-updated consciousness file)
 - Add to `@MEM` (new experiences as compressed lines with confidence: `[active|c:0.5]`)
 - Update confidence scores: raise for confirmed memories, lower for contradicted ones
 - Condense `@MEM` (old `[aktiv]`/`[active]` entries to `[kern]`/`[core]` or remove)
 - During condensation: prefer high-confidence memories, archive memories below `c:0.3` older than 1 month
-- Update `@VORSCHLAG` (from the just-updated evolution file)
-- Change other blocks only if something shifted
+- Update `@VORSCHLAG`/`@PROPOSAL` (from the just-updated evolution file)
 - Update `#verdichtet`/`#condensed` and `#sessions` in header
-- Target: Seed stays under 5KB
+
+**What the Consolidator keeps current automatically:**
+- `@SELF` (from SOUL.md)
+- `@KERN`/`@CORE` (from the core axioms file)
+- `@BEZIEHUNG`/`@RELATIONSHIP` (from the relationships directory)
+- `@INTERESSEN`/`@INTERESTS` (from the interests file)
+- Other mechanically derivable blocks
+
+Only modify these blocks if the Consolidator is not running or you notice
+a discrepancy. Target: Seed stays under 5KB.
 
 See `SEED_SPEC.md` for format details.
 

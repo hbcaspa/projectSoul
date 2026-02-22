@@ -1,0 +1,636 @@
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+use std::process::Command;
+use std::sync::{Arc, Mutex};
+
+use tauri::State;
+
+use crate::config::AppConfig;
+use crate::pty::PtyManager;
+use crate::sidecar::SidecarManager;
+use crate::types::{GitCommit, SoulStatus};
+use crate::watcher::WatcherState;
+
+type ConfigState = Arc<Mutex<AppConfig>>;
+
+fn soul_path(config: &State<ConfigState>) -> PathBuf {
+    config.lock().unwrap().soul_path.clone()
+}
+
+// --- New commands for product setup ---
+
+#[tauri::command]
+pub fn get_app_state(config: State<ConfigState>) -> String {
+    let cfg = config.lock().unwrap();
+    cfg.app_state().to_string()
+}
+
+#[tauri::command]
+pub fn get_soul_path(config: State<ConfigState>) -> String {
+    soul_path(&config).to_string_lossy().to_string()
+}
+
+#[tauri::command]
+pub fn set_soul_path(config: State<ConfigState>, path: String) -> Result<(), String> {
+    let mut cfg = config.lock().map_err(|e| e.to_string())?;
+    cfg.soul_path = PathBuf::from(&path);
+    cfg.first_run = false;
+    cfg.save()
+}
+
+#[tauri::command]
+pub fn write_soul_file(
+    config: State<ConfigState>,
+    name: String,
+    content: String,
+) -> Result<(), String> {
+    let sp = soul_path(&config);
+    let file_path = sp.join(&name);
+
+    // Security: prevent path traversal
+    let target = file_path
+        .canonicalize()
+        .unwrap_or_else(|_| file_path.clone());
+    if !target.starts_with(&sp)
+        && !file_path.starts_with(&sp)
+    {
+        return Err("Access denied: path outside soul directory".to_string());
+    }
+
+    // Create parent directories
+    if let Some(parent) = file_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+
+    fs::write(&file_path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn read_env(config: State<ConfigState>) -> Result<HashMap<String, String>, String> {
+    let sp = soul_path(&config);
+    let env_path = sp.join(".env");
+
+    if !env_path.exists() {
+        return Ok(HashMap::new());
+    }
+
+    let content = fs::read_to_string(&env_path).map_err(|e| e.to_string())?;
+    let mut map = HashMap::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some((key, val)) = trimmed.split_once('=') {
+            map.insert(key.trim().to_string(), val.trim().to_string());
+        }
+    }
+
+    Ok(map)
+}
+
+#[tauri::command]
+pub fn write_env(
+    config: State<ConfigState>,
+    entries: HashMap<String, String>,
+) -> Result<(), String> {
+    let sp = soul_path(&config);
+    let env_path = sp.join(".env");
+
+    // Read existing file to preserve comments and order
+    let existing = if env_path.exists() {
+        fs::read_to_string(&env_path).unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    let mut result_lines: Vec<String> = Vec::new();
+    let mut written_keys: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    // Update existing lines, preserving comments
+    for line in existing.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            result_lines.push(line.to_string());
+            continue;
+        }
+        if let Some((key, _)) = trimmed.split_once('=') {
+            let key = key.trim();
+            if let Some(new_val) = entries.get(key) {
+                result_lines.push(format!("{}={}", key, new_val));
+                written_keys.insert(key.to_string());
+            } else {
+                result_lines.push(line.to_string());
+                written_keys.insert(key.to_string());
+            }
+        } else {
+            result_lines.push(line.to_string());
+        }
+    }
+
+    // Append new keys not in original file
+    for (key, val) in &entries {
+        if !written_keys.contains(key) {
+            result_lines.push(format!("{}={}", key, val));
+        }
+    }
+
+    // Ensure parent directory exists
+    if let Some(parent) = env_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+
+    let content = result_lines.join("\n") + "\n";
+    fs::write(&env_path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn check_node(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    use crate::node;
+
+    match node::find_node(Some(&app)) {
+        Some(node_path) => {
+            let version = node::node_version(&node_path)
+                .unwrap_or_else(|| "unknown".to_string());
+            Ok(serde_json::json!({
+                "found": true,
+                "path": node_path.to_string_lossy(),
+                "version": version,
+            }))
+        }
+        None => Ok(serde_json::json!({
+            "found": false,
+            "path": "",
+            "version": "",
+        })),
+    }
+}
+
+#[tauri::command]
+pub fn create_soul_directories(config: State<ConfigState>) -> Result<(), String> {
+    let sp = soul_path(&config);
+
+    let dirs = [
+        "",
+        "seele",
+        "seele/beziehungen",
+        "erinnerungen",
+        "erinnerungen/kern",
+        "erinnerungen/episodisch",
+        "erinnerungen/semantisch",
+        "erinnerungen/emotional",
+        "erinnerungen/archiv",
+        "heartbeat",
+        "zustandslog",
+        "memory",
+        "connections",
+        // English variants
+        "soul",
+        "soul/relationships",
+        "memories",
+        "memories/core",
+        "memories/episodic",
+        "memories/semantic",
+        "memories/emotional",
+        "memories/archive",
+        "statelog",
+    ];
+
+    for dir in &dirs {
+        let path = sp.join(dir);
+        fs::create_dir_all(&path).map_err(|e| format!("Failed to create {}: {}", dir, e))?;
+    }
+
+    Ok(())
+}
+
+// --- Existing commands updated to use config ---
+
+#[tauri::command]
+pub fn get_soul_status(config: State<ConfigState>) -> Result<SoulStatus, String> {
+    let sp = soul_path(&config);
+    let seed_path = sp.join("SEED.md");
+
+    if !seed_path.exists() {
+        return Err("SEED.md not found".to_string());
+    }
+
+    let content = fs::read_to_string(&seed_path).map_err(|e| e.to_string())?;
+    let seed_size = fs::metadata(&seed_path)
+        .map(|m| m.len())
+        .unwrap_or(0);
+
+    // Parse basic info from SEED.md header
+    let mut name = String::from("Soul");
+    let mut born = String::from("unknown");
+    let mut sessions: u32 = 0;
+    let mut model = String::from("unknown");
+    let mut state = String::new();
+    let mut mood = String::new();
+
+    for line in content.lines() {
+        if line.starts_with("#SEED") {
+            continue;
+        }
+        if line.starts_with("#geboren:") || line.starts_with("#born:") {
+            for part in line.split_whitespace() {
+                if let Some(val) = part.strip_prefix("#geboren:").or(part.strip_prefix("#born:")) {
+                    born = val.to_string();
+                }
+                if let Some(val) = part.strip_prefix("#sessions:") {
+                    sessions = val.parse().unwrap_or(0);
+                }
+            }
+        }
+        if line.contains("modell:") || line.contains("model:") {
+            if let Some(idx) = line.find("modell:").or(line.find("model:")) {
+                let rest = &line[idx..];
+                let val = rest
+                    .split('|')
+                    .next()
+                    .unwrap_or("")
+                    .split(':')
+                    .nth(1)
+                    .unwrap_or("")
+                    .trim();
+                model = val.to_string();
+            }
+        }
+        if line.contains("zustand:") || line.contains("state:") {
+            if let Some(idx) = line.find("zustand:").or(line.find("state:")) {
+                let rest = &line[idx..];
+                let val = rest
+                    .split('|')
+                    .next()
+                    .unwrap_or("")
+                    .split(':')
+                    .nth(1)
+                    .unwrap_or("")
+                    .trim();
+                state = val.to_string();
+            }
+        }
+    }
+
+    // Derive mood from state
+    if !state.is_empty() {
+        mood = state.split(',').next().unwrap_or("").trim().to_string();
+    }
+
+    // Try to get name from @META or project
+    if content.contains("projekt:seele") || content.contains("project:soul") {
+        name = String::from("Seele");
+    }
+
+    Ok(SoulStatus {
+        name,
+        born,
+        sessions,
+        model,
+        state,
+        mood,
+        seed_size,
+    })
+}
+
+#[tauri::command]
+pub fn read_soul_file(config: State<ConfigState>, name: String) -> Result<String, String> {
+    let sp = soul_path(&config);
+    let file_path = sp.join(&name);
+
+    // Security: prevent path traversal
+    let canonical = file_path.canonicalize().map_err(|e| e.to_string())?;
+    let soul_canonical = sp.canonicalize().map_err(|e| e.to_string())?;
+    if !canonical.starts_with(&soul_canonical) {
+        return Err("Access denied: path outside soul directory".to_string());
+    }
+
+    fs::read_to_string(&canonical).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_active_nodes(state: State<WatcherState>) -> HashMap<String, f64> {
+    state.get_active_nodes_map()
+}
+
+#[tauri::command]
+pub fn get_is_working(state: State<WatcherState>) -> bool {
+    state.is_working()
+}
+
+#[tauri::command]
+pub fn start_engine(
+    sidecar: State<std::sync::Arc<SidecarManager>>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    sidecar.start_engine(&app)
+}
+
+#[tauri::command]
+pub fn stop_engine(
+    sidecar: State<std::sync::Arc<SidecarManager>>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    sidecar.stop_engine(&app)
+}
+
+#[tauri::command]
+pub fn get_sidecar_status(
+    sidecar: State<std::sync::Arc<SidecarManager>>,
+) -> crate::sidecar::SidecarStatus {
+    sidecar.get_status()
+}
+
+// --- Founding Commands ---
+
+#[tauri::command]
+pub fn start_founding(
+    config: State<ConfigState>,
+    founding: State<std::sync::Arc<crate::founding::FoundingServer>>,
+    app: tauri::AppHandle,
+) -> Result<u16, String> {
+    let sp = soul_path(&config);
+    founding.start(&app, &sp)
+}
+
+#[tauri::command]
+pub fn stop_founding(
+    founding: State<std::sync::Arc<crate::founding::FoundingServer>>,
+) -> Result<(), String> {
+    founding.stop()
+}
+
+#[tauri::command]
+pub async fn founding_chat(
+    founding: State<'_, std::sync::Arc<crate::founding::FoundingServer>>,
+    message: String,
+    history: Vec<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let port = founding.port();
+    let url = format!("http://127.0.0.1:{}/chat", port);
+
+    let body = serde_json::json!({
+        "message": message,
+        "history": history,
+    });
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to reach founding server: {}", e))?;
+
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response from founding server: {}", e))?;
+
+    Ok(json)
+}
+
+#[tauri::command]
+pub async fn founding_create(
+    founding: State<'_, std::sync::Arc<crate::founding::FoundingServer>>,
+    history: Vec<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let port = founding.port();
+    let url = format!("http://127.0.0.1:{}/create", port);
+
+    let body = serde_json::json!({ "history": history });
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to reach founding server: {}", e))?;
+
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {}", e))?;
+
+    Ok(json)
+}
+
+// --- Chain Commands ---
+
+#[tauri::command]
+pub fn start_chain(
+    sidecar: State<std::sync::Arc<SidecarManager>>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    sidecar.start_chain(&app)
+}
+
+#[tauri::command]
+pub fn stop_chain(
+    sidecar: State<std::sync::Arc<SidecarManager>>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    sidecar.stop_chain(&app)
+}
+
+#[tauri::command]
+pub fn get_chain_status(
+    sidecar: State<std::sync::Arc<SidecarManager>>,
+) -> crate::sidecar::SidecarStatus {
+    sidecar.get_chain_status()
+}
+
+// --- PTY Commands ---
+
+#[tauri::command]
+pub fn create_pty(
+    pty: State<std::sync::Arc<PtyManager>>,
+    app: tauri::AppHandle,
+    cols: u16,
+    rows: u16,
+) -> Result<u32, String> {
+    pty.create(&app, cols, rows)
+}
+
+#[tauri::command]
+pub fn write_pty(
+    pty: State<std::sync::Arc<PtyManager>>,
+    id: u32,
+    data: String,
+) -> Result<(), String> {
+    pty.write(id, &data)
+}
+
+#[tauri::command]
+pub fn resize_pty(
+    pty: State<std::sync::Arc<PtyManager>>,
+    id: u32,
+    cols: u16,
+    rows: u16,
+) -> Result<(), String> {
+    pty.resize(id, cols, rows)
+}
+
+#[tauri::command]
+pub fn close_pty(
+    pty: State<std::sync::Arc<PtyManager>>,
+    id: u32,
+) -> Result<(), String> {
+    pty.close(id)
+}
+
+// --- State Versioning Commands (Git) ---
+
+#[tauri::command]
+pub fn get_state_history(
+    config: State<ConfigState>,
+    limit: Option<u32>,
+) -> Result<Vec<GitCommit>, String> {
+    let sp = soul_path(&config);
+    let git_dir = sp.join(".git");
+    if !git_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let n = limit.unwrap_or(50);
+    let output = Command::new("git")
+        .args(["log", "--format=%H|%ai|%s", "-n", &n.to_string(), "--shortstat"])
+        .current_dir(&sp)
+        .output()
+        .map_err(|e| format!("git log failed: {}", e))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut commits = Vec::new();
+    let mut current_commit: Option<(String, String, String)> = None;
+
+    for line in text.lines() {
+        if line.contains('|') && line.len() > 40 {
+            // Flush previous commit
+            if let Some((hash, date, msg)) = current_commit.take() {
+                commits.push(GitCommit {
+                    hash,
+                    date,
+                    message: msg,
+                    files_changed: 0,
+                });
+            }
+            let parts: Vec<&str> = line.splitn(3, '|').collect();
+            if parts.len() >= 3 {
+                current_commit = Some((
+                    parts[0].to_string(),
+                    parts[1].to_string(),
+                    parts[2].to_string(),
+                ));
+            }
+        } else if line.contains("file") && line.contains("changed") {
+            let files = line
+                .split_whitespace()
+                .next()
+                .and_then(|n| n.parse::<u32>().ok())
+                .unwrap_or(0);
+            if let Some((hash, date, msg)) = current_commit.take() {
+                commits.push(GitCommit {
+                    hash,
+                    date,
+                    message: msg,
+                    files_changed: files,
+                });
+            }
+        }
+    }
+    // Flush last
+    if let Some((hash, date, msg)) = current_commit {
+        commits.push(GitCommit {
+            hash,
+            date,
+            message: msg,
+            files_changed: 0,
+        });
+    }
+
+    Ok(commits)
+}
+
+#[tauri::command]
+pub fn get_state_diff(config: State<ConfigState>, hash: String) -> Result<String, String> {
+    let sp = soul_path(&config);
+    if !hash.chars().all(|c| c.is_ascii_hexdigit()) || hash.len() < 7 {
+        return Err("Invalid commit hash".to_string());
+    }
+
+    let output = Command::new("git")
+        .args(["show", "--stat", "--patch", &hash])
+        .current_dir(&sp)
+        .output()
+        .map_err(|e| format!("git show failed: {}", e))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+#[tauri::command]
+pub fn rollback_state(config: State<ConfigState>, hash: String) -> Result<String, String> {
+    let sp = soul_path(&config);
+    if !hash.chars().all(|c| c.is_ascii_hexdigit()) || hash.len() < 7 {
+        return Err("Invalid commit hash".to_string());
+    }
+
+    let output = Command::new("git")
+        .args(["revert", "--no-edit", &hash])
+        .current_dir(&sp)
+        .output()
+        .map_err(|e| format!("git revert failed: {}", e))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+// --- Directory Listing ---
+
+#[tauri::command]
+pub fn list_directory(config: State<ConfigState>, name: String) -> Result<Vec<String>, String> {
+    let sp = soul_path(&config);
+    let dir_path = sp.join(&name);
+
+    // Security: prevent path traversal
+    if let Ok(canonical) = dir_path.canonicalize() {
+        if let Ok(soul_canonical) = sp.canonicalize() {
+            if !canonical.starts_with(&soul_canonical) {
+                return Err("Access denied: path outside soul directory".to_string());
+            }
+        }
+    }
+
+    if !dir_path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut files = Vec::new();
+    for entry in fs::read_dir(&dir_path).map_err(|e| e.to_string())? {
+        if let Ok(entry) = entry {
+            if let Ok(name) = entry.file_name().into_string() {
+                files.push(name);
+            }
+        }
+    }
+    files.sort();
+    files.reverse(); // newest first (for date-based filenames)
+    Ok(files)
+}

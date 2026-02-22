@@ -1,0 +1,66 @@
+name: Build SoulOS macOS
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout soul-os
+        uses: actions/checkout@v4
+
+      - name: Checkout soul-engine
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/soul-engine
+          path: ../soul-engine
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout soul-chain
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/soul-chain
+          path: ../soul-chain
+          token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Prepare build resources
+        run: bash scripts/prepare-build.sh
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'SoulOS ${{ github.ref_name }}'
+          releaseBody: 'Download SoulOS.dmg and drag to Applications.'
+          releaseDraft: true
+          prerelease: false
+          args: --config src-tauri/tauri.build.conf.json

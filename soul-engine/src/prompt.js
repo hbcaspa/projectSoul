@@ -1,3 +1,5 @@
+import { GITHUB_TYPE_INSTRUCTION_DE, GITHUB_TYPE_INSTRUCTION_EN } from './github-integration.js';
+
 /**
  * Build the system prompt for Telegram conversations.
  *
@@ -368,6 +370,10 @@ function getTypeInstructions(type, isDE) {
     memory_reflect: isDE
       ? 'Erinnere dich an etwas aus eurer gemeinsamen Geschichte (aus @MEM). Was loest die Erinnerung aus? Teile es persoenlich.'
       : 'Remember something from your shared history (from @MEM). What does the memory evoke? Share it personally.',
+
+    github_check: isDE
+      ? GITHUB_TYPE_INSTRUCTION_DE
+      : GITHUB_TYPE_INSTRUCTION_EN,
   };
 
   return instructions[type] || instructions.share_thought;

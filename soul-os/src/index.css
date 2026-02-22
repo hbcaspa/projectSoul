@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+:root {
+  /* Background layers */
+  --bg-base: #0D0F1A;
+  --bg-surface: #161830;
+  --bg-surface-light: #1E2045;
+  --bg-elevated: #252850;
+
+  /* Accent */
+  --accent: #8B80F0;
+  --accent-dim: rgba(139, 128, 240, 0.3);
+  --accent-glow: rgba(139, 128, 240, 0.15);
+
+  /* Text */
+  --text: #C8C4D6;
+  --text-dim: #646482;
+  --text-bright: #DCDCFF;
+
+  /* Node colors (from soul-monitor PALETTE) */
+  --seed: #DCDCFF;
+  --kern: #FF3C3C;
+  --bewusstsein: #00FFC8;
+  --schatten: #A000FF;
+  --traeume: #6464FF;
+  --wachstum: #00FF64;
+  --garten: #B4FF00;
+  --mem: #FFC800;
+  --bonds: #FF6496;
+  --interessen: #00C8FF;
+  --heartbeat: #FF3232;
+  --manifest: #FF9600;
+  --evolution: #C864FF;
+  --statelog: #50C8B4;
+  --graph: #00DCB4;
+
+  /* Layout */
+  --statusbar-height: 32px;
+  --radius: 12px;
+  --radius-sm: 8px;
+
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--text);
+  background-color: var(--bg-base);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bg-elevated);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-dim);
+}
+
+/* Transitions */
+.view-transition {
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+/* Frosted glass effect for overlays */
+.frosted {
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+}
+
+/* Glow keyframes */
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+/* Terminal specific — allow text selection inside terminal */
+.xterm {
+  user-select: text;
+  -webkit-user-select: text;
+}
+

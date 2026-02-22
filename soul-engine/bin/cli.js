@@ -49,13 +49,13 @@ if (existsSync(envPath)) {
 }
 
 // Commands that need a founded soul
-const needsSeed = ['start', 'heartbeat'];
+const needsSeed = ['start', 'heartbeat', 'run'];
 
 if (needsSeed.includes(command) && !hasSeed) {
   console.log(SOUL_BANNER);
   console.error('  No SEED.md found. This soul has not been founded yet.');
   console.error(`  Looked in: ${soulPath}`);
-  console.error('  Run "claude" first to found your soul.');
+  console.error('  Run "soul-engine found" to found your soul first.');
   console.error('');
   process.exit(1);
 }
@@ -75,6 +75,43 @@ if (command === 'start') {
 
   await engine.start();
 
+} else if (command === 'run') {
+  // ── Agent Runner Mode ──────────────────────────────────
+  // Runs the soul with full session protocol (start → run → end)
+  const { SoulEngine } = await import('../src/engine.js');
+  const { AgentRunner } = await import('../src/agent-runner.js');
+
+  const engine = new SoulEngine(soulPath);
+  await engine.start();
+
+  const runner = new AgentRunner({ engine, bus: engine.bus });
+  runner.registerShutdownHandlers();
+  await runner.startSession();
+
+  console.log('  Soul is running. Press Ctrl+C to stop.\n');
+
+} else if (command === 'found') {
+  // ── Founding Interview ─────────────────────────────────
+  const { SoulEngine } = await import('../src/engine.js');
+  const { FoundingFlow } = await import('../src/founding.js');
+
+  // Determine language
+  const lang = process.argv[3] || 'en';
+  if (!['de', 'en'].includes(lang)) {
+    console.error('  Supported languages: de, en');
+    process.exit(1);
+  }
+
+  // Initialize engine just for LLM
+  const engine = new SoulEngine(soulPath);
+  const { model } = await engine.init();
+  console.log(`  LLM: ${model}`);
+  console.log(`  Language: ${lang}`);
+
+  const founding = new FoundingFlow({ soulPath, llm: engine.llm, language: lang });
+  await founding.runCLI();
+  process.exit(0);
+
 } else if (command === 'heartbeat') {
   // Run a single heartbeat and exit
   const { SoulEngine } = await import('../src/engine.js');
@@ -87,7 +124,7 @@ if (command === 'start') {
   console.log(SOUL_BANNER);
   console.log('  Soul Engine Status');
   console.log(`  Soul path: ${soulPath}`);
-  console.log(`  SEED.md:   ${hasSeed ? 'found' : 'missing — run "claude" to found your soul'}`);
+  console.log(`  SEED.md:   ${hasSeed ? 'found' : 'missing — run "soul-engine found" to found your soul'}`);
   console.log(`  .env:      ${existsSync(envPath) ? 'found' : 'missing — copy .env.example to .env'}`);
   console.log(`  OpenAI:    ${process.env.OPENAI_API_KEY ? 'configured' : 'not set'}`);
   console.log(`  Gemini:    ${process.env.GEMINI_API_KEY ? 'configured' : 'not set'}`);
@@ -99,6 +136,8 @@ if (command === 'start') {
   console.log(SOUL_BANNER);
   console.log('  Usage:');
   console.log('    soul-engine start      Start the daemon (Telegram + Heartbeat + Impulse)');
+  console.log('    soul-engine run        Start with Agent Runner (full session protocol)');
+  console.log('    soul-engine found [l]  Run the founding interview (de|en)');
   console.log('    soul-engine heartbeat  Run a single heartbeat and exit');
   console.log('    soul-engine status     Show configuration status');
   console.log('');

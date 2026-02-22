@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicegui/nicegui/main/.schemas/tauri.v2.schema.json",
+  "bundle": {
+    "resources": [
+      "resources/node/**",
+      "resources/soul-engine/**",
+      "resources/soul-chain/**"
+    ]
+  }
+}

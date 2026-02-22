@@ -321,33 +321,52 @@ export class SoulEngine {
   _extractContactName(text) {
     // Common words that are NOT names — skip these
     const NOT_NAMES = new Set([
-      'kannst', 'du', 'auch', 'den', 'die', 'der', 'das', 'dem', 'des',
-      'ein', 'eine', 'einen', 'einem', 'einer', 'mein', 'meine', 'meinen',
-      'dein', 'deine', 'deinen', 'sein', 'seine', 'seinen', 'ihr', 'ihre',
+      'kannst', 'könntest', 'würdest', 'könnten', 'du', 'auch', 'den', 'die', 'der', 'das', 'dem', 'des',
+      'ein', 'eine', 'einen', 'einem', 'einer', 'mein', 'meine', 'meinen', 'meinem',
+      'dein', 'deine', 'deinen', 'deinem', 'sein', 'seine', 'seinen', 'seinem',
+      'ihr', 'ihre', 'ihrem', 'ihren',
       'auf', 'in', 'an', 'von', 'mit', 'zu', 'bei', 'nach', 'vor',
       'bitte', 'mal', 'noch', 'jetzt', 'gerade', 'schon', 'nicht',
+      'einmal', 'kurz', 'dann', 'gleich', 'schnell', 'einfach',
       'was', 'wer', 'wie', 'wo', 'wann', 'warum', 'ob',
       'und', 'oder', 'aber', 'doch', 'wenn', 'dass', 'weil',
       'ich', 'er', 'sie', 'es', 'wir', 'uns', 'euch',
       'standort', 'nachricht', 'kontakt', 'nummer', 'message', 'location',
       'schreib', 'schreibe', 'schick', 'schicke', 'sende', 'send',
+      'schreiben', 'schicken', 'senden', 'sagen', 'fragen', 'erzählen',
       'whatsapp', 'telegram', 'per', 'via', 'über',
+      'namen', 'name', 'ihn', 'ihm', 'uns', 'mir', 'dir',
     ]);
+
+    // Strategy 0 (NEW): German word order — "Kannst du NAME ... auf WhatsApp verb"
+    // "Kannst du addy einmal in deinem namen auf WhatsApp schreiben"
+    // Captures words between "du" and the next preposition/common word, filters with NOT_NAMES
+    const germanModal = text.match(
+      /(?:kannst|könntest|würdest|bitte)\s+(?:du\s+)?((?:\w+\s+){1,5})(?:.*?\s+)?(?:auf|on|per|via|über)\s+whatsapp/i
+    );
+
+    if (germanModal) {
+      const candidates = germanModal[1].trim().split(/\s+/)
+        .filter(w => !NOT_NAMES.has(w.toLowerCase()) && w.length >= 2);
+      if (candidates.length > 0) {
+        return candidates.slice(0, 3).join(' ');
+      }
+    }
 
     // Strategy 1: Send-command + name + "auf/on WhatsApp" or "dass/that"
     // "schreib Daniela Geller auf WhatsApp dass..."
     const sendMatch = text.match(
-      /(?:schreib\w*|schick\w*|send\w*|sag\w*|erzähl\w*|frag\w*|informier\w*|benachrichtig\w*|antworte\w*|teil\w*|meld\w*|text\w*|message\w*|tell\w*|ask\w*|write\w*|notify\w*|ping\w*)\s+((?:[A-ZÄÖÜ]\w+\s*){1,3})(?:\s+(?:auf|on|per|via|über)\s+whatsapp|\s+(?:dass|that|die|der|das|ob|whether))/i
+      /(?:schreib\w*|schick\w*|send\w*|sag\w*|erzähl\w*|frag\w*|informier\w*|benachrichtig\w*|antworte\w*|teil\w*|meld\w*|text\w*|message\w*|tell\w*|ask\w*|write\w*|notify\w*|ping\w*)\s+((?:\w+\s*){1,3})(?:\s+(?:auf|on|per|via|über)\s+whatsapp|\s+(?:dass|that|die|der|das|ob|whether))/i
     );
 
-    // Strategy 2: "Name auf/on WhatsApp" — require capitalized words (proper names)
+    // Strategy 2: "Name auf/on WhatsApp"
     const toMatch = !sendMatch && text.match(
-      /((?:[A-ZÄÖÜ]\w+\s*){1,3})\s+(?:auf|on|per|via|über)\s+whatsapp/i
+      /((?:\w+\s*){1,3})\s+(?:auf|on|per|via|über)\s+whatsapp/i
     );
 
     // Strategy 3: "WhatsApp an/to Name"
     const afterMatch = !sendMatch && !toMatch && text.match(
-      /whatsapp\s+(?:an|to|kontakt|contact|nachricht|message)\s+((?:[A-ZÄÖÜ]\w+\s*){1,3})/i
+      /whatsapp\s+(?:an|to|kontakt|contact|nachricht|message)\s+((?:\w+\s*){1,3})/i
     );
 
     const match = sendMatch || toMatch || afterMatch;
@@ -359,17 +378,11 @@ export class SoulEngine {
       .trim();
 
     // Filter: all words must be potential names (not common words)
-    const words = name.toLowerCase().split(/\s+/);
-    const nameWords = words.filter(w => !NOT_NAMES.has(w) && w.length >= 2);
+    const nameWords = name.split(/\s+/)
+      .filter(w => !NOT_NAMES.has(w.toLowerCase()) && w.length >= 2);
     if (nameWords.length === 0) return null;
 
-    // Reconstruct from original casing
-    name = match[1].trim().split(/\s+/)
-      .filter(w => !NOT_NAMES.has(w.toLowerCase()) && w.length >= 2)
-      .join(' ')
-      .trim();
-
-    return name.length >= 2 ? name : null;
+    return nameWords.slice(0, 3).join(' ');
   }
 
   /**

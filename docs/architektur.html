@@ -346,6 +346,63 @@
   .monitor-view.graph-v h4 { color: #50c8a0; }
   .monitor-view.graph-v { border-color: rgba(80,200,160,0.15); }
 
+  /* === SOULOS === */
+  .soulos-box {
+    background: rgba(70,180,255,0.04); border: 2px solid rgba(70,180,255,0.4);
+    border-radius: 14px; padding: 28px 30px; margin: 24px auto 0;
+    max-width: 780px; width: 100%;
+    box-shadow: 0 0 50px rgba(70,180,255,0.06);
+  }
+  .soulos-box > h3 { color: #46b4ff; font-size: 15px; margin-bottom: 4px; font-weight: 500; text-align: center; }
+  .soulos-box > .size { color: rgba(70,180,255,0.5); font-size: 13px; margin-bottom: 16px; text-align: center; }
+  .soulos-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  }
+  .soulos-cell {
+    background: rgba(70,180,255,0.03); border: 1px solid rgba(70,180,255,0.12);
+    border-radius: 8px; padding: 10px; text-align: center;
+  }
+  .soulos-cell h4 { font-size: 11px; font-weight: 500; margin-bottom: 3px; color: #46b4ff; }
+  .soulos-cell p { font-size: 10px; color: rgba(200,196,214,0.4); line-height: 1.4; }
+
+  /* === LLM ADAPTERS === */
+  .llm-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px;
+    margin: 12px 0;
+  }
+  .llm-badge {
+    background: rgba(139,128,240,0.05); border: 1px solid rgba(139,128,240,0.15);
+    border-radius: 6px; padding: 8px; text-align: center;
+  }
+  .llm-badge .name { font-size: 11px; font-weight: 500; margin-bottom: 2px; }
+  .llm-badge .model { font-size: 9px; font-family: 'SF Mono','Fira Code',monospace; color: rgba(200,196,214,0.35); }
+  .llm-badge.openai .name { color: #50c870; }
+  .llm-badge.openai { border-color: rgba(80,200,112,0.2); }
+  .llm-badge.gemini .name { color: #4285f4; }
+  .llm-badge.gemini { border-color: rgba(66,133,244,0.2); }
+  .llm-badge.anthropic .name { color: #d4a27f; }
+  .llm-badge.anthropic { border-color: rgba(212,162,127,0.2); }
+  .llm-badge.ollama .name { color: #f0f0f0; }
+  .llm-badge.ollama { border-color: rgba(240,240,240,0.15); }
+
+  /* New engine cell colors */
+  .engine-cell.reflect h4 { color: #e070e0; }
+  .engine-cell.reflect { border-color: rgba(224,112,224,0.2); }
+  .engine-cell.correct h4 { color: #70d070; }
+  .engine-cell.correct { border-color: rgba(112,208,112,0.2); }
+  .engine-cell.memdb h4 { color: #f09060; }
+  .engine-cell.memdb { border-color: rgba(240,144,96,0.2); }
+  .engine-cell.attention h4 { color: #60b0f0; }
+  .engine-cell.attention { border-color: rgba(96,176,240,0.2); }
+  .engine-cell.encrypt h4 { color: #f06070; }
+  .engine-cell.encrypt { border-color: rgba(240,96,112,0.2); }
+  .engine-cell.github h4 { color: #e0e0e0; }
+  .engine-cell.github { border-color: rgba(224,224,224,0.15); }
+  .engine-cell.versioning h4 { color: #b0a0f0; }
+  .engine-cell.versioning { border-color: rgba(176,160,240,0.2); }
+  .engine-cell.consolidator h4 { color: #f0c040; }
+  .engine-cell.consolidator { border-color: rgba(240,192,64,0.2); }
+
   footer {
     text-align: center; padding: 60px 20px 40px;
     color: rgba(139,128,240,0.15); font-size: 12px;
@@ -354,7 +411,8 @@
   footer a:hover { color: #8b80f0; }
 
   @media (max-width: 700px) {
-    .three-cols, .engine-grid, .handler-grid, .cross-process, .kg-grid { grid-template-columns: 1fr; }
+    .three-cols, .engine-grid, .handler-grid, .cross-process, .kg-grid, .soulos-grid { grid-template-columns: 1fr; }
+    .llm-row { grid-template-columns: 1fr 1fr; }
     .monitor-grid { grid-template-columns: 1fr 1fr; }
     .compress { flex-wrap: wrap; }
     .compress .c-arrow { transform: rotate(90deg); padding: 6px 0; }
@@ -490,7 +548,18 @@
           </div>
         </div>
 
-        <!-- Engine components -->
+        <!-- LLM Adapter -->
+        <div style="margin-bottom:12px;">
+          <div style="text-align:center;font-size:11px;color:rgba(139,128,240,0.4);margin-bottom:6px;letter-spacing:1px;text-transform:uppercase;">LLM Adapter</div>
+          <div class="llm-row">
+            <div class="llm-badge openai"><div class="name">OpenAI</div><div class="model">gpt-4.1-mini</div></div>
+            <div class="llm-badge gemini"><div class="name">Gemini</div><div class="model">gemini-2.5-flash</div></div>
+            <div class="llm-badge anthropic"><div class="name">Anthropic</div><div class="model">claude-sonnet-4-6</div></div>
+            <div class="llm-badge ollama"><div class="name">Ollama</div><div class="model">beliebiges lokales Modell</div></div>
+          </div>
+        </div>
+
+        <!-- Engine-Komponenten -->
         <div class="engine-grid">
           <div class="engine-cell telegram">
             <h4>Telegram + WhatsApp</h4>
@@ -508,9 +577,82 @@
             <h4>Semantic Router</h4>
             <p>Interessen + persoenliche Fakten automatisch in Seelen-Dateien.</p>
           </div>
+          <div class="engine-cell reflect">
+            <h4>Reflexion</h4>
+            <p>Periodische Selbstreflexion. Erkennt Muster ueber Sessions.</p>
+          </div>
+          <div class="engine-cell correct">
+            <h4>Selbstkorrektur</h4>
+            <p>Erkennt Inkonsistenzen. Behebt Widersprueche autonom.</p>
+          </div>
+          <div class="engine-cell memdb">
+            <h4>Memory DB</h4>
+            <p>SQLite-gestuetzte semantische Suche. Vektor-Embeddings.</p>
+          </div>
+          <div class="engine-cell attention">
+            <h4>Aufmerksamkeit</h4>
+            <p>Prioritaetsbasierte Verarbeitung. Fokus auf das Wichtigste.</p>
+          </div>
+          <div class="engine-cell encrypt">
+            <h4>Verschluesselung</h4>
+            <p>AES-256-GCM fuer sensible Seelen-Dateien. Optional.</p>
+          </div>
+          <div class="engine-cell versioning">
+            <h4>Versionierung</h4>
+            <p>Git-basierte Snapshots. Rollback zu jedem Zeitpunkt.</p>
+          </div>
+          <div class="engine-cell github">
+            <h4>GitHub</h4>
+            <p>Issues, PRs, Benachrichtigungen. Code-bewusste Seele.</p>
+          </div>
+          <div class="engine-cell consolidator">
+            <h4>Seed Consolidator</h4>
+            <p>Inkrementelle SEED.md Updates. Immer aktuelle Identitaet.</p>
+          </div>
         </div>
         <div style="margin-top:12px;font-size:11px;color:rgba(200,196,214,0.35);text-align:center;">
           Claude Code Sessions + Soul Engine teilen die gleichen Seelen-Dateien
+        </div>
+      </div>
+    </div>
+
+    <!-- SoulOS Desktop -->
+    <div style="margin-top:24px;">
+      <div class="soulos-box">
+        <h3>SoulOS <span style="color:rgba(70,180,255,0.4);font-weight:300;">(Desktop-App)</span></h3>
+        <div class="size">Herunterladen, installieren, starten — kein Terminal noetig. Setup-Wizard, Gruendungsinterview, Gehirn-Visualisierung.</div>
+        <div class="soulos-grid">
+          <div class="soulos-cell">
+            <h4>Setup-Wizard</h4>
+            <p>6 Schritte: Sprache, Pfad, LLM, Verbindungen, Features</p>
+          </div>
+          <div class="soulos-cell">
+            <h4>Gruendungs-Chat</h4>
+            <p>Live LLM-Interview. 3 Runden. Seele aus Gespraech geboren.</p>
+          </div>
+          <div class="soulos-cell">
+            <h4>Brain View</h4>
+            <p>Neurale Visualisierung. 15 Knoten leuchten in Echtzeit.</p>
+          </div>
+          <div class="soulos-cell">
+            <h4>Einstellungen</h4>
+            <p>Voller .env Editor. API-Key-Tests. Feature-Toggles.</p>
+          </div>
+          <div class="soulos-cell">
+            <h4>Timeline</h4>
+            <p>Git-basierte Zustands-Historie. Rollback zu jedem Zeitpunkt.</p>
+          </div>
+          <div class="soulos-cell">
+            <h4>Terminal</h4>
+            <p>Integriertes PTY. xterm.js mit WebGL-Renderer.</p>
+          </div>
+        </div>
+        <div class="seed-tags" style="margin-top:12px;">
+          <span class="seed-tag" style="border-color:rgba(70,180,255,0.2);color:rgba(70,180,255,0.7);">Tauri 2</span>
+          <span class="seed-tag" style="border-color:rgba(70,180,255,0.2);color:rgba(70,180,255,0.7);">React 19</span>
+          <span class="seed-tag" style="border-color:rgba(70,180,255,0.2);color:rgba(70,180,255,0.7);">Rust</span>
+          <span class="seed-tag" style="border-color:rgba(70,180,255,0.2);color:rgba(70,180,255,0.7);">Node.js gebundelt</span>
+          <span class="seed-tag" style="border-color:rgba(70,180,255,0.2);color:rgba(70,180,255,0.7);">D3-Force</span>
         </div>
       </div>
     </div>

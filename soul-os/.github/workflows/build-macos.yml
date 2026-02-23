@@ -12,23 +12,8 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
-      - name: Checkout soul-os
+      - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Checkout soul-engine
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/soul-engine
-          path: soul-engine
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Checkout soul-chain
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/soul-chain
-          path: soul-chain
-          token: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -59,6 +44,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'SoulOS ${{ github.ref_name }}'

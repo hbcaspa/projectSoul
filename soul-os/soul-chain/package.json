@@ -1,0 +1,21 @@
+{
+  "name": "soul-chain",
+  "version": "1.0.0",
+  "description": "P2P encrypted sync for your soul — no server needed",
+  "type": "module",
+  "bin": {
+    "soul-chain": "./bin/cli.js"
+  },
+  "scripts": {
+    "start": "node bin/cli.js start",
+    "test": "node --test test/**/*.test.js"
+  },
+  "dependencies": {
+    "hyperswarm": "^4.7.15",
+    "b4a": "^1.6.7"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "MIT"
+}

@@ -41,6 +41,12 @@
   "plugins": {
     "shell": {
       "open": true
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI4QzQ3ODIzNTdCMzdFOUUKUldTZWZyTlhJM2pFdUtqSHoyL3JsL2FlYXhORmJ3cXdBUkIwOG9LMTh6ZFhLeGtMZDZvTFExdXMK",
+      "endpoints": [
+        "https://github.com/hbcaspa/projectSoul/releases/latest/download/latest.json"
+      ]
     }
   }
 }

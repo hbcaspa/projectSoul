@@ -2,6 +2,9 @@ import { useEffect, useState, useCallback } from "react";
 import { commands } from "../lib/tauri";
 import { useSidecarStatus } from "../lib/store";
 import { PROVIDER_MODELS } from "../lib/setup";
+import { check, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { getVersion } from "@tauri-apps/api/app";
 
 interface EnvState {
   OPENAI_API_KEY: string; OPENAI_MODEL: string;
@@ -41,6 +44,11 @@ export default function SettingsView() {
   const [saved, setSaved] = useState(false);
   const [nodeInfo, setNodeInfo] = useState<{ found: boolean; version: string } | null>(null);
   const sidecar = useSidecarStatus();
+  const [appVersion, setAppVersion] = useState("...");
+  const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "available" | "downloading" | "done" | "error">("idle");
+  const [updateInfo, setUpdateInfo] = useState<Update | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   const engineRunning = sidecar?.status === "running";
   const hasChanges = JSON.stringify(env) !== JSON.stringify(original);
@@ -48,6 +56,7 @@ export default function SettingsView() {
   useEffect(() => {
     commands.getSoulPath().then(setSoulPath).catch(() => {});
     commands.checkNode().then((info) => setNodeInfo(info as { found: boolean; version: string })).catch(() => {});
+    getVersion().then(setAppVersion).catch(() => {});
     loadEnv();
   }, []);
 
@@ -85,6 +94,50 @@ export default function SettingsView() {
       await commands.startEngine();
     } catch (e) { console.error("Restart failed:", e); }
   };
+
+  const handleCheckUpdate = useCallback(async () => {
+    setUpdateStatus("checking");
+    setUpdateError(null);
+    try {
+      const update = await check();
+      if (update?.available) {
+        setUpdateInfo(update);
+        setUpdateStatus("available");
+      } else {
+        setUpdateStatus("idle");
+      }
+    } catch (e) {
+      setUpdateError(String(e));
+      setUpdateStatus("error");
+    }
+  }, []);
+
+  const handleInstallUpdate = useCallback(async () => {
+    if (!updateInfo) return;
+    setUpdateStatus("downloading");
+    setDownloadProgress(0);
+    try {
+      let totalBytes = 0;
+      let downloadedBytes = 0;
+      await updateInfo.downloadAndInstall((event) => {
+        if (event.event === "Started" && event.data.contentLength) {
+          totalBytes = event.data.contentLength;
+        } else if (event.event === "Progress") {
+          downloadedBytes += event.data.chunkLength;
+          if (totalBytes > 0) {
+            setDownloadProgress(Math.round((downloadedBytes / totalBytes) * 100));
+          }
+        } else if (event.event === "Finished") {
+          setDownloadProgress(100);
+        }
+      });
+      setUpdateStatus("done");
+      setTimeout(() => relaunch(), 1500);
+    } catch (e) {
+      setUpdateError(String(e));
+      setUpdateStatus("error");
+    }
+  }, [updateInfo]);
 
   const updateEnv = (key: string, value: string) => setEnv((prev) => ({ ...prev, [key]: value }));
   const toggleFeature = (key: string) => setEnv((prev) => ({ ...prev, [key]: prev[key] === "true" ? "false" : "true" }));
@@ -209,10 +262,62 @@ export default function SettingsView() {
               </div>
             </div>
 
+            {/* Updates */}
+            <div>
+              <Label text="Updates" />
+              <div className="rounded-2xl p-5 flex flex-col gap-3" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "linear-gradient(135deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))" }}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-medium" style={{ color: "var(--text-bright)" }}>
+                      SoulOS v{appVersion}
+                    </span>
+                    {updateStatus === "available" && updateInfo && (
+                      <div className="text-xs mt-0.5" style={{ color: "var(--wachstum)" }}>
+                        v{updateInfo.version} verfuegbar
+                      </div>
+                    )}
+                    {updateStatus === "downloading" && (
+                      <div className="text-xs mt-0.5" style={{ color: "var(--accent)" }}>
+                        Download... {downloadProgress}%
+                      </div>
+                    )}
+                    {updateStatus === "done" && (
+                      <div className="text-xs mt-0.5" style={{ color: "var(--wachstum)" }}>
+                        Installiert — Neustart...
+                      </div>
+                    )}
+                    {updateStatus === "error" && (
+                      <div className="text-xs mt-0.5" style={{ color: "var(--heartbeat)" }}>
+                        {updateError || "Update fehlgeschlagen"}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    {(updateStatus === "idle" || updateStatus === "error") && (
+                      <Pill label="Check" color="var(--accent)" onClick={handleCheckUpdate} />
+                    )}
+                    {updateStatus === "checking" && (
+                      <span className="text-xs" style={{ color: "var(--text-dim)" }}>Pruefe...</span>
+                    )}
+                    {updateStatus === "available" && (
+                      <Pill label="Update" color="var(--wachstum)" onClick={handleInstallUpdate} />
+                    )}
+                    {updateStatus === "downloading" && (
+                      <div className="h-1.5 w-20 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(255,255,255,0.08)" }}>
+                        <div className="h-full rounded-full transition-all" style={{ width: `${downloadProgress}%`, backgroundColor: "var(--accent)" }} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* System */}
             <div>
               <Label text="System" />
               <div className="rounded-2xl p-5 flex flex-col gap-3" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "linear-gradient(135deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))" }}>
+                <Sys label="Version" value={`v${appVersion}`} mono />
+                <Sep />
                 <Sys label="Soul Path" value={soulPath} mono />
                 <Sep />
                 <Sys label="Node.js" value={nodeInfo?.found ? nodeInfo.version : "Not found"} color={nodeInfo?.found ? "var(--wachstum)" : "var(--heartbeat)"} />

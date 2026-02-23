@@ -8,9 +8,10 @@ dist/
 src-tauri/target/
 
 # Resource placeholders (populated by prepare-build.sh)
-src-tauri/resources/node/
-src-tauri/resources/soul-engine/
-src-tauri/resources/soul-chain/
+# Note: NOT gitignored during build — Tauri skips gitignored paths
+# src-tauri/resources/node/
+# src-tauri/resources/soul-engine/
+# src-tauri/resources/soul-chain/
 
 # OS files
 .DS_Store

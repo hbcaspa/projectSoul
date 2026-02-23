@@ -18,40 +18,6 @@ import FoundingChat from "./views/FoundingChat";
 import { useActiveNodes, useCurrentPulse, useMood, useActivityFeed } from "./lib/store";
 import { commands } from "./lib/tauri";
 
-/* ── Chain Status Hook ─────────────────────────────────────── */
-
-interface ChainInfo {
-  health: string;
-  peersOnline: number;
-  peersTotal: number;
-  totalSynced: number;
-}
-
-function useChainStatus(intervalMs = 10000) {
-  const [info, setInfo] = useState<ChainInfo | null>(null);
-
-  useEffect(() => {
-    const load = () => {
-      commands.readSoulFile(".soul-chain-status")
-        .then((raw) => {
-          const s = JSON.parse(raw);
-          setInfo({
-            health: s.health || "unknown",
-            peersOnline: s.peers?.filter((p: { connected: boolean }) => p.connected).length || 0,
-            peersTotal: s.peers?.length || 0,
-            totalSynced: s.totalSynced || 0,
-          });
-        })
-        .catch(() => setInfo(null));
-    };
-    load();
-    const timer = setInterval(load, intervalMs);
-    return () => clearInterval(timer);
-  }, [intervalMs]);
-
-  return info;
-}
-
 /* ── Types ─────────────────────────────────────────────────── */
 
 export type ViewId =
@@ -195,6 +161,20 @@ const PANEL_COMPONENTS: Record<PanelId, React.FC> = {
   settings: SettingsView,
 };
 
+/* ── Widget positions (ring around brain) ─────────────────── */
+
+const WIDGET_POSITIONS: Record<PanelId, React.CSSProperties> = {
+  whisper:  { top: "22%", left: "3%" },
+  card:     { top: "4%", left: "50%", transform: "translateX(-50%)" },
+  chain:    { top: "4%", right: "3%" },
+  impulse:  { top: "50%", left: "2%", transform: "translateY(-50%)" },
+  graph:    { top: "50%", right: "2%", transform: "translateY(-50%)" },
+  replay:   { bottom: "18%", left: "5%" },
+  history:  { bottom: "18%", right: "5%" },
+  founding: { bottom: "6%", left: "50%", transform: "translateX(-50%)" },
+  settings: { bottom: "6%", right: "3%" },
+};
+
 /* ── Boot Splash ───────────────────────────────────────────── */
 
 function BootSplash({ onDone }: { onDone: () => void }) {
@@ -266,7 +246,6 @@ function App() {
   const mood = useMood();
   const feed = useActivityFeed();
 
-  const chain = useChainStatus();
   const handleBootDone = useCallback(() => setBooting(false), []);
 
   // Determine app phase after boot
@@ -371,105 +350,77 @@ function App() {
                 </div>
               )}
 
-              {/* Chain status — top-right indicator */}
-              {!openPanel && (
-                <div className="absolute top-2 right-3 pointer-events-none">
-                  <div
-                    className="flex items-center gap-2 px-2.5 py-1 rounded-lg frosted pointer-events-auto cursor-default"
+              {/* Chain status is now integrated into the Chain widget card */}
+
+              {/* ── Floating Widget Cards (ring around brain) ── */}
+              {PANELS.map((panel, i) => (
+                <div
+                  key={panel.id}
+                  className="absolute z-10"
+                  style={{
+                    ...WIDGET_POSITIONS[panel.id],
+                    opacity: openPanel ? (openPanel === panel.id ? 0 : 0.12) : 1,
+                    transition: "opacity 300ms ease",
+                    pointerEvents: openPanel ? "none" : "auto",
+                  }}
+                >
+                  <button
+                    onClick={() => togglePanel(panel.id)}
+                    className="group flex items-center gap-2 px-3 py-2 rounded-xl cursor-default transition-all hover:scale-105"
                     style={{
-                      backgroundColor: "rgba(22, 24, 48, 0.7)",
-                      border: "1px solid rgba(255,255,255,0.06)",
+                      background: "linear-gradient(160deg, rgba(0,255,200,0.04), rgba(10,12,20,0.7))",
+                      border: `1px solid color-mix(in srgb, ${panel.color} 20%, transparent)`,
+                      backdropFilter: "blur(12px)",
+                      WebkitBackdropFilter: "blur(12px)",
+                      boxShadow: `0 0 10px color-mix(in srgb, ${panel.color} 8%, transparent), 0 4px 12px rgba(0,0,0,0.3)`,
                     }}
-                    title={chain ? `${chain.peersOnline}/${chain.peersTotal} peers online, ${chain.totalSynced} files synced` : "Chain not configured"}
-                    onClick={() => togglePanel("chain")}
                   >
-                    <span
-                      className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                      style={{
-                        backgroundColor: !chain ? "var(--text-dim)"
-                          : chain.peersOnline > 0 ? "var(--wachstum)"
-                          : chain.health === "syncing" ? "var(--bewusstsein)"
-                          : "var(--heartbeat)",
-                        boxShadow: chain?.peersOnline ? "0 0 6px var(--wachstum)" : "none",
-                      }}
-                    />
-                    <span className="text-[10px] font-mono" style={{
-                      color: !chain ? "var(--text-dim)"
-                        : chain.peersOnline > 0 ? "var(--wachstum)"
-                        : "var(--text-dim)",
-                    }}>
-                      {!chain ? "no chain"
-                        : chain.peersOnline > 0 ? `${chain.peersOnline}/${chain.peersTotal}`
-                        : `0/${chain.peersTotal}`}
+                    <span style={{ color: panel.color, filter: `drop-shadow(0 0 4px color-mix(in srgb, ${panel.color} 40%, transparent))` }}>
+                      {panel.icon}
                     </span>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Floating Dock ────────────────────────────── */}
-              <div
-                className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-3 py-2 rounded-2xl frosted z-30"
-                style={{
-                  background: "linear-gradient(135deg, rgba(22, 24, 48, 0.85), rgba(16, 18, 36, 0.9))",
-                  border: "1px solid rgba(255,255,255,0.07)",
-                  boxShadow: "0 8px 40px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
-                }}
-              >
-                {/* Logo */}
-                <img
-                  src="/logo.png"
-                  alt=""
-                  className="w-6 h-6 mr-1"
-                  style={{ filter: "drop-shadow(0 0 8px rgba(139,128,240,0.3))", opacity: 0.7 }}
-                />
-                <div className="w-px h-5 mx-1" style={{ backgroundColor: "rgba(255,255,255,0.06)" }} />
-                {PANELS.map((item, i) => {
-                  const isActive = openPanel === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => togglePanel(item.id)}
-                      title={`${item.label} (${i + 1})`}
-                      className="relative w-8 h-8 flex items-center justify-center rounded-xl transition-all duration-200 cursor-default"
-                      style={{
-                        backgroundColor: isActive ? `color-mix(in srgb, ${item.color} 12%, transparent)` : "transparent",
-                        color: isActive ? item.color : "var(--text-dim)",
-                        boxShadow: isActive ? `0 0 12px ${item.color}20` : "none",
-                      }}
+                    <span
+                      className="text-[10px] uppercase tracking-[0.12em] font-medium"
+                      style={{ color: panel.color, textShadow: `0 0 8px color-mix(in srgb, ${panel.color} 25%, transparent)` }}
                     >
-                      {item.icon}
-                      <span
-                        className="absolute -top-0.5 right-0 text-[7px] font-mono leading-none"
-                        style={{ color: "var(--text-dim)", opacity: 0.25 }}
-                      >
-                        {i + 1}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+                      {panel.label}
+                    </span>
+                    <span className="text-[8px] font-mono ml-0.5" style={{ color: "var(--text-muted)" }}>
+                      {i + 1}
+                    </span>
+                  </button>
+                </div>
+              ))}
 
-              {/* ── Panel overlay ────────────────────────────── */}
+              {/* ── Expanded Panel (Glass Overlay) ─────────────── */}
               {PanelComponent && panelDef && (
                 <>
                   <div
                     className="absolute inset-0 z-20"
-                    style={{ backgroundColor: "rgba(13, 15, 26, 0.6)" }}
+                    style={{ backgroundColor: "rgba(5, 8, 15, 0.45)" }}
                     onClick={() => setOpenPanel(null)}
                   />
                   <div
-                    className="absolute inset-3 rounded-2xl overflow-hidden frosted z-20"
+                    className="absolute rounded-2xl overflow-hidden frosted neon-scanlines z-30 panel-expand"
                     style={{
-                      background: "linear-gradient(135deg, rgba(22, 24, 48, 0.95), rgba(16, 18, 36, 0.92))",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      boxShadow: "0 24px 64px rgba(0,0,0,0.6), 0 4px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
-                      bottom: "44px",
+                      top: "4%",
+                      left: "6%",
+                      right: "6%",
+                      bottom: "4%",
+                      background: "linear-gradient(160deg, rgba(0,255,200,0.03) 0%, rgba(10, 12, 20, 0.88) 30%, rgba(10, 12, 20, 0.85) 100%)",
+                      border: "1px solid rgba(0,255,200,0.22)",
+                      boxShadow: "0 0 40px rgba(0,255,200,0.1), 0 0 80px rgba(0,255,200,0.04), 0 24px 64px rgba(0,0,0,0.5), inset 0 1px 0 rgba(0,255,200,0.08)",
                     }}
                   >
-                    <div className="flex items-center justify-between px-5 h-10 border-b flex-shrink-0" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+                    <div
+                      className="flex items-center justify-between px-5 h-10 flex-shrink-0"
+                      style={{ borderBottom: "1px solid rgba(0,255,200,0.1)" }}
+                    >
                       <div className="flex items-center gap-2">
-                        <span style={{ color: panelDef.color, opacity: 0.8 }}>{panelDef.icon}</span>
-                        <span className="text-xs font-medium tracking-wide" style={{ color: panelDef.color }}>
+                        <span style={{ color: panelDef.color, filter: `drop-shadow(0 0 4px ${panelDef.color})` }}>{panelDef.icon}</span>
+                        <span
+                          className="text-xs font-semibold uppercase tracking-[0.15em]"
+                          style={{ color: panelDef.color, textShadow: `0 0 10px color-mix(in srgb, ${panelDef.color} 40%, transparent)` }}
+                        >
                           {panelDef.label}
                         </span>
                       </div>
@@ -477,9 +428,9 @@ function App() {
                         onClick={() => setOpenPanel(null)}
                         className="text-[9px] px-2.5 py-0.5 rounded-lg cursor-default transition-all"
                         style={{
-                          color: "var(--text-dim)",
-                          backgroundColor: "rgba(255,255,255,0.04)",
-                          border: "1px solid rgba(255,255,255,0.06)",
+                          color: "var(--bewusstsein)",
+                          backgroundColor: "rgba(0,255,200,0.06)",
+                          border: "1px solid rgba(0,255,200,0.15)",
                         }}
                       >
                         ESC

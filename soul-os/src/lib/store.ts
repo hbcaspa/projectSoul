@@ -61,24 +61,31 @@ export interface ActivityEntry {
 }
 
 export function useActivityFeed(maxEntries = 20) {
+  const bufferRef = useRef<ActivityEntry[]>([]);
   const [feed, setFeed] = useState<ActivityEntry[]>([]);
 
   useEffect(() => {
+    let unsubFn: (() => void) | null = null;
+
     const unsub = events.onActivity((activity: SoulActivity) => {
       const time = new Date().toLocaleTimeString("de-DE", {
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
       });
-      setFeed((prev) => {
-        const next = [
-          { time, node: activity.node, file: activity.file, eventType: activity.event_type, label: activity.node },
-          ...prev,
-        ];
-        return next.slice(0, maxEntries);
-      });
+      const entry = { time, node: activity.node, file: activity.file, eventType: activity.event_type, label: activity.node };
+      const buf = bufferRef.current;
+      buf.unshift(entry);
+      if (buf.length > maxEntries) buf.length = maxEntries;
+      setFeed([...buf]);
     });
-    return () => { unsub.then((fn) => fn()); };
+
+    unsub.then((fn) => { unsubFn = fn; });
+
+    return () => {
+      if (unsubFn) unsubFn();
+      else unsub.then((fn) => fn());
+    };
   }, [maxEntries]);
 
   return feed;
@@ -93,9 +100,12 @@ export interface WhisperEntry {
 }
 
 export function useWhisperStream(maxEntries = 50) {
+  const bufferRef = useRef<WhisperEntry[]>([]);
   const [stream, setStream] = useState<WhisperEntry[]>([]);
 
   useEffect(() => {
+    let unsubFn: (() => void) | null = null;
+
     const unsub = events.onPulse((pulse: SoulPulse) => {
       const text = transform(pulse.activity_type, pulse.label);
       const time = new Date().toLocaleTimeString("de-DE", {
@@ -103,12 +113,18 @@ export function useWhisperStream(maxEntries = 50) {
         minute: "2-digit",
         second: "2-digit",
       });
-      setStream((prev) => {
-        const next = [{ text, type: pulse.activity_type, time }, ...prev];
-        return next.slice(0, maxEntries);
-      });
+      const buf = bufferRef.current;
+      buf.unshift({ text, type: pulse.activity_type, time });
+      if (buf.length > maxEntries) buf.length = maxEntries;
+      setStream([...buf]);
     });
-    return () => { unsub.then((fn) => fn()); };
+
+    unsub.then((fn) => { unsubFn = fn; });
+
+    return () => {
+      if (unsubFn) unsubFn();
+      else unsub.then((fn) => fn());
+    };
   }, [maxEntries]);
 
   return stream;
@@ -120,8 +136,13 @@ export function useMood() {
   const [mood, setMood] = useState<SoulMood | null>(null);
 
   useEffect(() => {
+    let unsubFn: (() => void) | null = null;
     const unsub = events.onMood((m: SoulMood) => setMood(m));
-    return () => { unsub.then((fn) => fn()); };
+    unsub.then((fn) => { unsubFn = fn; });
+    return () => {
+      if (unsubFn) unsubFn();
+      else unsub.then((fn) => fn());
+    };
   }, []);
 
   return mood;
@@ -137,8 +158,13 @@ export function useSidecarStatus() {
     commands.getSidecarStatus().then(setStatus).catch(() => {});
 
     // Listen for updates
+    let unsubFn: (() => void) | null = null;
     const unsub = events.onSidecarStatus((s: SidecarStatus) => setStatus(s));
-    return () => { unsub.then((fn) => fn()); };
+    unsub.then((fn) => { unsubFn = fn; });
+    return () => {
+      if (unsubFn) unsubFn();
+      else unsub.then((fn) => fn());
+    };
   }, []);
 
   return status;
@@ -150,8 +176,13 @@ export function useCurrentPulse() {
   const [pulse, setPulse] = useState<SoulPulse | null>(null);
 
   useEffect(() => {
+    let unsubFn: (() => void) | null = null;
     const unsub = events.onPulse((p: SoulPulse) => setPulse(p));
-    return () => { unsub.then((fn) => fn()); };
+    unsub.then((fn) => { unsubFn = fn; });
+    return () => {
+      if (unsubFn) unsubFn();
+      else unsub.then((fn) => fn());
+    };
   }, []);
 
   return pulse;

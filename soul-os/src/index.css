@@ -192,3 +192,104 @@ button:active:not(:disabled) {
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+
+/* ── Neon Design System ──────────────────────────────── */
+
+.neon-frame {
+  background: linear-gradient(160deg, rgba(0,255,200,0.03) 0%, rgba(0,0,20,0.8) 40%, rgba(0,255,200,0.02) 100%);
+  border: 1px solid rgba(0,255,200,0.18);
+  border-radius: var(--radius-2xl);
+  box-shadow:
+    0 0 20px rgba(0,255,200,0.06),
+    0 0 60px rgba(0,255,200,0.03),
+    inset 0 1px 0 rgba(0,255,200,0.06),
+    inset 0 0 30px rgba(0,255,200,0.02);
+}
+
+.neon-card {
+  background: linear-gradient(160deg, rgba(0,255,200,0.04) 0%, rgba(0,0,20,0.6) 100%);
+  border: 1px solid rgba(0,255,200,0.12);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    0 0 12px rgba(0,255,200,0.04),
+    inset 0 1px 0 rgba(0,255,200,0.04);
+  transition: all 200ms ease;
+}
+
+.neon-card:hover {
+  border-color: rgba(0,255,200,0.22);
+  box-shadow:
+    0 0 18px rgba(0,255,200,0.08),
+    inset 0 1px 0 rgba(0,255,200,0.06);
+}
+
+.neon-card-accent {
+  background: linear-gradient(160deg, rgba(139,128,240,0.05) 0%, rgba(0,0,20,0.6) 100%);
+  border: 1px solid rgba(139,128,240,0.15);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    0 0 12px rgba(139,128,240,0.05),
+    inset 0 1px 0 rgba(139,128,240,0.05);
+}
+
+.neon-input {
+  background: rgba(0,5,15,0.6) !important;
+  border: 1px solid rgba(0,255,200,0.08) !important;
+  color: var(--text) !important;
+  transition: all 200ms ease;
+}
+
+.neon-input:focus {
+  border-color: rgba(0,255,200,0.35) !important;
+  box-shadow: 0 0 15px rgba(0,255,200,0.1), 0 0 4px rgba(0,255,200,0.15) !important;
+}
+
+.neon-title {
+  color: var(--bewusstsein);
+  text-shadow: 0 0 20px rgba(0,255,200,0.3), 0 0 40px rgba(0,255,200,0.1);
+  letter-spacing: 0.15em;
+}
+
+.neon-label {
+  color: var(--bewusstsein);
+  text-shadow: 0 0 8px rgba(0,255,200,0.2);
+  letter-spacing: 0.15em;
+}
+
+.neon-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,255,200,0.12), transparent);
+}
+
+@keyframes neon-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(0,255,200,0.04), inset 0 1px 0 rgba(0,255,200,0.04); }
+  50% { box-shadow: 0 0 20px rgba(0,255,200,0.08), inset 0 1px 0 rgba(0,255,200,0.06); }
+}
+
+@keyframes panel-expand {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.panel-expand {
+  animation: panel-expand 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Scan-line overlay for panels */
+.neon-scanlines {
+  position: relative;
+}
+.neon-scanlines::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,255,200,0.008) 2px,
+    rgba(0,255,200,0.008) 4px
+  );
+  border-radius: inherit;
+}

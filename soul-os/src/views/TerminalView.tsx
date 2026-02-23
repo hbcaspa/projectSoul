@@ -120,6 +120,17 @@ export default function TerminalView() {
   );
 }
 
+/* ── SoulOS ASCII Banner ─────────────────────────────────── */
+
+const SOUL_BANNER =
+  "\r\n" +
+  "\x1b[38;2;80;72;160m  ____            _  ___  ____\r\n" +
+  "\x1b[38;2;100;90;180m / ___|  ___  _  _| |/ _ \\/ ___|\r\n" +
+  "\x1b[38;2;120;110;210m \\___ \\ / _ \\| || | | | | \\___ \\\r\n" +
+  "\x1b[38;2;139;128;240m  ___) | (_) | || | | |_| |___) |\r\n" +
+  "\x1b[38;2;160;150;255m |____/ \\___/ \\__,_|_|\\___/|____/\r\n" +
+  "\x1b[0m\r\n";
+
 /* ── Single Terminal Pane ──────────────────────────────────── */
 
 function TerminalPane({ paneId, isActive }: { paneId: number; isActive: boolean }) {
@@ -145,6 +156,7 @@ function TerminalPane({ paneId, isActive }: { paneId: number; isActive: boolean 
       fontSize: 13,
       fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace",
       lineHeight: 1.2,
+      scrollback: 5000,
       theme: {
         background: "#0D0F1A",
         foreground: "#C8C4D6",
@@ -186,6 +198,11 @@ function TerminalPane({ paneId, isActive }: { paneId: number; isActive: boolean 
     termRef.current = term;
     fitRef.current = fit;
 
+    // Show SoulOS banner
+    commands.getSoulPath().then(() => {
+      term.write(SOUL_BANNER);
+    }).catch(() => {});
+
     const cols = term.cols;
     const rows = term.rows;
 
@@ -207,11 +224,13 @@ function TerminalPane({ paneId, isActive }: { paneId: number; isActive: boolean 
         term.writeln(`\r\n\x1b[31mFailed to create PTY: ${e}\x1b[0m`);
       });
 
+    let unsubFn: (() => void) | null = null;
     const unsubPromise = events.onPtyData(({ id, data }) => {
       if (id === ptyIdRef.current) {
         term.write(data);
       }
     });
+    unsubPromise.then((fn) => { unsubFn = fn; });
 
     const handleResize = () => {
       if (fitRef.current) fitRef.current.fit();
@@ -221,7 +240,8 @@ function TerminalPane({ paneId, isActive }: { paneId: number; isActive: boolean 
 
     return () => {
       resizeObserver.disconnect();
-      unsubPromise.then((fn) => fn());
+      if (unsubFn) unsubFn();
+      else unsubPromise.then((fn) => fn());
       if (ptyIdRef.current !== null) {
         commands.closePty(ptyIdRef.current).catch(() => {});
       }

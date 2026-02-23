@@ -18,8 +18,15 @@ export default function BrainCanvas({ activeNodes, isWorking }: BrainCanvasProps
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    let paused = false;
+
+    // Pause rendering when tab is hidden to save resources
+    const onVisibility = () => { paused = document.hidden; };
+    document.addEventListener("visibilitychange", onVisibility);
+
     const render = () => {
       animRef.current = requestAnimationFrame(render);
+      if (paused) return;
       tickRef.current += 0.04;
       const tick = tickRef.current;
 
@@ -171,7 +178,10 @@ export default function BrainCanvas({ activeNodes, isWorking }: BrainCanvasProps
     };
 
     animRef.current = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(animRef.current);
+    return () => {
+      cancelAnimationFrame(animRef.current);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [activeNodes, isWorking]);
 
   return (

@@ -143,28 +143,25 @@ export default function SettingsView() {
   const toggleFeature = (key: string) => setEnv((prev) => ({ ...prev, [key]: prev[key] === "true" ? "false" : "true" }));
 
   return (
-    <div className="h-full overflow-auto" style={{ backgroundColor: "var(--bg-base)" }}>
+    <div className="h-full overflow-auto neon-scanlines" style={{ backgroundColor: "var(--bg-base)" }}>
       <div className="px-8 py-6 flex flex-col gap-5">
+
+        {/* ── Title ──────────────────────────────────────────── */}
+        <div className="text-center">
+          <h1 className="text-lg font-semibold neon-title">SETTINGS</h1>
+        </div>
 
         {/* ── Row 1: Engine + Save ─────────────────────────── */}
         <div className="flex items-center gap-4">
-          <div
-            className="flex-1 flex items-center gap-4 px-6 py-4 rounded-2xl"
-            style={{
-              background: engineRunning
-                ? "linear-gradient(135deg, rgba(0,255,100,0.05), rgba(0,200,255,0.02), rgba(255,255,255,0.02))"
-                : "linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
-              border: "1px solid rgba(255,255,255,0.06)",
-            }}
-          >
+          <div className="flex-1 flex items-center gap-4 px-6 py-4 neon-card">
             <div
               className={`w-2.5 h-2.5 rounded-full shrink-0 ${engineRunning ? "animate-breathe" : ""}`}
               style={{
                 backgroundColor: engineRunning ? "var(--wachstum)" : sidecar?.status === "starting" ? "var(--mem)" : "var(--text-muted)",
-                boxShadow: engineRunning ? "0 0 8px var(--wachstum)" : "none",
+                boxShadow: engineRunning ? "0 0 12px var(--wachstum)" : "none",
               }}
             />
-            <span className="text-sm font-medium" style={{ color: "var(--text-bright)" }}>Soul Engine</span>
+            <span className="text-sm font-medium" style={{ color: "var(--bewusstsein)" }}>Soul Engine</span>
             <span className="text-xs capitalize" style={{ color: engineRunning ? "var(--wachstum)" : "var(--text-dim)" }}>
               {sidecar?.status || "stopped"}
             </span>
@@ -176,7 +173,7 @@ export default function SettingsView() {
             <div className="ml-auto flex gap-2">
               {engineRunning ? (
                 <>
-                  <Pill label="Restart" color="var(--accent)" onClick={handleRestart} />
+                  <Pill label="Restart" color="var(--bewusstsein)" onClick={handleRestart} />
                   <Pill label="Stop" color="var(--heartbeat)" onClick={() => commands.stopEngine()} />
                 </>
               ) : (
@@ -191,9 +188,10 @@ export default function SettingsView() {
               disabled={saving}
               className="px-6 py-4 rounded-2xl text-xs font-semibold cursor-default shrink-0 transition-all"
               style={{
-                background: "linear-gradient(135deg, var(--accent), #6B5CE7)",
-                color: "#fff",
-                boxShadow: "0 2px 12px rgba(139,128,240,0.3)",
+                background: "linear-gradient(135deg, rgba(0,255,200,0.15), rgba(0,255,200,0.05))",
+                color: "var(--bewusstsein)",
+                border: "1px solid rgba(0,255,200,0.3)",
+                boxShadow: "0 0 20px rgba(0,255,200,0.15)",
               }}
             >
               {saving ? "..." : saved ? "Saved" : "Save"}
@@ -208,7 +206,7 @@ export default function SettingsView() {
             <Provider name="OpenAI" color="#10a37f" apiKey={env.OPENAI_API_KEY} model={env.OPENAI_MODEL} models={PROVIDER_MODELS.openai} onKey={(v) => updateEnv("OPENAI_API_KEY", v)} onModel={(v) => updateEnv("OPENAI_MODEL", v)} />
             <Provider name="Anthropic" color="#d4a27f" apiKey={env.ANTHROPIC_API_KEY} model={env.ANTHROPIC_MODEL} models={PROVIDER_MODELS.anthropic} onKey={(v) => updateEnv("ANTHROPIC_API_KEY", v)} onModel={(v) => updateEnv("ANTHROPIC_MODEL", v)} />
             <Provider name="Gemini" color="#4285f4" apiKey={env.GEMINI_API_KEY} model={env.GEMINI_MODEL} models={PROVIDER_MODELS.gemini} onKey={(v) => updateEnv("GEMINI_API_KEY", v)} onModel={(v) => updateEnv("GEMINI_MODEL", v)} />
-            <Provider name="Ollama" color="#888" local apiKey={env.OLLAMA_URL} model={env.OLLAMA_MODEL} models={PROVIDER_MODELS.ollama} onKey={(v) => updateEnv("OLLAMA_URL", v)} onModel={(v) => updateEnv("OLLAMA_MODEL", v)} />
+            <Provider name="Ollama" color="#00FFC8" local apiKey={env.OLLAMA_URL} model={env.OLLAMA_MODEL} models={PROVIDER_MODELS.ollama} onKey={(v) => updateEnv("OLLAMA_URL", v)} onModel={(v) => updateEnv("OLLAMA_MODEL", v)} />
           </div>
         </div>
 
@@ -218,7 +216,7 @@ export default function SettingsView() {
           {/* Features */}
           <div className="col-span-2">
             <Label text="Features" />
-            <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "linear-gradient(135deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))" }}>
+            <div className="neon-card overflow-hidden">
               <Toggle label="Reflection" desc="Daily self-reflection cycles" on={env.FEATURE_REFLECTION === "true"} toggle={() => toggleFeature("FEATURE_REFLECTION")} />
               <Toggle label="Self-Correction" desc="Automatic error detection" on={env.FEATURE_SELF_CORRECTION === "true"} toggle={() => toggleFeature("FEATURE_SELF_CORRECTION")} />
               <Toggle label="Anti-Performance" desc="Detects inauthentic behavior" on={env.FEATURE_ANTI_PERFORMANCE === "true"} toggle={() => toggleFeature("FEATURE_ANTI_PERFORMANCE")} />
@@ -234,13 +232,13 @@ export default function SettingsView() {
               <Label text="Connections" />
               <div className="flex flex-col gap-3">
                 {/* Telegram */}
-                <div className="rounded-2xl p-5" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "linear-gradient(135deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))" }}>
+                <div className="neon-card p-5">
                   <div className="flex items-center gap-2.5 mb-3">
                     <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4" style={{ color: "#0088cc" }}>
                       <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
                     </svg>
-                    <span className="text-sm font-medium" style={{ color: "var(--text-bright)" }}>Telegram</span>
-                    {env.TELEGRAM_BOT_TOKEN && <span className="w-2 h-2 rounded-full ml-auto" style={{ backgroundColor: "#0088cc" }} />}
+                    <span className="text-sm font-medium" style={{ color: "var(--bewusstsein)" }}>Telegram</span>
+                    {env.TELEGRAM_BOT_TOKEN && <span className="w-2 h-2 rounded-full ml-auto" style={{ backgroundColor: "var(--bewusstsein)", boxShadow: "0 0 8px var(--bewusstsein)" }} />}
                   </div>
                   <div className="flex flex-col gap-2">
                     <Inp placeholder="Bot Token" value={env.TELEGRAM_BOT_TOKEN} pw onChange={(v) => updateEnv("TELEGRAM_BOT_TOKEN", v)} />
@@ -249,13 +247,13 @@ export default function SettingsView() {
                 </div>
 
                 {/* GitHub */}
-                <div className="rounded-2xl p-5" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "linear-gradient(135deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))" }}>
+                <div className="neon-card p-5">
                   <div className="flex items-center gap-2.5 mb-3">
-                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4" style={{ color: "#ccc" }}>
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4" style={{ color: "var(--bewusstsein)" }}>
                       <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
                     </svg>
-                    <span className="text-sm font-medium" style={{ color: "var(--text-bright)" }}>GitHub</span>
-                    {env.GITHUB_TOKEN && <span className="w-2 h-2 rounded-full ml-auto" style={{ backgroundColor: "#ccc" }} />}
+                    <span className="text-sm font-medium" style={{ color: "var(--bewusstsein)" }}>GitHub</span>
+                    {env.GITHUB_TOKEN && <span className="w-2 h-2 rounded-full ml-auto" style={{ backgroundColor: "var(--bewusstsein)", boxShadow: "0 0 8px var(--bewusstsein)" }} />}
                   </div>
                   <Inp placeholder="Personal Access Token" value={env.GITHUB_TOKEN} pw onChange={(v) => updateEnv("GITHUB_TOKEN", v)} />
                 </div>
@@ -265,10 +263,10 @@ export default function SettingsView() {
             {/* Updates */}
             <div>
               <Label text="Updates" />
-              <div className="rounded-2xl p-5 flex flex-col gap-3" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "linear-gradient(135deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))" }}>
+              <div className="neon-card p-5 flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-sm font-medium" style={{ color: "var(--text-bright)" }}>
+                    <span className="text-sm font-medium" style={{ color: "var(--bewusstsein)" }}>
                       SoulOS v{appVersion}
                     </span>
                     {updateStatus === "available" && updateInfo && (
@@ -277,7 +275,7 @@ export default function SettingsView() {
                       </div>
                     )}
                     {updateStatus === "downloading" && (
-                      <div className="text-xs mt-0.5" style={{ color: "var(--accent)" }}>
+                      <div className="text-xs mt-0.5" style={{ color: "var(--bewusstsein)" }}>
                         Download... {downloadProgress}%
                       </div>
                     )}
@@ -294,7 +292,7 @@ export default function SettingsView() {
                   </div>
                   <div>
                     {(updateStatus === "idle" || updateStatus === "error") && (
-                      <Pill label="Check" color="var(--accent)" onClick={handleCheckUpdate} />
+                      <Pill label="Check" color="var(--bewusstsein)" onClick={handleCheckUpdate} />
                     )}
                     {updateStatus === "checking" && (
                       <span className="text-xs" style={{ color: "var(--text-dim)" }}>Pruefe...</span>
@@ -303,8 +301,8 @@ export default function SettingsView() {
                       <Pill label="Update" color="var(--wachstum)" onClick={handleInstallUpdate} />
                     )}
                     {updateStatus === "downloading" && (
-                      <div className="h-1.5 w-20 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(255,255,255,0.08)" }}>
-                        <div className="h-full rounded-full transition-all" style={{ width: `${downloadProgress}%`, backgroundColor: "var(--accent)" }} />
+                      <div className="h-1.5 w-20 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(0,255,200,0.1)" }}>
+                        <div className="h-full rounded-full transition-all" style={{ width: `${downloadProgress}%`, backgroundColor: "var(--bewusstsein)", boxShadow: "0 0 8px var(--bewusstsein)" }} />
                       </div>
                     )}
                   </div>
@@ -315,15 +313,15 @@ export default function SettingsView() {
             {/* System */}
             <div>
               <Label text="System" />
-              <div className="rounded-2xl p-5 flex flex-col gap-3" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "linear-gradient(135deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))" }}>
+              <div className="neon-card p-5 flex flex-col gap-3">
                 <Sys label="Version" value={`v${appVersion}`} mono />
-                <Sep />
+                <NeonSep />
                 <Sys label="Soul Path" value={soulPath} mono />
-                <Sep />
+                <NeonSep />
                 <Sys label="Node.js" value={nodeInfo?.found ? nodeInfo.version : "Not found"} color={nodeInfo?.found ? "var(--wachstum)" : "var(--heartbeat)"} />
-                <Sep />
+                <NeonSep />
                 <Sys label="Engine PID" value={sidecar?.pid ? String(sidecar.pid) : "\u2014"} mono />
-                <Sep />
+                <NeonSep />
                 <Sys label="Runtime" value="Tauri 2 \u00B7 React 19" />
               </div>
             </div>
@@ -337,7 +335,7 @@ export default function SettingsView() {
 /* ── Atoms ─────────────────────────────────────────────────── */
 
 function Label({ text }: { text: string }) {
-  return <div className="text-[11px] uppercase tracking-[0.15em] font-semibold mb-2.5" style={{ color: "var(--text-dim)" }}>{text}</div>;
+  return <div className="text-[11px] uppercase font-semibold mb-2.5 neon-label">{text}</div>;
 }
 
 function Pill({ label, color, onClick }: { label: string; color: string; onClick: () => void }) {
@@ -346,9 +344,11 @@ function Pill({ label, color, onClick }: { label: string; color: string; onClick
       onClick={onClick}
       className="px-4 py-2 rounded-xl text-xs font-semibold cursor-default transition-all"
       style={{
-        background: `linear-gradient(135deg, color-mix(in srgb, ${color} 14%, transparent), color-mix(in srgb, ${color} 6%, transparent))`,
+        background: `linear-gradient(135deg, color-mix(in srgb, ${color} 18%, transparent), color-mix(in srgb, ${color} 6%, transparent))`,
         color,
-        border: `1px solid color-mix(in srgb, ${color} 18%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${color} 25%, transparent)`,
+        textShadow: `0 0 8px color-mix(in srgb, ${color} 30%, transparent)`,
+        boxShadow: `0 0 12px color-mix(in srgb, ${color} 10%, transparent)`,
       }}
     >
       {label}
@@ -368,29 +368,30 @@ function Provider({
     <div
       className="rounded-2xl p-5 transition-all"
       style={{
-        border: `1px solid ${ok ? `color-mix(in srgb, ${color} 20%, transparent)` : "rgba(255,255,255,0.06)"}`,
+        border: `1px solid ${ok ? `color-mix(in srgb, ${color} 30%, transparent)` : "rgba(0,255,200,0.08)"}`,
         background: ok
-          ? `linear-gradient(135deg, color-mix(in srgb, ${color} 5%, transparent), rgba(255,255,255,0.01))`
-          : "linear-gradient(135deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))",
+          ? `linear-gradient(160deg, color-mix(in srgb, ${color} 8%, transparent), rgba(0,0,20,0.6))`
+          : "linear-gradient(160deg, rgba(0,255,200,0.03), rgba(0,0,20,0.6))",
+        boxShadow: ok
+          ? `0 0 15px color-mix(in srgb, ${color} 12%, transparent), inset 0 1px 0 color-mix(in srgb, ${color} 8%, transparent)`
+          : "0 0 8px rgba(0,255,200,0.03)",
       }}
     >
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-semibold" style={{ color }}>{name}</span>
-        {ok && <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}50` }} />}
+        <span className="text-sm font-semibold" style={{ color, textShadow: ok ? `0 0 10px ${color}40` : "none" }}>{name}</span>
+        {ok && <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color, boxShadow: `0 0 8px ${color}` }} />}
       </div>
       <input
         type={local ? "text" : "password"}
         placeholder={local ? "http://localhost:11434" : "API Key"}
         value={apiKey}
         onChange={(e) => onKey(e.target.value)}
-        className="w-full px-3.5 py-2.5 rounded-xl text-xs font-mono outline-none mb-2"
-        style={{ backgroundColor: "rgba(0,0,0,0.15)", border: "1px solid rgba(255,255,255,0.04)", color: "var(--text)" }}
+        className="w-full px-3.5 py-2.5 rounded-xl text-xs font-mono outline-none mb-2 neon-input"
       />
       <select
         value={model}
         onChange={(e) => onModel(e.target.value)}
-        className="w-full px-3.5 py-2.5 rounded-xl text-xs outline-none cursor-default"
-        style={{ backgroundColor: "rgba(0,0,0,0.15)", border: "1px solid rgba(255,255,255,0.04)", color: "var(--text)" }}
+        className="w-full px-3.5 py-2.5 rounded-xl text-xs outline-none cursor-default neon-input"
       >
         {models.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
       </select>
@@ -402,7 +403,7 @@ function Toggle({ label, desc, on, toggle, last }: { label: string; desc: string
   return (
     <div
       className="flex items-center justify-between px-5 py-4 cursor-default"
-      style={{ borderBottom: last ? "none" : "1px solid rgba(255,255,255,0.035)" }}
+      style={{ borderBottom: last ? "none" : "1px solid rgba(0,255,200,0.06)" }}
       onClick={toggle}
     >
       <div>
@@ -412,16 +413,16 @@ function Toggle({ label, desc, on, toggle, last }: { label: string; desc: string
       <div
         className="w-[38px] h-[22px] rounded-full relative transition-all shrink-0 ml-4"
         style={{
-          backgroundColor: on ? "var(--wachstum)" : "rgba(255,255,255,0.08)",
-          boxShadow: on ? "0 0 8px rgba(0,255,100,0.2)" : "inset 0 1px 2px rgba(0,0,0,0.2)",
+          backgroundColor: on ? "var(--bewusstsein)" : "rgba(0,255,200,0.08)",
+          boxShadow: on ? "0 0 12px rgba(0,255,200,0.3)" : "inset 0 1px 2px rgba(0,0,0,0.2)",
         }}
       >
         <div
           className="absolute top-[2px] w-[18px] h-[18px] rounded-full transition-all"
           style={{
-            backgroundColor: "#fff",
+            backgroundColor: on ? "#0A0C14" : "#fff",
             left: on ? "calc(100% - 20px)" : "2px",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+            boxShadow: on ? "0 0 4px rgba(0,255,200,0.5)" : "0 1px 3px rgba(0,0,0,0.3)",
           }}
         />
       </div>
@@ -436,8 +437,7 @@ function Inp({ placeholder, value, onChange, pw }: { placeholder: string; value:
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full px-3.5 py-2.5 rounded-xl text-xs font-mono outline-none"
-      style={{ backgroundColor: "rgba(0,0,0,0.15)", border: "1px solid rgba(255,255,255,0.04)", color: "var(--text)" }}
+      className="w-full px-3.5 py-2.5 rounded-xl text-xs font-mono outline-none neon-input"
     />
   );
 }
@@ -446,11 +446,11 @@ function Sys({ label, value, mono, color }: { label: string; value: string; mono
   return (
     <div className="flex items-center justify-between">
       <span className="text-xs" style={{ color: "var(--text-dim)" }}>{label}</span>
-      <span className={`text-xs truncate ml-4 max-w-[60%] text-right ${mono ? "font-mono" : ""}`} style={{ color: color || "var(--text)" }}>{value}</span>
+      <span className={`text-xs truncate ml-4 max-w-[60%] text-right ${mono ? "font-mono" : ""}`} style={{ color: color || "var(--bewusstsein)" }}>{value}</span>
     </div>
   );
 }
 
-function Sep() {
-  return <div className="h-px" style={{ backgroundColor: "rgba(255,255,255,0.035)" }} />;
+function NeonSep() {
+  return <div className="neon-divider" />;
 }

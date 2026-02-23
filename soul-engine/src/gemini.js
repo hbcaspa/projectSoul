@@ -16,12 +16,13 @@ export class GeminiAdapter {
    * @returns {string} The model's response text
    */
   async generate(systemPrompt, history = [], userMessage, options = {}) {
-    const { tools = [], onToolCall = null } = options;
+    const { tools = [], onToolCall = null, max_tokens } = options;
 
     // Build model config
     const modelConfig = {
       model: this.modelName,
       systemInstruction: systemPrompt,
+      ...(max_tokens ? { generationConfig: { maxOutputTokens: max_tokens } } : {}),
     };
 
     // Add tools if available

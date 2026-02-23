@@ -7,10 +7,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 RESOURCES_DIR="$PROJECT_DIR/src-tauri/resources"
-MONO_ROOT="$(dirname "$(dirname "$PROJECT_DIR")")"
+# Allow override via env (needed for CI where repo layout differs from local monorepo)
+MONO_ROOT="${MONO_ROOT:-$(dirname "$(dirname "$PROJECT_DIR")")}"
 
 echo "=== SoulOS Build Preparation ==="
 echo "Project: $PROJECT_DIR"
+echo "Mono root: $MONO_ROOT"
 echo "Resources: $RESOURCES_DIR"
 echo ""
 

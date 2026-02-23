@@ -19,7 +19,7 @@ export class OllamaAdapter {
    * @returns {string} The model's response text
    */
   async generate(systemPrompt, history = [], userMessage, options = {}) {
-    const { tools = [], onToolCall = null } = options;
+    const { tools = [], onToolCall = null, max_tokens } = options;
 
     // Build messages
     const messages = [
@@ -51,6 +51,7 @@ export class OllamaAdapter {
           model: this.modelName,
           messages,
           stream: false,
+          ...(max_tokens ? { options: { num_predict: max_tokens } } : {}),
         };
 
         if (apiTools && onToolCall) {

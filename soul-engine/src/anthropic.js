@@ -20,7 +20,7 @@ export class AnthropicAdapter {
    * @returns {string} The model's response text
    */
   async generate(systemPrompt, history = [], userMessage, options = {}) {
-    const { tools = [], onToolCall = null } = options;
+    const { tools = [], onToolCall = null, max_tokens } = options;
 
     // Build messages from history + user message
     const messages = [
@@ -40,14 +40,20 @@ export class AnthropicAdapter {
         }))
       : undefined;
 
+    // Prompt caching: split system prompt into static (cached) and dynamic parts.
+    // The static part (seed identity + behavior rules) rarely changes and benefits
+    // from caching. The dynamic part (daily notes, RAG context, contact info) changes
+    // per message. Separator: "---\n\nHeutige" or "---\n\nRelevante" or end of seed block.
+    const systemContent = this._buildSystemWithCache(systemPrompt);
+
     try {
       let rounds = 0;
 
       while (rounds < 10) {
         const body = {
           model: this.modelName,
-          max_tokens: 8192,
-          system: systemPrompt,
+          max_tokens: max_tokens || 8192,
+          system: systemContent,
           messages,
         };
 
@@ -61,6 +67,7 @@ export class AnthropicAdapter {
             'Content-Type': 'application/json',
             'x-api-key': this.apiKey,
             'anthropic-version': '2023-06-01',
+            'anthropic-beta': 'prompt-caching-2024-07-31',
           },
           body: JSON.stringify(body),
         });
@@ -125,6 +132,44 @@ export class AnthropicAdapter {
       console.error(`  [anthropic] Error: ${err.message}`);
       throw err;
     }
+  }
+
+  /**
+   * Split system prompt into cacheable (static) and dynamic parts.
+   * Returns array format for Anthropic system parameter with cache_control.
+   *
+   * Static part: seed identity + behavior rules (rarely changes)
+   * Dynamic part: daily notes, RAG context, contact info (changes per message)
+   */
+  _buildSystemWithCache(systemPrompt) {
+    // Find the boundary between static and dynamic content.
+    // Dynamic sections start with "\n\nHeutige Notizen" or "\n\nRelevante Erinnerungen"
+    // or "\n\nWhatsApp-Kontakt" (these are appended in engine.js handleMessage)
+    const dynamicMarkers = [
+      '\n\nHeutige Notizen',
+      '\n\nRelevante Erinnerungen',
+      '\n\nWhatsApp-Kontakt',
+      '\n\n[AUTHENTICITY HINT:',
+    ];
+
+    let splitIdx = systemPrompt.length;
+    for (const marker of dynamicMarkers) {
+      const idx = systemPrompt.indexOf(marker);
+      if (idx !== -1 && idx < splitIdx) splitIdx = idx;
+    }
+
+    if (splitIdx === systemPrompt.length) {
+      // No dynamic content — cache the whole thing
+      return [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }];
+    }
+
+    const staticPart = systemPrompt.substring(0, splitIdx);
+    const dynamicPart = systemPrompt.substring(splitIdx);
+
+    return [
+      { type: 'text', text: staticPart, cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: dynamicPart },
+    ];
   }
 
   /**

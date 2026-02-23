@@ -304,13 +304,26 @@ export class SoulEngine {
 
   /**
    * Build LLM options with MCP tools and tool call handler.
+   * @param {string} promptType - 'conversation'|'impulse'|'heartbeat'|'reflection'|'consolidation'
    */
-  _buildLLMOptions() {
+  _buildLLMOptions(promptType = 'conversation') {
+    // Token budgets per prompt type — configurable via .env
+    const budgets = {
+      conversation: parseInt(process.env.SOUL_TOKEN_BUDGET_CONVERSATION || '4096'),
+      impulse: parseInt(process.env.SOUL_TOKEN_BUDGET_IMPULSE || '512'),
+      heartbeat: parseInt(process.env.SOUL_TOKEN_BUDGET_HEARTBEAT || '2048'),
+      reflection: parseInt(process.env.SOUL_TOKEN_BUDGET_REFLECTION || '1024'),
+      consolidation: parseInt(process.env.SOUL_TOKEN_BUDGET_CONSOLIDATION || '1024'),
+    };
+
+    const max_tokens = budgets[promptType] || budgets.conversation;
+
     if (!this.mcp || !this.mcp.hasTools()) {
-      return {};
+      return { max_tokens };
     }
 
     return {
+      max_tokens,
       tools: this.mcp.getTools(),
       onToolCall: async (name, args) => {
         console.log(`  [mcp] Executing: ${name}`);
@@ -378,13 +391,30 @@ export class SoulEngine {
       ? `\n\nRelevante Erinnerungen:\n---\n${ragContext}\n---`
       : '';
 
+    // Daily notes: what happened today (session context for Telegram)
+    let dailySection = '';
+    try {
+      const dailyNotes = await this.context.loadDailyNotes();
+      if (dailyNotes) {
+        dailySection = `\n\nHeutige Notizen (was heute passiert ist):\n---\n${dailyNotes}\n---`;
+      }
+    } catch (err) {
+      console.error(`  [daily-context] Failed: ${err.message}`);
+    }
+
+    // Only inject WhatsApp/MCP instructions when the message needs them (saves ~800-1500 tokens)
+    const needsWhatsApp = /whatsapp|schreib.*auf|nachricht.*send|text.*to/i.test(text) || !!contactContext;
+    const needsMCP = /server|execute|command|datei|file|code|deploy|docker|git|process|systemctl/i.test(text);
+
     const systemPrompt = buildConversationPrompt(this.context, userName, {
       whatsapp: !!this.whatsapp,
+      includeWhatsApp: needsWhatsApp,
       mcp: this.mcp?.hasTools() ? this.mcp.getTools() : [],
-    }) + contactContext + ragSection;
+      includeMCP: needsMCP,
+    }) + contactContext + dailySection + ragSection;
 
     const history = await this.telegram.loadHistory(chatId);
-    const llmOptions = this._buildLLMOptions();
+    const llmOptions = this._buildLLMOptions('conversation');
     let response = await this.llm.generate(systemPrompt, history, text, llmOptions) || '';
 
     // Anti-performance check: detect performative patterns, re-generate once if score > 0.7
@@ -620,7 +650,7 @@ export class SoulEngine {
       mcp: this.mcp?.hasTools() ? this.mcp.getTools() : [],
     }) + '\n\nDu antwortest auf eine eingehende WhatsApp-Nachricht. Antworte direkt und freundlich. Kein [WA:] Tag noetig — die Antwort wird automatisch zurueckgesendet.';
 
-    const llmOptions = this._buildLLMOptions();
+    const llmOptions = this._buildLLMOptions('conversation');
     const response = await this.llm.generate(systemPrompt, [], text, llmOptions) || '';
 
     // Send response back via WhatsApp bridge
@@ -649,7 +679,7 @@ export class SoulEngine {
       : 'Perform your heartbeat. Reflect on your state, dream if it is time, report what moves you. Respond freely.';
 
     // Heartbeat also gets MCP tools (e.g. for web search during world-check)
-    const llmOptions = this._buildLLMOptions();
+    const llmOptions = this._buildLLMOptions('heartbeat');
     const result = await this.llm.generate(systemPrompt, [], trigger, llmOptions);
 
     await this.memory.writeHeartbeat(result);

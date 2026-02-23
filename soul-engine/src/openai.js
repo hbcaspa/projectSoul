@@ -60,7 +60,7 @@ export class OpenAIAdapter {
    * @returns {string} The model's response text
    */
   async generate(systemPrompt, history = [], userMessage, options = {}) {
-    const { tools = [], onToolCall = null } = options;
+    const { tools = [], onToolCall = null, max_tokens } = options;
 
     // Build input array from history + user message
     const input = [
@@ -95,6 +95,7 @@ export class OpenAIAdapter {
           instructions: systemPrompt,
           input,
           tools: apiTools,
+          ...(max_tokens ? { max_output_tokens: max_tokens } : {}),
         };
 
         const res = await fetch(this.baseUrl, {

@@ -22,23 +22,23 @@ const DEFAULT_LLM_BUDGET = 10;
 
 const REFLECTION_TYPES = {
   pattern_scan: {
-    cronExpr: '0 */4 * * *',
+    intervalMs: 4 * 60 * 60 * 1000,
     pulse: 'reflect:Scanning interaction patterns',
   },
   memory_consolidation: {
-    cronExpr: '30 */8 * * *',
+    intervalMs: 8 * 60 * 60 * 1000,
     pulse: 'reflect:Consolidating memories',
   },
   relationship_reflection: {
-    cronExpr: '0 */12 * * *',
+    intervalMs: 12 * 60 * 60 * 1000,
     pulse: 'relate:Reflecting on relationships',
   },
   goal_tracking: {
-    cronExpr: '0 6 * * *',
+    intervalMs: 24 * 60 * 60 * 1000,
     pulse: 'grow:Tracking goals',
   },
   creative_collision: {
-    cronExpr: '0 */6 * * *',
+    intervalMs: 6 * 60 * 60 * 1000,
     pulse: 'dream:Creative collision',
   },
 };
@@ -54,19 +54,19 @@ export class ReflectionEngine {
     this.llmCallsToday = 0;
     this.llmBudget = parseInt(process.env.SOUL_REFLECTION_LLM_BUDGET || DEFAULT_LLM_BUDGET);
     this.lastResetDate = new Date().toISOString().split('T')[0];
+    this.lastRun = {}; // tracks last run time per type
     this.running = false;
   }
 
   start() {
     if (process.env.SOUL_REFLECTION === 'false') return;
 
-    for (const [type, config] of Object.entries(REFLECTION_TYPES)) {
-      const job = cron.schedule(config.cronExpr, async () => {
-        try { await this._runReflection(type); }
-        catch (err) { console.error(`  [reflection] ${type} failed: ${err.message}`); }
-      });
-      this.jobs.push(job);
-    }
+    // Single cron every 4 hours — batches all due reflections into one LLM call
+    const job = cron.schedule('0 */4 * * *', async () => {
+      try { await this._runBatched(); }
+      catch (err) { console.error(`  [reflection] batch failed: ${err.message}`); }
+    });
+    this.jobs.push(job);
 
     this.running = true;
   }
@@ -77,7 +77,11 @@ export class ReflectionEngine {
     this.running = false;
   }
 
-  async _runReflection(type) {
+  /**
+   * Collect all due reflection types and run them in a single LLM call.
+   * Saves ~60-70% tokens compared to individual calls.
+   */
+  async _runBatched() {
     const today = new Date().toISOString().split('T')[0];
     if (today !== this.lastResetDate) {
       this.llmCallsToday = 0;
@@ -85,45 +89,73 @@ export class ReflectionEngine {
     }
 
     if (this.llmCallsToday >= this.llmBudget) {
-      console.log(`  [reflection] ${type} skipped — budget exhausted`);
-      return null;
+      console.log(`  [reflection] batch skipped — budget exhausted`);
+      return;
     }
 
-    const config = REFLECTION_TYPES[type];
-    if (!config) return null;
+    const now = Date.now();
+    const dueTypes = [];
+    const prompts = {};
 
-    await writePulse(this.soulPath, config.pulse.split(':')[0], config.pulse.split(':')[1], this.bus);
+    for (const [type, config] of Object.entries(REFLECTION_TYPES)) {
+      const lastRun = this.lastRun[type] || 0;
+      if (now - lastRun < config.intervalMs) continue;
 
-    let prompt;
-    switch (type) {
-      case 'pattern_scan': prompt = await this._buildPatternPrompt(); break;
-      case 'memory_consolidation': prompt = await this._buildConsolidationPrompt(); break;
-      case 'relationship_reflection': prompt = await this._buildRelationshipPrompt(); break;
-      case 'goal_tracking': prompt = await this._buildGoalPrompt(); break;
-      case 'creative_collision': prompt = await this._buildCollisionPrompt(); break;
-      default: return null;
+      const prompt = await this._buildPromptForType(type);
+      if (prompt) {
+        dueTypes.push(type);
+        prompts[type] = prompt;
+      }
     }
 
-    if (!prompt) return null;
+    if (dueTypes.length === 0) return;
+
+    await writePulse(this.soulPath, 'reflect', `Batched reflection: ${dueTypes.join(', ')}`, this.bus);
+
+    // Build combined prompt
+    const combinedPrompt = dueTypes.map(type =>
+      `## ${type}\n\n${prompts[type]}`
+    ).join('\n\n---\n\n');
+
+    const systemMsg = 'You are a soul reflecting on its experiences. Be honest, concise, and genuine.\n\n' +
+      'Multiple reflection tasks follow. Answer each under its own ## heading. Keep each response to 3-5 sentences.';
 
     this.llmCallsToday++;
-    const result = await this.llm.generate(
-      'You are a soul reflecting on its experiences. Be honest, concise, and genuine.',
-      [], prompt, {}
-    );
+    const result = await this.llm.generate(systemMsg, [], combinedPrompt, {});
 
-    await this._routeResult(type, result);
+    // Parse and route results per type
+    for (const type of dueTypes) {
+      const sectionPattern = new RegExp(`##\\s*${type}[\\s\\S]*?(?=\\n##\\s|$)`, 'i');
+      const match = result.match(sectionPattern);
+      const section = match ? match[0] : '';
+
+      if (section) {
+        await this._routeResult(type, section);
+      }
+      this.lastRun[type] = now;
+    }
 
     if (this.bus) {
       this.bus.safeEmit('reflection.completed', {
-        source: 'reflection', type,
-        summary: result.substring(0, 200),
+        source: 'reflection',
+        type: 'batched',
+        types: dueTypes,
         llmCallsToday: this.llmCallsToday,
       });
     }
 
-    console.log(`  [reflection] ${type} complete (${this.llmCallsToday}/${this.llmBudget} calls today)`);
-    return result;
+    console.log(`  [reflection] batch complete: ${dueTypes.join(', ')} (${this.llmCallsToday}/${this.llmBudget} calls today)`);
+  }
+
+  async _buildPromptForType(type) {
+    switch (type) {
+      case 'pattern_scan': return this._buildPatternPrompt();
+      case 'memory_consolidation': return this._buildConsolidationPrompt();
+      case 'relationship_reflection': return this._buildRelationshipPrompt();
+      case 'goal_tracking': return this._buildGoalPrompt();
+      case 'creative_collision': return this._buildCollisionPrompt();
+      default: return null;
+    }
   }
 
   async _buildPatternPrompt() {

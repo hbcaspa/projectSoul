@@ -107,7 +107,10 @@ export class ImpulseScheduler {
     const trigger = this._buildTrigger(type);
 
     // LLM options (with tools if needed)
-    const llmOptions = config.needsTools ? this._buildLLMOptions() : {};
+    const impulseMaxTokens = parseInt(process.env.SOUL_TOKEN_BUDGET_IMPULSE || '512');
+    const llmOptions = config.needsTools
+      ? { ...this._buildLLMOptions(), max_tokens: impulseMaxTokens }
+      : { max_tokens: impulseMaxTokens };
 
     // Call LLM
     let result;

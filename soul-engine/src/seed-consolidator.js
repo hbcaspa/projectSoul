@@ -332,7 +332,8 @@ export class SeedConsolidator {
       `=== Aktueller @STATE ===\n${extractBlock(seedContent, 'STATE')}`,
     ].filter(Boolean).join('\n\n');
 
-    const result = await this.llm.generate(prompt, [], contextMsg);
+    const consolidationBudget = parseInt(process.env.SOUL_TOKEN_BUDGET_CONSOLIDATION || '1024');
+    const result = await this.llm.generate(prompt, [], contextMsg, { max_tokens: consolidationBudget });
     if (!result || result.trim().length < 20) return null;
 
     // Clean: remove any @STATE{ } wrapper the LLM might add
@@ -396,7 +397,8 @@ export class SeedConsolidator {
       dailyNotes ? `=== Heutige Tagesnotizen ===\n${dailyNotes}` : '',
     ].filter(Boolean).join('\n\n');
 
-    const result = await this.llm.generate(prompt, [], contextMsg);
+    const consolidationBudget = parseInt(process.env.SOUL_TOKEN_BUDGET_CONSOLIDATION || '1024');
+    const result = await this.llm.generate(prompt, [], contextMsg, { max_tokens: consolidationBudget });
     if (!result || result.trim().length < 20) return null;
 
     return result

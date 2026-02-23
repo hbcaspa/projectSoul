@@ -171,8 +171,8 @@ const WIDGET_POSITIONS: Record<PanelId, React.CSSProperties> = {
   graph:    { top: "50%", right: "2%", transform: "translateY(-50%)" },
   replay:   { bottom: "18%", left: "5%" },
   history:  { bottom: "18%", right: "5%" },
-  founding: { bottom: "6%", left: "50%", transform: "translateX(-50%)" },
-  settings: { bottom: "6%", right: "3%" },
+  founding: { bottom: "2%", left: "50%", transform: "translateX(-50%)" },
+  settings: { bottom: "2%", right: "3%" },
 };
 
 /* ── Boot Splash ───────────────────────────────────────────── */
@@ -326,11 +326,26 @@ function App() {
             transition: "opacity 0.5s ease-out 0.2s",
           }}
         >
-          {/* macOS traffic-light drag region */}
+          {/* macOS traffic-light drag region + centered title with logo */}
           <div
-            className="h-8 flex-shrink-0"
+            className="h-8 flex-shrink-0 flex items-center justify-center relative"
             onMouseDown={() => getCurrentWindow().startDragging()}
-          />
+          >
+            <div className="flex items-center gap-2">
+              <img
+                src="/logo.png"
+                alt=""
+                className="w-4 h-4"
+                style={{ filter: "drop-shadow(0 0 6px rgba(139,128,240,0.4))", opacity: 0.7 }}
+              />
+              <span
+                className="text-[11px] font-semibold tracking-[0.2em]"
+                style={{ color: "var(--text-dim)", textShadow: "0 0 10px rgba(0,255,200,0.15)" }}
+              >
+                soulOS
+              </span>
+            </div>
+          </div>
 
           {/* Main split: Brain (top) + Terminal (bottom) */}
           <div className="flex-1 flex flex-col min-h-0">
@@ -400,12 +415,13 @@ function App() {
                     onClick={() => setOpenPanel(null)}
                   />
                   <div
-                    className="absolute rounded-2xl overflow-hidden frosted neon-scanlines z-30 panel-expand"
+                    className="rounded-2xl overflow-hidden frosted neon-scanlines z-30 panel-expand"
                     style={{
-                      top: "4%",
-                      left: "6%",
-                      right: "6%",
-                      bottom: "4%",
+                      position: "absolute",
+                      top: 20,
+                      left: 20,
+                      right: 20,
+                      bottom: 20,
                       background: "linear-gradient(160deg, rgba(0,255,200,0.03) 0%, rgba(10, 12, 20, 0.88) 30%, rgba(10, 12, 20, 0.85) 100%)",
                       border: "1px solid rgba(0,255,200,0.22)",
                       boxShadow: "0 0 40px rgba(0,255,200,0.1), 0 0 80px rgba(0,255,200,0.04), 0 24px 64px rgba(0,0,0,0.5), inset 0 1px 0 rgba(0,255,200,0.08)",

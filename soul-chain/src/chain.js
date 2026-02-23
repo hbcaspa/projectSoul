@@ -31,6 +31,11 @@ const MERGE_FILES = new Set([
   'knowledge-graph.jsonl',
 ]);
 
+// Files that must NEVER be overwritten by chain sync (immutable)
+const IMMUTABLE_FILES = new Set([
+  'KERN.md', 'CORE.md',
+]);
+
 const IGNORE = new Set([
   '.env', '.mcp.json', '.soul-pulse', '.session-writes', '.soul-route-log',
   '.git', '.claude', '.soul-chain', '.soul-chain-status',
@@ -262,6 +267,13 @@ export class SoulChain {
 
     try {
       const content = await fs.readFile(fullPath);
+
+      // SAFETY: Don't propagate empty files (except newly created ones)
+      if (content.length === 0) {
+        console.warn(`  [chain] Skipping send of empty file: ${filePath} (to peer ${peerId})`);
+        return;
+      }
+
       const encrypted = encrypt(content, this.keys.encryptionKey);
       const stat = statSync(fullPath);
 
@@ -291,6 +303,21 @@ export class SoulChain {
 
       const fullPath = path.resolve(this.soulPath, filePath);
       const fileName = path.basename(filePath);
+
+      // SAFETY: Never overwrite immutable files
+      if (IMMUTABLE_FILES.has(fileName)) {
+        console.warn(`  [chain] BLOCKED: Refusing to overwrite immutable file: ${filePath} (from peer ${peerId})`);
+        return;
+      }
+
+      // SAFETY: Reject empty content when local file exists and has content
+      if (content.length === 0 && existsSync(fullPath)) {
+        const localStat = statSync(fullPath);
+        if (localStat.size > 0) {
+          console.warn(`  [chain] BLOCKED: Refusing empty overwrite of ${filePath} (local: ${localStat.size} bytes, from peer ${peerId})`);
+          return;
+        }
+      }
 
       // Create directories if needed
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
@@ -494,6 +521,8 @@ export class SoulChain {
       const full = path.resolve(this.soulPath, file);
       if (existsSync(full)) {
         const content = await fs.readFile(full);
+        // Skip empty files — don't advertise them in manifest
+        if (content.length === 0) continue;
         const stat = statSync(full);
         this.manifest.set(file, {
           hash: hashFile(content),
@@ -527,6 +556,8 @@ export class SoulChain {
       } else if (entry.isFile()) {
         try {
           const content = await fs.readFile(absPath);
+          // Skip empty files — don't advertise them in manifest
+          if (content.length === 0) continue;
           const stat = statSync(absPath);
           this.manifest.set(relPath, {
             hash: hashFile(content),

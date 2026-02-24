@@ -53,21 +53,31 @@ jobs:
           cp soul-chain/src/*.js "${RESOURCES}/soul-chain/src/"
           cd "${RESOURCES}/soul-chain" && npm ci --omit=dev && cd -
 
+      - name: Verify resources exist
+        run: |
+          echo "=== Resources ==="
+          ls -la soul-os/src-tauri/resources/
+          echo "=== Node binary ==="
+          soul-os/src-tauri/resources/node/bin/node --version
+          echo "=== soul-engine ==="
+          ls soul-os/src-tauri/resources/soul-engine/
+          echo "=== soul-chain ==="
+          ls soul-os/src-tauri/resources/soul-chain/
+
       - name: Build Tauri app
         working-directory: soul-os
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npx tauri build
+        run: npx tauri build --verbose --bundles dmg,updater
 
       - name: List build artifacts
+        if: always()
         run: |
+          echo "=== target/release/ ==="
+          ls soul-os/src-tauri/target/release/ 2>/dev/null | head -20 || echo "No release dir"
           echo "=== Bundle directory ==="
-          ls -la soul-os/src-tauri/target/release/bundle/ 2>/dev/null || echo "No bundle dir"
-          echo "=== DMG ==="
-          ls -la soul-os/src-tauri/target/release/bundle/dmg/ 2>/dev/null || echo "No dmg dir"
-          echo "=== macOS ==="
-          ls -la soul-os/src-tauri/target/release/bundle/macos/ 2>/dev/null || echo "No macos dir"
+          find soul-os/src-tauri/target/release/bundle/ -type f 2>/dev/null || echo "No bundle files found"
 
       - name: Create latest.json for updater
         run: |

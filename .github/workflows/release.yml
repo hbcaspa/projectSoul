@@ -53,16 +53,56 @@ jobs:
           cp soul-chain/src/*.js "${RESOURCES}/soul-chain/src/"
           cd "${RESOURCES}/soul-chain" && npm ci --omit=dev && cd -
 
-      - name: Build and release
-        uses: tauri-apps/tauri-action@v0
+      - name: Build Tauri app
+        working-directory: soul-os
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          projectPath: soul-os
-          tagName: ${{ github.ref_name }}
-          releaseName: 'SoulOS ${{ github.ref_name }}'
-          releaseBody: 'See commit history for changes.'
-          releaseDraft: false
-          prerelease: false
+        run: npx tauri build
+
+      - name: List build artifacts
+        run: |
+          echo "=== Bundle directory ==="
+          ls -la soul-os/src-tauri/target/release/bundle/ 2>/dev/null || echo "No bundle dir"
+          echo "=== DMG ==="
+          ls -la soul-os/src-tauri/target/release/bundle/dmg/ 2>/dev/null || echo "No dmg dir"
+          echo "=== macOS ==="
+          ls -la soul-os/src-tauri/target/release/bundle/macos/ 2>/dev/null || echo "No macos dir"
+
+      - name: Create latest.json for updater
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          DMG_PATH="soul-os/src-tauri/target/release/bundle/dmg/SoulOS_${VERSION}_aarch64.dmg"
+          SIG_PATH="soul-os/src-tauri/target/release/bundle/macos/SoulOS.app.tar.gz.sig"
+          TAR_PATH="soul-os/src-tauri/target/release/bundle/macos/SoulOS.app.tar.gz"
+
+          SIGNATURE=$(cat "${SIG_PATH}")
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/SoulOS.app.tar.gz"
+
+          cat > latest.json << EOF
+          {
+            "version": "${VERSION}",
+            "notes": "See commit history for changes.",
+            "pub_date": "${PUB_DATE}",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "${SIGNATURE}",
+                "url": "${DOWNLOAD_URL}"
+              }
+            }
+          }
+          EOF
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "SoulOS ${GITHUB_REF_NAME}" \
+            --notes "See commit history for changes." \
+            "soul-os/src-tauri/target/release/bundle/dmg/SoulOS_${VERSION}_aarch64.dmg" \
+            "soul-os/src-tauri/target/release/bundle/macos/SoulOS.app.tar.gz" \
+            "soul-os/src-tauri/target/release/bundle/macos/SoulOS.app.tar.gz.sig" \
+            "latest.json"

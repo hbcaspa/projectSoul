@@ -19,6 +19,10 @@ import MemoryMapView from "./views/MemoryMapView";
 import HealthView from "./views/HealthView";
 import MonitorView from "./views/MonitorView";
 import MCPView from "./views/MCPView";
+import GardenView from "./views/GardenView";
+import InnerWorldView from "./views/InnerWorldView";
+import WorldWindowView from "./views/WorldWindowView";
+import BondsView from "./views/BondsView";
 import SetupWizard from "./views/SetupWizard";
 import FoundingChat from "./views/FoundingChat";
 import { useActiveNodes, useCurrentPulse, useMood, useActivityFeed } from "./lib/store";
@@ -41,6 +45,10 @@ export type ViewId =
   | "monitor"
   | "founding"
   | "mcp"
+  | "garden"
+  | "innerworld"
+  | "worldwindow"
+  | "bonds"
   | "terminal"
   | "settings";
 
@@ -183,6 +191,53 @@ const PANELS: PanelDef[] = [
     ),
   },
   {
+    id: "garden",
+    label: "Garden",
+    color: "#00E676",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+        <path d="M12 22V12" />
+        <path d="M7 12c0-3 2-7 5-10 3 3 5 7 5 10" />
+        <path d="M7 12c-2 0-5 1-5 4 3 0 5-1 5-4z" />
+        <path d="M17 12c2 0 5 1 5 4-3 0-5-1-5-4z" />
+      </svg>
+    ),
+  },
+  {
+    id: "innerworld",
+    label: "Inner",
+    color: "#B464FF",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+        <circle cx="12" cy="12" r="9" />
+        <circle cx="12" cy="12" r="4" />
+        <circle cx="12" cy="12" r="1" fill="currentColor" />
+      </svg>
+    ),
+  },
+  {
+    id: "worldwindow",
+    label: "World",
+    color: "#64C8FF",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M2 12h20" />
+        <path d="M12 2a15 15 0 010 20M12 2a15 15 0 000 20" />
+      </svg>
+    ),
+  },
+  {
+    id: "bonds",
+    label: "Bonds",
+    color: "#FF6496",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+        <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 000-7.78z" />
+      </svg>
+    ),
+  },
+  {
     id: "mcp",
     label: "MCP",
     color: "#00C8FF",
@@ -231,6 +286,10 @@ const PANEL_COMPONENTS: Record<PanelId, React.FC> = {
   health: HealthView,
   monitor: MonitorView,
   mcp: MCPView,
+  garden: GardenView,
+  innerworld: InnerWorldView,
+  worldwindow: WorldWindowView,
+  bonds: BondsView,
   founding: FoundingView,
   settings: SettingsView,
 };
@@ -249,9 +308,13 @@ const WIDGET_POSITIONS: Record<PanelId, React.CSSProperties> = {
   memorymap: { bottom: "2%", left: "20%" },
   health:    { bottom: "2%", left: "8%" },
   monitor:   { top: "4%", left: "3%" },
-  mcp:       { bottom: "2%", right: "20%" },
-  founding:  { bottom: "2%", left: "50%", transform: "translateX(-50%)" },
-  settings: { bottom: "2%", right: "3%" },
+  mcp:         { bottom: "2%", right: "20%" },
+  garden:      { top: "36%", right: "3%" },
+  innerworld:  { top: "12%", left: "18%" },
+  worldwindow: { top: "12%", right: "18%" },
+  bonds:       { bottom: "10%", left: "50%", transform: "translateX(-50%)" },
+  founding:    { bottom: "2%", left: "50%", transform: "translateX(-50%)" },
+  settings:    { bottom: "2%", right: "3%" },
 };
 
 /* ── Boot Splash ───────────────────────────────────────────── */
@@ -454,7 +517,14 @@ function App() {
 
               {/* Activity feed — top-left overlay */}
               {!openPanel && (
-                <div className="absolute top-1 left-0 pointer-events-none" style={{ maxWidth: "45%" }}>
+                <div
+                  className="absolute top-1 left-0 pointer-events-none"
+                  style={{
+                    maxWidth: "45%",
+                    opacity: isWorking ? 1 : 0.4,
+                    transition: "opacity 1.2s ease",
+                  }}
+                >
                   <div className="pointer-events-auto" style={{ maxHeight: "120px", overflow: "hidden" }}>
                     <ActivityFeed feed={feed} activeNodes={nodes} />
                   </div>
@@ -464,14 +534,17 @@ function App() {
               {/* Chain status is now integrated into the Chain widget card */}
 
               {/* ── Floating Widget Cards (ring around brain) ── */}
-              {PANELS.map((panel, i) => (
+              {PANELS.map((panel, i) => {
+                // Silence mode: when nothing is active, widgets are softer
+                const silenceOpacity = !isWorking && !openPanel ? 0.55 : 1;
+                return (
                 <div
                   key={panel.id}
                   className="absolute z-10"
                   style={{
                     ...WIDGET_POSITIONS[panel.id],
-                    opacity: openPanel ? (openPanel === panel.id ? 0 : 0.12) : 1,
-                    transition: "opacity 300ms ease",
+                    opacity: openPanel ? (openPanel === panel.id ? 0 : 0.12) : silenceOpacity,
+                    transition: "opacity 800ms ease",
                     pointerEvents: openPanel ? "none" : "auto",
                   }}
                 >
@@ -500,7 +573,8 @@ function App() {
                     </span>
                   </button>
                 </div>
-              ))}
+                );
+              })}
 
               {/* ── Expanded Panel (Glass Overlay) ─────────────── */}
               {PanelComponent && panelDef && (

@@ -2,6 +2,7 @@ import Hyperswarm from 'hyperswarm';
 import chokidar from 'chokidar';
 import fs from 'node:fs/promises';
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import {
   generateMnemonic,
@@ -346,7 +347,10 @@ export class SoulChain {
       if (MERGE_FILES.has(fileName)) {
         await this.mergeJsonl(fullPath, content);
       } else {
-        await fs.writeFile(fullPath, content);
+        // Atomic write: tmp file + rename prevents 0-byte files on crash
+        const tmpPath = fullPath + '.chain-tmp-' + randomBytes(4).toString('hex');
+        await fs.writeFile(tmpPath, content);
+        await fs.rename(tmpPath, fullPath);
       }
 
       // Update manifest with merged result
@@ -431,16 +435,16 @@ export class SoulChain {
       }
     }
 
-    // Write merged result
+    // Write merged result (atomic: tmp + rename)
     const merged = [
       ...Array.from(entities.values()),
       ...relationObjects,
     ];
 
-    await fs.writeFile(
-      fullPath,
-      merged.map((obj) => JSON.stringify(obj)).join('\n') + (merged.length > 0 ? '\n' : ''),
-    );
+    const mergedContent = merged.map((obj) => JSON.stringify(obj)).join('\n') + (merged.length > 0 ? '\n' : '');
+    const tmpPath = fullPath + '.chain-tmp-' + randomBytes(4).toString('hex');
+    await fs.writeFile(tmpPath, mergedContent);
+    await fs.rename(tmpPath, fullPath);
 
     const localCount = localLines.length;
     const remoteCount = remoteLines.length;
@@ -763,6 +767,13 @@ export class SoulChain {
 
     try {
       const content = await fs.readFile(fullPath);
+
+      // SAFETY: Never broadcast empty files (could be mid-write by another process)
+      if (content.length === 0) {
+        console.warn(`  [chain] Skipping broadcast of empty file: ${filePath}`);
+        return;
+      }
+
       const encrypted = encrypt(content, this.keys.encryptionKey);
       const stat = statSync(fullPath);
 

@@ -30,6 +30,29 @@ jobs:
         working-directory: soul-os
         run: npm ci
 
+      - name: Prepare bundled resources
+        run: |
+          RESOURCES=soul-os/src-tauri/resources
+
+          # Download Node.js ARM64 macOS binary
+          NODE_VERSION=20.18.1
+          curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-darwin-arm64.tar.gz" \
+            | tar xz -C /tmp
+          mkdir -p "${RESOURCES}/node"
+          cp -R "/tmp/node-v${NODE_VERSION}-darwin-arm64/." "${RESOURCES}/node/"
+
+          # Copy soul-engine source + install deps
+          mkdir -p "${RESOURCES}/soul-engine/src"
+          cp soul-engine/package.json soul-engine/package-lock.json "${RESOURCES}/soul-engine/"
+          cp soul-engine/src/*.js "${RESOURCES}/soul-engine/src/"
+          cd "${RESOURCES}/soul-engine" && npm ci --omit=dev && cd -
+
+          # Copy soul-chain source + install deps
+          mkdir -p "${RESOURCES}/soul-chain/src"
+          cp soul-chain/package.json soul-chain/package-lock.json "${RESOURCES}/soul-chain/"
+          cp soul-chain/src/*.js "${RESOURCES}/soul-chain/src/"
+          cd "${RESOURCES}/soul-chain" && npm ci --omit=dev && cd -
+
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
         env:

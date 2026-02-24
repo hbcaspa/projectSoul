@@ -10,8 +10,8 @@ function parseEntry(filename: string): StateEntry | null {
 }
 
 const TYPE_COLORS: Record<string, string> = {
-  start: "var(--wachstum)", ende: "var(--heartbeat)", end: "var(--heartbeat)",
-  heartbeat: "var(--bewusstsein)", reflection: "var(--traeume)", dream: "var(--traeume)", impulse: "var(--manifest)",
+  start: "#00FF64", ende: "#FF3232", end: "#FF3232",
+  heartbeat: "#00FFC8", reflection: "#6464FF", dream: "#6464FF", impulse: "#FF9600",
 };
 
 export default function ReplayView() {
@@ -52,7 +52,7 @@ export default function ReplayView() {
 
   return (
     <div className="h-full flex flex-col" style={{ backgroundColor: "var(--bg-base)" }}>
-      <div className="flex items-center gap-4 px-8 py-3.5 flex-shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+      <div className="flex items-center gap-4 px-8 py-3.5 flex-shrink-0" style={{ borderBottom: "1px solid rgba(var(--white-rgb),0.05)" }}>
         <select value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="glass-inset px-4 py-2.5 text-xs cursor-default" style={{ color: "var(--text)", borderRadius: "var(--radius-lg)" }}>
           {uniqueDates.map((date) => <option key={date} value={date}>{date}</option>)}
         </select>
@@ -61,16 +61,16 @@ export default function ReplayView() {
       </div>
 
       <div className="flex-1 flex min-h-0">
-        <div className="w-52 overflow-auto py-4 px-3" style={{ borderRight: "1px solid rgba(255,255,255,0.04)" }}>
+        <div className="w-52 overflow-auto py-4 px-3" style={{ borderRight: "1px solid rgba(var(--white-rgb),0.04)" }}>
           {filteredEntries.length === 0 ? (
             <p className="text-xs px-3 py-2" style={{ color: "var(--text-muted)" }}>No snapshots</p>
           ) : (
             <div className="flex flex-col gap-1">
               {filteredEntries.map((entry) => {
                 const isActive = selectedEntry?.filename === entry.filename;
-                const color = TYPE_COLORS[entry.type] || "var(--statelog)";
+                const color = TYPE_COLORS[entry.type] || "#50C8B4";
                 return (
-                  <button key={entry.filename} onClick={() => selectEntry(entry)} className="w-full text-left px-4 py-3 rounded-xl text-xs transition-all cursor-default" style={{ background: isActive ? `linear-gradient(135deg, color-mix(in srgb, ${color} 10%, transparent), rgba(255,255,255,0.01))` : "transparent", border: isActive ? `1px solid color-mix(in srgb, ${color} 15%, transparent)` : "1px solid transparent" }}>
+                  <button key={entry.filename} onClick={() => selectEntry(entry)} className="w-full text-left px-4 py-3 rounded-xl text-xs transition-all cursor-default" style={{ background: isActive ? `linear-gradient(135deg, ${color}1A, rgba(var(--white-rgb),0.01))` : "transparent", border: isActive ? `1px solid ${color}26` : "1px solid transparent" }}>
                     <div className="flex items-center gap-2.5">
                       <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: isActive ? color : "var(--text-dim)", opacity: isActive ? 1 : 0.3, boxShadow: isActive ? `0 0 8px ${color}40` : "none" }} />
                       <span className="font-mono" style={{ color: isActive ? color : "var(--text-dim)" }}>{entry.time}</span>

@@ -26,7 +26,7 @@ export default function StatusBar({ activeNodes, isWorking, currentPulse, mood }
       style={{
         height: "var(--statusbar-height)",
         backgroundColor: "rgba(22, 24, 48, 0.6)",
-        borderColor: "rgba(255,255,255,0.04)",
+        borderColor: "rgba(var(--white-rgb),0.04)",
       }}
     >
       {/* Heartbeat */}

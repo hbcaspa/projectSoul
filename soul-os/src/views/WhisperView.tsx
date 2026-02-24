@@ -1,6 +1,15 @@
 import { NODES } from "../lib/brain-layout";
 import { useWhisperStream } from "../lib/store";
 
+const NODE_HEX: Record<string, string> = {
+  "var(--seed)": "#DCDCFF", "var(--kern)": "#FF3C3C", "var(--bewusstsein)": "#00FFC8",
+  "var(--schatten)": "#A000FF", "var(--traeume)": "#6464FF", "var(--wachstum)": "#00FF64",
+  "var(--garten)": "#B4FF00", "var(--mem)": "#FFC800", "var(--bonds)": "#FF6496",
+  "var(--interessen)": "#00C8FF", "var(--heartbeat)": "#FF3232", "var(--manifest)": "#FF9600",
+  "var(--evolution)": "#C864FF", "var(--statelog)": "#50C8B4", "var(--graph)": "#00DCB4",
+  "var(--text)": "#B8B4CC",
+};
+
 export default function WhisperView() {
   const stream = useWhisperStream();
 
@@ -12,7 +21,7 @@ export default function WhisperView() {
             <div
               className="w-20 h-20 rounded-3xl flex items-center justify-center mb-5"
               style={{
-                background: "linear-gradient(135deg, rgba(100,100,255,0.06), rgba(139,128,240,0.03))",
+                background: "linear-gradient(135deg, rgba(100,100,255,0.06), rgba(var(--accent-rgb),0.03))",
                 border: "1px solid rgba(100,100,255,0.08)",
                 boxShadow: "0 4px 24px rgba(100,100,255,0.06)",
               }}
@@ -28,7 +37,8 @@ export default function WhisperView() {
           <div className="flex flex-col gap-2">
             {stream.map((entry, i) => {
               const node = NODES[entry.type] || NODES.bewusstsein;
-              const color = node?.color || "var(--text)";
+              const varColor = node?.color || "var(--text)";
+              const color = NODE_HEX[varColor] || "#B8B4CC";
               const opacity = Math.max(0.15, 1 - i * 0.04);
               const isLatest = i === 0;
 
@@ -38,8 +48,8 @@ export default function WhisperView() {
                   className="flex gap-4 items-start py-2.5 rounded-xl px-4 transition-all duration-500"
                   style={{
                     opacity,
-                    background: isLatest ? "linear-gradient(135deg, rgba(139,128,240,0.05), rgba(255,255,255,0.01))" : "transparent",
-                    border: isLatest ? "1px solid rgba(139,128,240,0.08)" : "1px solid transparent",
+                    background: isLatest ? "linear-gradient(135deg, rgba(var(--accent-rgb),0.05), rgba(var(--white-rgb),0.01))" : "transparent",
+                    border: isLatest ? "1px solid rgba(var(--accent-rgb),0.08)" : "1px solid transparent",
                   }}
                 >
                   <span className="text-xs flex-shrink-0 pt-0.5 font-mono" style={{ color: "var(--text-dim)", fontVariantNumeric: "tabular-nums", minWidth: "55px", opacity: 0.6 }}>

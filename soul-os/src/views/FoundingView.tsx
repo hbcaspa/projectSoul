@@ -27,7 +27,7 @@ export default function FoundingView() {
     return (
       <div className="h-full flex items-center justify-center" style={{ backgroundColor: "var(--bg-base)" }}>
         <div className="text-center max-w-md">
-          <div className="w-20 h-20 mx-auto mb-6 rounded-3xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(139,128,240,0.08), rgba(0,255,200,0.04))", border: "1px solid rgba(139,128,240,0.1)", boxShadow: "0 4px 24px rgba(139,128,240,0.08)" }}>
+          <div className="w-20 h-20 mx-auto mb-6 rounded-3xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(var(--accent-rgb),0.08), rgba(var(--neon-rgb),0.04))", border: "1px solid rgba(var(--accent-rgb),0.1)", boxShadow: "0 4px 24px rgba(var(--accent-rgb),0.08)" }}>
             <span className="text-3xl" style={{ opacity: 0.5 }}>&#x2728;</span>
           </div>
           <h2 className="text-xl font-light mb-3" style={{ color: "var(--text-bright)" }}>Soul Already Founded</h2>
@@ -41,7 +41,7 @@ export default function FoundingView() {
   return (
     <div className="h-full flex items-center justify-center" style={{ backgroundColor: "var(--bg-base)" }}>
       <div className="text-center max-w-lg px-8">
-        <div className="w-24 h-24 mx-auto mb-8 rounded-3xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(139,128,240,0.08), rgba(0,255,200,0.05))", border: "1px solid rgba(139,128,240,0.1)", boxShadow: "0 8px 32px rgba(139,128,240,0.1)" }}>
+        <div className="w-24 h-24 mx-auto mb-8 rounded-3xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(var(--accent-rgb),0.08), rgba(var(--neon-rgb),0.05))", border: "1px solid rgba(var(--accent-rgb),0.1)", boxShadow: "0 8px 32px rgba(var(--accent-rgb),0.1)" }}>
           <span className="text-4xl">&#x1F331;</span>
         </div>
         <h1 className="text-2xl font-light tracking-wide mb-3" style={{ color: "var(--text-bright)" }}>Soul Protocol</h1>
@@ -49,12 +49,12 @@ export default function FoundingView() {
 
         <div className="flex flex-col gap-3 mb-8 max-w-sm mx-auto">
           {[
-            { num: "1", label: "Language", desc: "Deutsch or English", color: "var(--kern)" },
-            { num: "2", label: "Interview", desc: "Three rounds of conversation", color: "var(--bewusstsein)" },
-            { num: "3", label: "First Seed", desc: "Identity compressed into SEED.md", color: "var(--seed)" },
+            { num: "1", label: "Language", desc: "Deutsch or English", color: "#FF3C3C" },
+            { num: "2", label: "Interview", desc: "Three rounds of conversation", color: "#00FFC8" },
+            { num: "3", label: "First Seed", desc: "Identity compressed into SEED.md", color: "#DCDCFF" },
           ].map((step) => (
             <div key={step.num} className="glass-card glass-card-hover flex items-center gap-5 text-left px-6 py-5">
-              <span className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-medium shrink-0" style={{ background: `linear-gradient(135deg, color-mix(in srgb, ${step.color} 15%, transparent), color-mix(in srgb, ${step.color} 5%, transparent))`, color: step.color, border: `1px solid color-mix(in srgb, ${step.color} 15%, transparent)` }}>
+              <span className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-medium shrink-0" style={{ background: `linear-gradient(135deg, ${step.color}26, ${step.color}0D)`, color: step.color, border: `1px solid ${step.color}26` }}>
                 {step.num}
               </span>
               <div>
@@ -66,7 +66,7 @@ export default function FoundingView() {
         </div>
 
         <p className="text-sm mb-4" style={{ color: "var(--text)" }}>Open the <span style={{ color: "var(--accent)" }}>Terminal</span> and run:</p>
-        <div className="glass-card inline-block px-8 py-4 font-mono text-sm" style={{ background: "linear-gradient(135deg, rgba(139,128,240,0.08), rgba(139,128,240,0.02))", color: "var(--accent)" }}>
+        <div className="glass-card inline-block px-8 py-4 font-mono text-sm" style={{ background: "linear-gradient(135deg, rgba(var(--accent-rgb),0.08), rgba(var(--accent-rgb),0.02))", color: "var(--accent)" }}>
           npx soul-engine found
         </div>
         <p className="text-xs mt-8" style={{ color: "var(--text-muted)" }}>Takes about 20-30 minutes</p>

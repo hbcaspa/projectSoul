@@ -161,7 +161,7 @@ function StepWelcome({ config, setConfig }: StepProps) {
   return (
     <div className="text-center">
       <img src="/logo.png" alt="" className="w-20 h-20 mx-auto mb-6" style={{
-        filter: "drop-shadow(0 0 30px rgba(139, 128, 240, 0.3))",
+        filter: "drop-shadow(0 0 30px rgba(var(--accent-rgb), 0.3))",
       }} />
       <h1 className="text-2xl font-light tracking-wider mb-3" style={{ color: "var(--text-bright)" }}>
         Welcome to SoulOS
@@ -181,7 +181,7 @@ function StepWelcome({ config, setConfig }: StepProps) {
             style={{
               backgroundColor: config.language === lang ? "var(--accent-glow)" : "var(--bg-surface)",
               color: config.language === lang ? "var(--accent)" : "var(--text-dim)",
-              border: `1px solid ${config.language === lang ? "var(--accent-dim)" : "rgba(255,255,255,0.06)"}`,
+              border: `1px solid ${config.language === lang ? "var(--accent-dim)" : "rgba(var(--white-rgb),0.06)"}`,
             }}
           >
             {lang === "de" ? "Deutsch" : "English"}
@@ -220,7 +220,7 @@ function StepSoulPath({ config, setConfig }: StepProps) {
           style={{
             backgroundColor: "var(--bg-surface)",
             color: "var(--text-bright)",
-            border: "1px solid rgba(255,255,255,0.08)",
+            border: "1px solid rgba(var(--white-rgb),0.08)",
           }}
         />
         <button
@@ -229,7 +229,7 @@ function StepSoulPath({ config, setConfig }: StepProps) {
           style={{
             backgroundColor: "var(--bg-surface)",
             color: "var(--text)",
-            border: "1px solid rgba(255,255,255,0.08)",
+            border: "1px solid rgba(var(--white-rgb),0.08)",
           }}
         >
           {config.language === "de" ? "Waehlen" : "Browse"}
@@ -283,7 +283,7 @@ function StepProviders({ config, setConfig }: StepProps) {
               className="rounded-lg p-3 transition-all"
               style={{
                 backgroundColor: p.enabled ? "var(--bg-surface)" : "var(--bg-surface)",
-                border: `1px solid ${p.enabled ? `${color}40` : "rgba(255,255,255,0.06)"}`,
+                border: `1px solid ${p.enabled ? `${color}40` : "rgba(var(--white-rgb),0.06)"}`,
                 opacity: p.enabled ? 1 : 0.6,
               }}
             >
@@ -312,7 +312,7 @@ function StepProviders({ config, setConfig }: StepProps) {
                       style={{
                         backgroundColor: "var(--bg-elevated)",
                         color: "var(--text)",
-                        border: "1px solid rgba(255,255,255,0.06)",
+                        border: "1px solid rgba(var(--white-rgb),0.06)",
                       }}
                     />
                   ) : (
@@ -325,7 +325,7 @@ function StepProviders({ config, setConfig }: StepProps) {
                       style={{
                         backgroundColor: "var(--bg-elevated)",
                         color: "var(--text)",
-                        border: "1px solid rgba(255,255,255,0.06)",
+                        border: "1px solid rgba(var(--white-rgb),0.06)",
                       }}
                     />
                   )}
@@ -336,7 +336,7 @@ function StepProviders({ config, setConfig }: StepProps) {
                     style={{
                       backgroundColor: "var(--bg-elevated)",
                       color: "var(--text)",
-                      border: "1px solid rgba(255,255,255,0.06)",
+                      border: "1px solid rgba(var(--white-rgb),0.06)",
                     }}
                   >
                     {models.map((m) => (
@@ -421,7 +421,7 @@ function ConnectionSection({
   return (
     <div className="mb-3 rounded-lg" style={{
       backgroundColor: "var(--bg-surface)",
-      border: "1px solid rgba(255,255,255,0.06)",
+      border: "1px solid rgba(var(--white-rgb),0.06)",
     }}>
       <button
         onClick={onToggle}
@@ -468,7 +468,7 @@ function StepFeatures({ config, setConfig }: StepProps) {
             className="flex items-center justify-between px-4 py-3 rounded-lg cursor-default"
             style={{
               backgroundColor: "var(--bg-surface)",
-              border: "1px solid rgba(255,255,255,0.06)",
+              border: "1px solid rgba(var(--white-rgb),0.06)",
             }}
           >
             <div>
@@ -554,7 +554,7 @@ function SummaryRow({ label, value, mono }: { label: string; value: string; mono
   return (
     <div className="flex items-center justify-between px-4 py-2.5 rounded-lg" style={{
       backgroundColor: "var(--bg-surface)",
-      border: "1px solid rgba(255,255,255,0.06)",
+      border: "1px solid rgba(var(--white-rgb),0.06)",
     }}>
       <span className="text-xs" style={{ color: "var(--text-dim)" }}>{label}</span>
       <span className={`text-xs ${mono ? "font-mono" : ""}`} style={{ color: "var(--text-bright)" }}>{value}</span>
@@ -577,7 +577,7 @@ function Input({
       style={{
         backgroundColor: "var(--bg-elevated)",
         color: "var(--text)",
-        border: "1px solid rgba(255,255,255,0.06)",
+        border: "1px solid rgba(var(--white-rgb),0.06)",
       }}
     />
   );

@@ -137,7 +137,7 @@ export default function TimelineView() {
   if (error && entries.length === 0) {
     return (
       <div className="h-full flex flex-col items-center justify-center" style={{ backgroundColor: "var(--bg-base)" }}>
-        <div className="w-20 h-20 rounded-3xl flex items-center justify-center mb-5" style={{ background: "linear-gradient(135deg, rgba(200,100,255,0.06), rgba(139,128,240,0.03))", border: "1px solid rgba(200,100,255,0.08)" }}>
+        <div className="w-20 h-20 rounded-3xl flex items-center justify-center mb-5" style={{ background: "linear-gradient(135deg, rgba(200,100,255,0.06), rgba(var(--accent-rgb),0.03))", border: "1px solid rgba(200,100,255,0.08)" }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="w-9 h-9" style={{ color: "var(--evolution)", opacity: 0.4 }}>
             <path d="M12 2v20M12 6l-4 4M12 6l4 4" />
           </svg>
@@ -151,7 +151,7 @@ export default function TimelineView() {
   return (
     <div className="h-full flex flex-col" style={{ backgroundColor: "var(--bg-base)" }}>
       {/* Header */}
-      <div className="flex items-center gap-4 px-8 py-3.5 flex-shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+      <div className="flex items-center gap-4 px-8 py-3.5 flex-shrink-0" style={{ borderBottom: "1px solid rgba(var(--white-rgb),0.05)" }}>
         <span className="text-xs font-mono" style={{ color: "var(--text-dim)" }}>
           {entries.length} evolution points
         </span>
@@ -168,7 +168,7 @@ export default function TimelineView() {
         <button
           onClick={loadTimeline}
           className="ml-auto text-xs px-4 py-2 rounded-xl cursor-default transition-all"
-          style={{ color: "var(--text-dim)", background: "linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))", border: "1px solid rgba(255,255,255,0.06)" }}
+          style={{ color: "var(--text-dim)", background: "linear-gradient(135deg, rgba(var(--white-rgb),0.04), rgba(var(--white-rgb),0.01))", border: "1px solid rgba(var(--white-rgb),0.06)" }}
         >
           Refresh
         </button>
@@ -208,11 +208,11 @@ export default function TimelineView() {
                       className="w-full text-left px-4 py-3 rounded-xl transition-all cursor-default"
                       style={{
                         background: isExpanded
-                          ? "linear-gradient(135deg, rgba(139,128,240,0.08), rgba(139,128,240,0.02))"
-                          : "linear-gradient(135deg, rgba(255,255,255,0.02), transparent)",
+                          ? "linear-gradient(135deg, rgba(var(--accent-rgb),0.08), rgba(var(--accent-rgb),0.02))"
+                          : "linear-gradient(135deg, rgba(var(--white-rgb),0.02), transparent)",
                         border: isExpanded
-                          ? "1px solid rgba(139,128,240,0.12)"
-                          : "1px solid rgba(255,255,255,0.03)",
+                          ? "1px solid rgba(var(--accent-rgb),0.12)"
+                          : "1px solid rgba(var(--white-rgb),0.03)",
                       }}
                     >
                       <div className="flex items-center gap-3">
@@ -230,12 +230,12 @@ export default function TimelineView() {
                       {/* Metadata badges */}
                       <div className="flex items-center gap-2 mt-1.5 ml-12">
                         {entry.commit.files_changed > 0 && (
-                          <span className="text-[9px] px-2 py-0.5 rounded-md" style={{ color: "var(--text-muted)", backgroundColor: "rgba(255,255,255,0.03)" }}>
+                          <span className="text-[9px] px-2 py-0.5 rounded-md" style={{ color: "var(--text-muted)", backgroundColor: "rgba(var(--white-rgb),0.03)" }}>
                             {entry.commit.files_changed} file{entry.commit.files_changed > 1 ? "s" : ""}
                           </span>
                         )}
                         {entry.mood && (
-                          <span className="text-[9px] px-2 py-0.5 rounded-md" style={{ color: "var(--bewusstsein)", backgroundColor: "rgba(0,255,200,0.04)" }}>
+                          <span className="text-[9px] px-2 py-0.5 rounded-md" style={{ color: "var(--bewusstsein)", backgroundColor: "rgba(var(--neon-rgb),0.04)" }}>
                             {entry.mood}
                           </span>
                         )}
@@ -249,7 +249,7 @@ export default function TimelineView() {
 
                     {/* Expanded diff */}
                     {isExpanded && (
-                      <div className="mt-2 ml-4 mr-2 rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.04)" }}>
+                      <div className="mt-2 ml-4 mr-2 rounded-xl overflow-hidden" style={{ border: "1px solid rgba(var(--white-rgb),0.04)" }}>
                         <pre className="text-[10px] leading-relaxed font-mono p-4 overflow-auto" style={{ maxHeight: "300px" }}>
                           {diff.split("\n").map((line, li) => {
                             let color = "var(--text-dim)";

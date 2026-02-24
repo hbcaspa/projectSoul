@@ -171,7 +171,7 @@ export default function MemoryMapView() {
   if (nodes.length === 0) {
     return (
       <div className="h-full flex flex-col items-center justify-center" style={{ backgroundColor: "var(--bg-base)" }}>
-        <div className="w-20 h-20 rounded-3xl flex items-center justify-center mb-5" style={{ background: "linear-gradient(135deg, rgba(0,200,255,0.06), rgba(139,128,240,0.03))", border: "1px solid rgba(0,200,255,0.08)" }}>
+        <div className="w-20 h-20 rounded-3xl flex items-center justify-center mb-5" style={{ background: "linear-gradient(135deg, rgba(0,200,255,0.06), rgba(var(--accent-rgb),0.03))", border: "1px solid rgba(0,200,255,0.08)" }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="w-9 h-9" style={{ color: "var(--interessen)", opacity: 0.4 }}>
             <circle cx="5" cy="6" r="2" /><circle cx="19" cy="6" r="2" /><circle cx="12" cy="18" r="2" />
             <path d="M7 6h10M5 8l7 8M19 8l-7 8" />
@@ -190,7 +190,7 @@ export default function MemoryMapView() {
         {/* Legend */}
         <div className="absolute top-4 left-4 z-10 flex flex-wrap gap-3">
           {types.map(type => (
-            <div key={type} className="flex items-center gap-1.5 px-2 py-1 rounded-lg" style={{ background: "rgba(10,12,20,0.7)", border: "1px solid rgba(255,255,255,0.05)" }}>
+            <div key={type} className="flex items-center gap-1.5 px-2 py-1 rounded-lg" style={{ background: "rgba(var(--bg-base-rgb),0.7)", border: "1px solid rgba(var(--white-rgb),0.05)" }}>
               <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colorFor(type) }} />
               <span className="text-[9px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{type}</span>
             </div>
@@ -233,7 +233,7 @@ export default function MemoryMapView() {
                   key={i}
                   x1={src.x} y1={src.y}
                   x2={tgt.x} y2={tgt.y}
-                  stroke={isHighlight ? "rgba(139,128,240,0.4)" : "rgba(255,255,255,0.06)"}
+                  stroke={isHighlight ? "rgba(var(--accent-rgb),0.4)" : "rgba(var(--white-rgb),0.06)"}
                   strokeWidth={isHighlight ? 1.5 : 0.5}
                 />
               );
@@ -251,7 +251,7 @@ export default function MemoryMapView() {
                 x={(src.x! + tgt.x!) / 2}
                 y={(src.y! + tgt.y!) / 2 - 4}
                 textAnchor="middle"
-                fill="rgba(139,128,240,0.6)"
+                fill="rgba(var(--accent-rgb),0.6)"
                 fontSize="8"
                 fontFamily="monospace"
               >
@@ -300,7 +300,7 @@ export default function MemoryMapView() {
                     x={node.x}
                     y={node.y! + r + 12}
                     textAnchor="middle"
-                    fill={isSelected || isHovered ? "#fff" : "rgba(255,255,255,0.5)"}
+                    fill={isSelected || isHovered ? "#fff" : "rgba(var(--white-rgb),0.5)"}
                     fontSize={isSelected ? "11" : "9"}
                     fontFamily="system-ui, sans-serif"
                     fontWeight={isSelected ? "600" : "400"}
@@ -318,7 +318,7 @@ export default function MemoryMapView() {
       {selected && (
         <div
           className="w-64 flex-shrink-0 overflow-auto p-5"
-          style={{ borderLeft: "1px solid rgba(255,255,255,0.05)", background: "rgba(10,12,20,0.6)" }}
+          style={{ borderLeft: "1px solid rgba(var(--white-rgb),0.05)", background: "rgba(var(--bg-base-rgb),0.6)" }}
         >
           <div className="flex items-start justify-between mb-4">
             <div>
@@ -361,7 +361,7 @@ export default function MemoryMapView() {
                       key={i}
                       onClick={() => { const n = nodes.find(n => n.id === other); if (n) setSelected(n); }}
                       className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg text-left"
-                      style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.03)" }}
+                      style={{ background: "rgba(var(--white-rgb),0.02)", border: "1px solid rgba(var(--white-rgb),0.03)" }}
                     >
                       <span style={{ color: "var(--text-muted)" }}>{isFrom ? "\u2192" : "\u2190"}</span>
                       <span className="flex-1 truncate" style={{ color: "var(--bonds)" }}>{other}</span>

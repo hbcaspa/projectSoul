@@ -17,11 +17,11 @@ interface RlufState {
 }
 
 const REFLECTIONS = [
-  { label: "Pattern Scan", interval: "4h", icon: "\u25C9", color: "var(--bewusstsein)", desc: "Scans for behavioral patterns" },
-  { label: "Memory Consolidation", interval: "8h", icon: "\u25CB", color: "var(--mem)", desc: "Strengthens important memories" },
-  { label: "Relationship Reflection", interval: "12h", icon: "\u25C7", color: "var(--bonds)", desc: "Reviews connection quality" },
-  { label: "Goal Tracking", interval: "24h", icon: "\u25B3", color: "var(--manifest)", desc: "Tracks progress toward goals" },
-  { label: "Creative Collision", interval: "6h", icon: "\u2726", color: "var(--garten)", desc: "Generates unexpected connections" },
+  { label: "Pattern Scan", interval: "4h", icon: "\u25C9", color: "#00FFC8", desc: "Scans for behavioral patterns" },
+  { label: "Memory Consolidation", interval: "8h", icon: "\u25CB", color: "#FFC800", desc: "Strengthens important memories" },
+  { label: "Relationship Reflection", interval: "12h", icon: "\u25C7", color: "#FF6496", desc: "Reviews connection quality" },
+  { label: "Goal Tracking", interval: "24h", icon: "\u25B3", color: "#FF9600", desc: "Tracks progress toward goals" },
+  { label: "Creative Collision", interval: "6h", icon: "\u2726", color: "#B4FF00", desc: "Generates unexpected connections" },
 ];
 
 export default function ImpulseView() {
@@ -42,8 +42,8 @@ export default function ImpulseView() {
   const v = mood?.valence ?? impulseState?.mood?.valence ?? 0;
   const e = mood?.energy ?? impulseState?.mood?.energy ?? 0;
   const label = mood?.label ?? impulseState?.mood?.label ?? "neutral";
-  const vColor = v > 0.2 ? "var(--wachstum)" : v < -0.2 ? "var(--heartbeat)" : "var(--bewusstsein)";
-  const eColor = e > 0.2 ? "var(--bewusstsein)" : e < -0.2 ? "var(--traeume)" : "var(--accent)";
+  const vColor = v > 0.2 ? "#00FF64" : v < -0.2 ? "#FF3232" : "#00FFC8";
+  const eColor = e > 0.2 ? "#00FFC8" : e < -0.2 ? "#6464FF" : "#8B80F0";
 
   const interests = impulseState?.interests || {};
   const sortedInterests = Object.entries(interests).sort(([, a], [, b]) => b - a);
@@ -57,7 +57,7 @@ export default function ImpulseView() {
         {/* ── Top Row: Mood + Activity ────────────────────── */}
         <div className="grid grid-cols-3 gap-4 mb-5">
           {/* Mood Card — large */}
-          <div className="col-span-2 glass-card p-7" style={{ background: `linear-gradient(135deg, ${vColor}08, rgba(255,255,255,0.02))` }}>
+          <div className="col-span-2 glass-card p-7" style={{ background: `linear-gradient(135deg, ${vColor}08, rgba(var(--white-rgb),0.02))` }}>
             <div className="flex items-center gap-6">
               <div
                 className="w-20 h-20 rounded-2xl flex items-center justify-center shrink-0"
@@ -124,8 +124,8 @@ export default function ImpulseView() {
                   key={r.label}
                   className="flex items-center gap-4 px-5 py-3.5 rounded-xl transition-all"
                   style={{
-                    background: "linear-gradient(135deg, rgba(255,255,255,0.02), rgba(255,255,255,0.005))",
-                    border: "1px solid rgba(255,255,255,0.04)",
+                    background: "linear-gradient(135deg, rgba(var(--white-rgb),0.02), rgba(var(--white-rgb),0.005))",
+                    border: "1px solid rgba(var(--white-rgb),0.04)",
                   }}
                 >
                   <span className="text-lg" style={{ color: r.color, opacity: 0.6 }}>{r.icon}</span>
@@ -136,9 +136,9 @@ export default function ImpulseView() {
                   <span
                     className="text-xs font-mono px-3 py-1.5 rounded-lg shrink-0"
                     style={{
-                      background: `color-mix(in srgb, ${r.color} 10%, transparent)`,
+                      background: `${r.color}1A`,
                       color: r.color,
-                      border: `1px solid color-mix(in srgb, ${r.color} 12%, transparent)`,
+                      border: `1px solid ${r.color}1F`,
                     }}
                   >
                     {r.interval}
@@ -157,7 +157,7 @@ export default function ImpulseView() {
                 </div>
                 <div className="flex flex-col gap-3 flex-1 overflow-auto">
                   {sortedRluf.map(([type, weight]) => (
-                    <WeightBar key={type} name={type} value={weight} max={3} color={weight > 1.5 ? "var(--wachstum)" : weight < 0.5 ? "var(--heartbeat)" : "var(--accent)"} />
+                    <WeightBar key={type} name={type} value={weight} max={3} color={weight > 1.5 ? "#00FF64" : weight < 0.5 ? "#FF3232" : "#8B80F0"} />
                   ))}
                 </div>
               </>
@@ -168,13 +168,13 @@ export default function ImpulseView() {
                 </div>
                 <div className="flex flex-col gap-3 flex-1 overflow-auto">
                   {sortedInterests.slice(0, 10).map(([name, weight]) => (
-                    <WeightBar key={name} name={name} value={weight * 100} max={100} color="var(--interessen)" suffix="%" />
+                    <WeightBar key={name} name={name} value={weight * 100} max={100} color="#00C8FF" suffix="%" />
                   ))}
                 </div>
               </>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center">
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: "rgba(139,128,240,0.06)" }}>
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: "rgba(var(--accent-rgb),0.06)" }}>
                   <span className="text-xl" style={{ color: "var(--accent)", opacity: 0.3 }}>{"\u2726"}</span>
                 </div>
                 <p className="text-xs text-center" style={{ color: "var(--text-muted)" }}>
@@ -199,7 +199,7 @@ function MiniGauge({ label, value, color }: { label: string; value: number; colo
         <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{label}</span>
         <span className="text-xs font-mono" style={{ color }}>{value > 0 ? "+" : ""}{value.toFixed(2)}</span>
       </div>
-      <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(0,0,0,0.2)" }}>
+      <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(var(--black-rgb),0.2)" }}>
         <div
           className="h-full rounded-full transition-all duration-700"
           style={{ width: `${Math.max(3, pct)}%`, background: `linear-gradient(90deg, ${color}60, ${color})` }}
@@ -222,7 +222,7 @@ function WeightBar({ name, value, max, color, suffix }: { name: string; value: n
   return (
     <div className="flex items-center gap-4">
       <span className="text-xs w-32 truncate font-mono" style={{ color: "var(--text)" }}>{name}</span>
-      <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(0,0,0,0.2)" }}>
+      <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(var(--black-rgb),0.2)" }}>
         <div
           className="h-full rounded-full transition-all"
           style={{ width: `${Math.min(100, (value / max) * 100)}%`, background: `linear-gradient(90deg, ${color}60, ${color})` }}

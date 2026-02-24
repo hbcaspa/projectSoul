@@ -1,4 +1,4 @@
-name: Build SoulOS macOS
+name: Build & Release SoulOS
 
 on:
   push:
@@ -14,6 +14,48 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for changelog generation
+
+      - name: Verify version consistency
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAURI_VERSION=$(python3 -c "import json; print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
+          CARGO_VERSION=$(grep '^version' src-tauri/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+
+          echo "Tag:            $TAG"
+          echo "package.json:   $PKG_VERSION"
+          echo "tauri.conf.json: $TAURI_VERSION"
+          echo "Cargo.toml:     $CARGO_VERSION"
+
+          FAIL=0
+          [ "$TAG" != "$PKG_VERSION" ] && echo "::error::package.json version mismatch" && FAIL=1
+          [ "$TAG" != "$TAURI_VERSION" ] && echo "::error::tauri.conf.json version mismatch" && FAIL=1
+          [ "$TAG" != "$CARGO_VERSION" ] && echo "::error::Cargo.toml version mismatch" && FAIL=1
+          [ $FAIL -eq 1 ] && exit 1
+          echo "All versions match: $TAG"
+
+      - name: Generate changelog
+        id: changelog
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          PREV_TAG=$(git tag --sort=-version:refname | grep '^v' | sed -n '2p')
+          if [ -n "$PREV_TAG" ]; then
+            echo "Previous tag: $PREV_TAG"
+            CHANGES=$(git log "$PREV_TAG"..HEAD --pretty=format:"- %s" --no-merges | head -30)
+          else
+            echo "No previous tag found — using last 20 commits"
+            CHANGES=$(git log --pretty=format:"- %s" --no-merges -20)
+          fi
+          # Write to file to preserve multiline
+          echo "$CHANGES" > /tmp/changelog.txt
+          echo "prev_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
+          # Output changelog for releaseBody
+          echo "changelog<<CHANGELOG_EOF" >> "$GITHUB_OUTPUT"
+          echo "$CHANGES" >> "$GITHUB_OUTPUT"
+          echo "CHANGELOG_EOF" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -39,7 +81,7 @@ jobs:
         env:
           MONO_ROOT: ${{ github.workspace }}
 
-      - name: Build Tauri app
+      - name: Build & Release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -48,7 +90,55 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'SoulOS ${{ github.ref_name }}'
-          releaseBody: 'Download SoulOS.dmg and drag to Applications.'
+          releaseBody: |
+            ## What's New
+
+            ${{ steps.changelog.outputs.prev_tag && format('Changes since {0}:', steps.changelog.outputs.prev_tag) || 'Initial release:' }}
+
+            ${{ steps.changelog.outputs.changelog || '' }}
+
+            _See commit history for full details._
+
+            ## Install
+
+            1. Download **SoulOS.dmg**
+            2. Open and drag to Applications
+            3. First launch: right-click → Open (macOS Gatekeeper)
+
+            ## Auto-Update
+
+            Existing installations update automatically via the built-in updater.
+
+            ---
+            _Signed release artifact. Verified via embedded public key._
           releaseDraft: false
           prerelease: false
           args: --config src-tauri/tauri.build.conf.json
+
+      - name: Generate checksums
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          echo "## SHA-256 Checksums" > /tmp/checksums.md
+          echo '```' >> /tmp/checksums.md
+          find src-tauri/target/release/bundle -type f \( -name "*.dmg" -o -name "*.tar.gz" -o -name "*.sig" -o -name "*.json" \) | while read f; do
+            shasum -a 256 "$f" >> /tmp/checksums.md
+          done
+          echo '```' >> /tmp/checksums.md
+          cat /tmp/checksums.md
+
+      - name: Append checksums to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASE_ID=$(gh release view "$GITHUB_REF_NAME" --json id -q .id 2>/dev/null || echo "")
+          if [ -n "$RELEASE_ID" ]; then
+            # Build combined body in a temp file to avoid shell quoting issues
+            gh release view "$GITHUB_REF_NAME" --json body -q .body > /tmp/release-body.md
+            echo "" >> /tmp/release-body.md
+            cat /tmp/checksums.md >> /tmp/release-body.md
+            gh release edit "$GITHUB_REF_NAME" --notes-file /tmp/release-body.md
+            echo "Checksums appended to release notes"
+          else
+            echo "Release not found — checksums not appended"
+          fi

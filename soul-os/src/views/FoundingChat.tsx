@@ -259,7 +259,7 @@ export default function FoundingChat({ onComplete }: Props) {
               style={{
                 backgroundColor: "var(--bg-surface)",
                 color: "var(--text-bright)",
-                border: "1px solid rgba(255,255,255,0.08)",
+                border: "1px solid rgba(var(--white-rgb),0.08)",
               }}
               autoFocus
             />

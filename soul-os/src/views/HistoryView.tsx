@@ -52,7 +52,7 @@ export default function HistoryView() {
   if (error && commits.length === 0) {
     return (
       <div className="h-full flex flex-col items-center justify-center" style={{ backgroundColor: "var(--bg-base)" }}>
-        <div className="w-20 h-20 rounded-3xl flex items-center justify-center mb-5" style={{ background: "linear-gradient(135deg, rgba(200,100,255,0.06), rgba(139,128,240,0.03))", border: "1px solid rgba(200,100,255,0.08)", boxShadow: "0 4px 24px rgba(200,100,255,0.06)" }}>
+        <div className="w-20 h-20 rounded-3xl flex items-center justify-center mb-5" style={{ background: "linear-gradient(135deg, rgba(200,100,255,0.06), rgba(var(--accent-rgb),0.03))", border: "1px solid rgba(200,100,255,0.08)", boxShadow: "0 4px 24px rgba(200,100,255,0.06)" }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="w-9 h-9" style={{ color: "var(--evolution)", opacity: 0.4 }}>
             <circle cx="12" cy="5" r="2" /><circle cx="12" cy="19" r="2" /><circle cx="18" cy="12" r="2" /><path d="M12 7v10M14 12h2" />
           </svg>
@@ -65,15 +65,15 @@ export default function HistoryView() {
 
   return (
     <div className="h-full flex flex-col" style={{ backgroundColor: "var(--bg-base)" }}>
-      <div className="flex items-center gap-4 px-8 py-3.5 flex-shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+      <div className="flex items-center gap-4 px-8 py-3.5 flex-shrink-0" style={{ borderBottom: "1px solid rgba(var(--white-rgb),0.05)" }}>
         <span className="text-xs font-mono" style={{ color: "var(--text-dim)" }}>{commits.length} commits</span>
-        <button onClick={loadHistory} className="ml-auto text-xs px-4 py-2 rounded-xl cursor-default transition-all" style={{ color: "var(--text-dim)", background: "linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))", border: "1px solid rgba(255,255,255,0.06)" }}>
+        <button onClick={loadHistory} className="ml-auto text-xs px-4 py-2 rounded-xl cursor-default transition-all" style={{ color: "var(--text-dim)", background: "linear-gradient(135deg, rgba(var(--white-rgb),0.04), rgba(var(--white-rgb),0.01))", border: "1px solid rgba(var(--white-rgb),0.06)" }}>
           Refresh
         </button>
       </div>
 
       <div className="flex-1 flex min-h-0">
-        <div className="w-80 overflow-auto py-4 px-4" style={{ borderRight: "1px solid rgba(255,255,255,0.04)" }}>
+        <div className="w-80 overflow-auto py-4 px-4" style={{ borderRight: "1px solid rgba(var(--white-rgb),0.04)" }}>
           {Object.entries(grouped).map(([date, dateCommits]) => (
             <div key={date} className="mb-5">
               <div className="text-xs font-mono mb-2 px-3 font-semibold" style={{ color: "var(--text-dim)" }}>{date}</div>
@@ -81,7 +81,7 @@ export default function HistoryView() {
                 {dateCommits.map((commit) => {
                   const isSel = selectedCommit?.hash === commit.hash;
                   return (
-                    <button key={commit.hash} onClick={() => selectCommit(commit)} className="w-full text-left px-4 py-3 rounded-xl text-xs transition-all cursor-default" style={{ background: isSel ? "linear-gradient(135deg, rgba(139,128,240,0.1), rgba(139,128,240,0.03))" : "transparent", border: isSel ? "1px solid rgba(139,128,240,0.15)" : "1px solid transparent", color: isSel ? "var(--accent)" : "var(--text)" }}>
+                    <button key={commit.hash} onClick={() => selectCommit(commit)} className="w-full text-left px-4 py-3 rounded-xl text-xs transition-all cursor-default" style={{ background: isSel ? "linear-gradient(135deg, rgba(var(--accent-rgb),0.1), rgba(var(--accent-rgb),0.03))" : "transparent", border: isSel ? "1px solid rgba(var(--accent-rgb),0.15)" : "1px solid transparent", color: isSel ? "var(--accent)" : "var(--text)" }}>
                       <div className="flex items-center gap-2.5 mb-1">
                         <span className="w-2 h-2 rounded-full" style={{ backgroundColor: isSel ? "var(--accent)" : "var(--text-dim)", opacity: isSel ? 1 : 0.3 }} />
                         <span className="font-mono" style={{ opacity: 0.5 }}>{commit.hash.slice(0, 7)}</span>
@@ -99,7 +99,7 @@ export default function HistoryView() {
 
         <div className="flex-1 flex flex-col min-w-0">
           {selectedCommit && (
-            <div className="flex items-center gap-4 px-8 py-3 flex-shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+            <div className="flex items-center gap-4 px-8 py-3 flex-shrink-0" style={{ borderBottom: "1px solid rgba(var(--white-rgb),0.04)" }}>
               <span className="font-mono text-xs" style={{ color: "var(--accent)" }}>{selectedCommit.hash.slice(0, 12)}</span>
               <span className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>{selectedCommit.message}</span>
               <button onClick={() => handleRollback(selectedCommit)} className="text-xs px-4 py-2 rounded-xl transition-all cursor-default flex-shrink-0" style={{ background: "linear-gradient(135deg, rgba(255,50,50,0.08), rgba(255,50,50,0.02))", color: "var(--heartbeat)", border: "1px solid rgba(255,50,50,0.1)" }}>

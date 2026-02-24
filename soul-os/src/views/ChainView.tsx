@@ -8,7 +8,7 @@ interface ChainStatus {
 }
 
 const healthColors: Record<string, string> = {
-  syncing: "var(--bewusstsein)", synced: "var(--wachstum)", idle: "var(--mem)", stale: "var(--heartbeat)", offline: "var(--text-dim)",
+  syncing: "#00FFC8", synced: "#00FF64", idle: "#FFC800", stale: "#FF3232", offline: "#565478",
 };
 
 export default function ChainView() {
@@ -43,7 +43,7 @@ export default function ChainView() {
   return (
     <div className="h-full overflow-hidden flex flex-col" style={{ backgroundColor: "var(--bg-base)" }}>
       <div className="px-8 pt-6 pb-5 flex-shrink-0">
-        <div className="glass-card p-7 mb-4" style={{ background: `linear-gradient(135deg, color-mix(in srgb, ${healthColor} 6%, transparent), rgba(255,255,255,0.01))` }}>
+        <div className="glass-card p-7 mb-4" style={{ background: `linear-gradient(135deg, ${healthColor}0F, rgba(var(--white-rgb),0.01))` }}>
           <div className="flex items-center gap-5">
             <span className="w-4 h-4 rounded-full animate-breathe" style={{ backgroundColor: healthColor, boxShadow: `0 0 16px ${healthColor}40` }} />
             <span className="text-2xl font-light uppercase tracking-wide" style={{ color: healthColor }}>{chainStatus.health}</span>
@@ -62,7 +62,7 @@ export default function ChainView() {
           {chainStatus.peers.map((peer) => (
             <div key={peer.id} className="glass-card glass-card-hover px-6 py-4 transition-all">
               <div className="flex items-center gap-5">
-                <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: peer.connected ? "var(--wachstum)" : "var(--text-dim)", boxShadow: peer.connected ? "0 0 10px var(--wachstum)40" : "none" }} />
+                <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: peer.connected ? "var(--wachstum)" : "var(--text-dim)", boxShadow: peer.connected ? "0 0 10px #00FF6440" : "none" }} />
                 <span className="font-mono text-sm flex-1 truncate" style={{ color: "var(--text-bright)" }}>{peer.id.slice(0, 16)}</span>
                 <div className="flex items-center gap-6 text-xs">
                   <span style={{ color: "var(--text-dim)" }}><span style={{ color: "var(--wachstum)", opacity: 0.7 }}>{"\u2191"}</span> {peer.sentFiles}</span>

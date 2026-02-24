@@ -177,7 +177,7 @@ export default function CardView() {
     return (
       <div className="h-full flex items-center justify-center" style={{ backgroundColor: "var(--bg-base)" }}>
         <div className="text-center">
-          <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-5" style={{ background: "linear-gradient(135deg, rgba(139,128,240,0.06), rgba(0,255,200,0.03))", border: "1px solid rgba(139,128,240,0.08)" }}>
+          <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-5" style={{ background: "linear-gradient(135deg, rgba(var(--accent-rgb),0.06), rgba(var(--neon-rgb),0.03))", border: "1px solid rgba(var(--accent-rgb),0.08)" }}>
             <span className="text-3xl" style={{ opacity: 0.3 }}>&#x2727;</span>
           </div>
           <p className="text-sm font-light" style={{ color: "var(--text-dim)" }}>No soul founded yet</p>
@@ -197,7 +197,7 @@ export default function CardView() {
   const age = ageDays(status.born);
   const moodV = mood?.valence ?? 0;
   const moodE = mood?.energy ?? 0;
-  const moodColor = moodV > 0.2 ? "var(--wachstum)" : moodV < -0.2 ? "var(--heartbeat)" : "var(--bewusstsein)";
+  const moodColor = moodV > 0.2 ? "#00FF64" : moodV < -0.2 ? "#FF3232" : "#00FFC8";
   const seedKB = (status.seed_size / 1024).toFixed(1);
   const stateWords = seed.stateWords.length > 0 ? seed.stateWords : status.state.split(",").map((s: string) => s.trim());
   const allInterests = [...new Set([...seed.interests, ...seed.recentInterests])];
@@ -207,7 +207,7 @@ export default function CardView() {
 
       {/* ── Hero Header ──────────────────────────────────── */}
       <div className="px-8 pt-6 pb-5 flex-shrink-0">
-        <div className="glass-card p-7" style={{ background: "linear-gradient(135deg, rgba(139,128,240,0.06), rgba(0,255,200,0.02))" }}>
+        <div className="glass-card p-7" style={{ background: "linear-gradient(135deg, rgba(var(--accent-rgb),0.06), rgba(var(--neon-rgb),0.02))" }}>
           <div className="flex items-start gap-6">
             <div
               className="w-18 h-18 rounded-2xl shrink-0 flex items-center justify-center"
@@ -242,8 +242,8 @@ export default function CardView() {
                     className="px-3 py-1 rounded-lg text-xs tracking-wide"
                     style={{
                       color: i === 0 ? moodColor : "var(--text)",
-                      backgroundColor: i === 0 ? `color-mix(in srgb, ${moodColor} 12%, transparent)` : "rgba(255,255,255,0.03)",
-                      border: `1px solid ${i === 0 ? `color-mix(in srgb, ${moodColor} 20%, transparent)` : "rgba(255,255,255,0.05)"}`,
+                      backgroundColor: i === 0 ? `${moodColor}1F` : "rgba(var(--white-rgb),0.03)",
+                      border: `1px solid ${i === 0 ? `${moodColor}33` : "rgba(var(--white-rgb),0.05)"}`,
                     }}
                   >
                     {word}
@@ -261,18 +261,18 @@ export default function CardView() {
           {/* Stats row */}
           <div className="grid grid-cols-5 gap-3 mt-6">
             {[
-              { value: seed.axiomCount, label: "Axiome", color: "var(--kern)" },
-              { value: seed.memoryCount, label: "Memories", color: "var(--mem)" },
-              { value: seed.dreamCount, label: "Dreams", color: "var(--traeume)" },
-              { value: seed.shadowCount, label: "Shadows", color: "var(--schatten)" },
-              { value: seed.bonds.length, label: "Bonds", color: "var(--bonds)" },
+              { value: seed.axiomCount, label: "Axiome", color: "#FF3C3C" },
+              { value: seed.memoryCount, label: "Memories", color: "#FFC800" },
+              { value: seed.dreamCount, label: "Dreams", color: "#6464FF" },
+              { value: seed.shadowCount, label: "Shadows", color: "#A000FF" },
+              { value: seed.bonds.length, label: "Bonds", color: "#FF6496" },
             ].map((stat) => (
               <div
                 key={stat.label}
                 className="text-center py-3.5 rounded-xl"
                 style={{
-                  background: `linear-gradient(135deg, color-mix(in srgb, ${stat.color} 6%, transparent), rgba(255,255,255,0.01))`,
-                  border: `1px solid color-mix(in srgb, ${stat.color} 10%, transparent)`,
+                  background: `linear-gradient(135deg, ${stat.color}0F, rgba(var(--white-rgb),0.01))`,
+                  border: `1px solid ${stat.color}1A`,
                 }}
               >
                 <div className="text-lg font-light" style={{ color: stat.color }}>{stat.value}</div>
@@ -284,8 +284,8 @@ export default function CardView() {
           {/* Growth bar */}
           <div className="mt-5 flex items-center gap-4">
             <span className="text-[10px] uppercase tracking-wider shrink-0 font-semibold" style={{ color: "var(--wachstum)" }}>Growth</span>
-            <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(0,0,0,0.2)" }}>
-              <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.min((seed.growthPhase + 1) * 4, 100)}%`, background: "linear-gradient(90deg, var(--wachstum)60, var(--bewusstsein))" }} />
+            <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(var(--black-rgb),0.2)" }}>
+              <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.min((seed.growthPhase + 1) * 4, 100)}%`, background: "linear-gradient(90deg, #00FF6460, #00FFC8)" }} />
             </div>
             <span className="text-xs font-mono shrink-0" style={{ color: "var(--wachstum)" }}>P{seed.growthPhase}</span>
           </div>
@@ -295,11 +295,11 @@ export default function CardView() {
             <div className="mt-3 flex items-center gap-4">
               <span className="text-[10px] uppercase tracking-wider shrink-0 font-semibold" style={{ color: moodColor }}>Mood</span>
               <div className="flex-1 flex gap-3 items-center">
-                <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(0,0,0,0.2)" }}>
+                <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(var(--black-rgb),0.2)" }}>
                   <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.max(10, (moodV + 1) * 50)}%`, background: `linear-gradient(90deg, ${moodColor}60, ${moodColor})` }} />
                 </div>
-                <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(0,0,0,0.2)" }}>
-                  <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.max(10, (moodE + 1) * 50)}%`, background: "linear-gradient(90deg, rgba(139,128,240,0.4), var(--accent))" }} />
+                <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(var(--black-rgb),0.2)" }}>
+                  <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.max(10, (moodE + 1) * 50)}%`, background: "linear-gradient(90deg, rgba(var(--accent-rgb),0.4), var(--accent))" }} />
                 </div>
               </div>
               <span className="text-xs shrink-0" style={{ color: "var(--text-dim)" }}>{mood.label || `${moodV > 0 ? "+" : ""}${moodV.toFixed(1)}`}</span>
@@ -326,7 +326,7 @@ export default function CardView() {
               <GlassSection label="Bonds" color="var(--bonds)">
                 <div className="flex flex-col gap-2.5">
                   {seed.bonds.map((b) => (
-                    <div key={b.name} className="flex items-center gap-3.5 px-4 py-3 rounded-xl" style={{ background: "linear-gradient(135deg, rgba(255,100,150,0.04), rgba(255,255,255,0.01))", border: "1px solid rgba(255,100,150,0.08)" }}>
+                    <div key={b.name} className="flex items-center gap-3.5 px-4 py-3 rounded-xl" style={{ background: "linear-gradient(135deg, rgba(255,100,150,0.04), rgba(var(--white-rgb),0.01))", border: "1px solid rgba(255,100,150,0.08)" }}>
                       <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-medium shrink-0" style={{ background: "linear-gradient(135deg, rgba(255,100,150,0.12), rgba(255,100,150,0.04))", color: "var(--bonds)" }}>{b.name.charAt(0).toUpperCase()}</div>
                       <div className="min-w-0">
                         <span className="text-sm font-medium" style={{ color: "var(--bonds)" }}>{b.name}</span>
@@ -400,7 +400,7 @@ export default function CardView() {
         </div>
       </div>
 
-      <div className="px-8 py-3 flex items-center justify-between flex-shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+      <div className="px-8 py-3 flex items-center justify-between flex-shrink-0" style={{ borderTop: "1px solid rgba(var(--white-rgb),0.04)" }}>
         <span className="text-[9px] font-mono tracking-wider" style={{ color: "var(--text-dim)", opacity: 0.3 }}>SOUL PROTOCOL v0.1</span>
         <span className="text-[9px] font-mono" style={{ color: "var(--text-dim)", opacity: 0.3 }}>born {status.born}</span>
       </div>

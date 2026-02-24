@@ -173,11 +173,11 @@ export default function SettingsView() {
             <div className="ml-auto flex gap-2">
               {engineRunning ? (
                 <>
-                  <Pill label="Restart" color="var(--bewusstsein)" onClick={handleRestart} />
-                  <Pill label="Stop" color="var(--heartbeat)" onClick={() => commands.stopEngine()} />
+                  <Pill label="Restart" color="#00FFC8" onClick={handleRestart} />
+                  <Pill label="Stop" color="#FF3232" onClick={() => commands.stopEngine()} />
                 </>
               ) : (
-                <Pill label="Start" color="var(--wachstum)" onClick={() => commands.startEngine()} />
+                <Pill label="Start" color="#00FF64" onClick={() => commands.startEngine()} />
               )}
             </div>
           </div>
@@ -188,10 +188,10 @@ export default function SettingsView() {
               disabled={saving}
               className="px-6 py-4 rounded-2xl text-xs font-semibold cursor-default shrink-0 transition-all"
               style={{
-                background: "linear-gradient(135deg, rgba(0,255,200,0.15), rgba(0,255,200,0.05))",
+                background: "linear-gradient(135deg, rgba(var(--neon-rgb),0.15), rgba(var(--neon-rgb),0.05))",
                 color: "var(--bewusstsein)",
-                border: "1px solid rgba(0,255,200,0.3)",
-                boxShadow: "0 0 20px rgba(0,255,200,0.15)",
+                border: "1px solid rgba(var(--neon-rgb),0.3)",
+                boxShadow: "0 0 20px rgba(var(--neon-rgb),0.15)",
               }}
             >
               {saving ? "..." : saved ? "Saved" : "Save"}
@@ -230,33 +230,20 @@ export default function SettingsView() {
           <div className="flex flex-col gap-5">
             <div>
               <Label text="Connections" />
-              <div className="flex flex-col gap-3">
-                {/* Telegram */}
-                <div className="neon-card p-5">
-                  <div className="flex items-center gap-2.5 mb-3">
-                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4" style={{ color: "#0088cc" }}>
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
-                    </svg>
-                    <span className="text-sm font-medium" style={{ color: "var(--bewusstsein)" }}>Telegram</span>
-                    {env.TELEGRAM_BOT_TOKEN && <span className="w-2 h-2 rounded-full ml-auto" style={{ backgroundColor: "var(--bewusstsein)", boxShadow: "0 0 8px var(--bewusstsein)" }} />}
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <Inp placeholder="Bot Token" value={env.TELEGRAM_BOT_TOKEN} pw onChange={(v) => updateEnv("TELEGRAM_BOT_TOKEN", v)} />
-                    <Inp placeholder="Owner ID" value={env.TELEGRAM_OWNER_ID} onChange={(v) => updateEnv("TELEGRAM_OWNER_ID", v)} />
-                  </div>
+              <div className="neon-card p-5 flex items-center gap-3">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4" style={{ color: "var(--bewusstsein)" }}>
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                </svg>
+                <div className="flex-1">
+                  <span className="text-sm font-medium" style={{ color: "var(--bewusstsein)" }}>MCP Servers</span>
+                  <p className="text-[10px] mt-0.5" style={{ color: "var(--text-dim)" }}>
+                    Manage connections in the MCP panel
+                  </p>
                 </div>
-
-                {/* GitHub */}
-                <div className="neon-card p-5">
-                  <div className="flex items-center gap-2.5 mb-3">
-                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4" style={{ color: "var(--bewusstsein)" }}>
-                      <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-                    </svg>
-                    <span className="text-sm font-medium" style={{ color: "var(--bewusstsein)" }}>GitHub</span>
-                    {env.GITHUB_TOKEN && <span className="w-2 h-2 rounded-full ml-auto" style={{ backgroundColor: "var(--bewusstsein)", boxShadow: "0 0 8px var(--bewusstsein)" }} />}
-                  </div>
-                  <Inp placeholder="Personal Access Token" value={env.GITHUB_TOKEN} pw onChange={(v) => updateEnv("GITHUB_TOKEN", v)} />
-                </div>
+                <span className="text-[9px] font-mono px-2 py-0.5 rounded-md" style={{ background: "rgba(var(--neon-rgb),0.06)", color: "var(--text-muted)" }}>
+                  MCP
+                </span>
               </div>
             </div>
 
@@ -292,16 +279,16 @@ export default function SettingsView() {
                   </div>
                   <div>
                     {(updateStatus === "idle" || updateStatus === "error") && (
-                      <Pill label="Check" color="var(--bewusstsein)" onClick={handleCheckUpdate} />
+                      <Pill label="Check" color="#00FFC8" onClick={handleCheckUpdate} />
                     )}
                     {updateStatus === "checking" && (
                       <span className="text-xs" style={{ color: "var(--text-dim)" }}>Pruefe...</span>
                     )}
                     {updateStatus === "available" && (
-                      <Pill label="Update" color="var(--wachstum)" onClick={handleInstallUpdate} />
+                      <Pill label="Update" color="#00FF64" onClick={handleInstallUpdate} />
                     )}
                     {updateStatus === "downloading" && (
-                      <div className="h-1.5 w-20 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(0,255,200,0.1)" }}>
+                      <div className="h-1.5 w-20 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(var(--neon-rgb),0.1)" }}>
                         <div className="h-full rounded-full transition-all" style={{ width: `${downloadProgress}%`, backgroundColor: "var(--bewusstsein)", boxShadow: "0 0 8px var(--bewusstsein)" }} />
                       </div>
                     )}
@@ -344,11 +331,11 @@ function Pill({ label, color, onClick }: { label: string; color: string; onClick
       onClick={onClick}
       className="px-4 py-2 rounded-xl text-xs font-semibold cursor-default transition-all"
       style={{
-        background: `linear-gradient(135deg, color-mix(in srgb, ${color} 18%, transparent), color-mix(in srgb, ${color} 6%, transparent))`,
+        background: `linear-gradient(135deg, ${color}2E, ${color}0F)`,
         color,
-        border: `1px solid color-mix(in srgb, ${color} 25%, transparent)`,
-        textShadow: `0 0 8px color-mix(in srgb, ${color} 30%, transparent)`,
-        boxShadow: `0 0 12px color-mix(in srgb, ${color} 10%, transparent)`,
+        border: `1px solid ${color}40`,
+        textShadow: `0 0 8px ${color}4D`,
+        boxShadow: `0 0 12px ${color}1A`,
       }}
     >
       {label}
@@ -368,13 +355,13 @@ function Provider({
     <div
       className="rounded-2xl p-5 transition-all"
       style={{
-        border: `1px solid ${ok ? `color-mix(in srgb, ${color} 30%, transparent)` : "rgba(0,255,200,0.08)"}`,
+        border: `1px solid ${ok ? `${color}4D` : "rgba(var(--neon-rgb),0.08)"}`,
         background: ok
-          ? `linear-gradient(160deg, color-mix(in srgb, ${color} 8%, transparent), rgba(0,0,20,0.6))`
-          : "linear-gradient(160deg, rgba(0,255,200,0.03), rgba(0,0,20,0.6))",
+          ? `linear-gradient(160deg, ${color}14, rgba(var(--dark-rgb),0.6))`
+          : "linear-gradient(160deg, rgba(var(--neon-rgb),0.03), rgba(var(--dark-rgb),0.6))",
         boxShadow: ok
-          ? `0 0 15px color-mix(in srgb, ${color} 12%, transparent), inset 0 1px 0 color-mix(in srgb, ${color} 8%, transparent)`
-          : "0 0 8px rgba(0,255,200,0.03)",
+          ? `0 0 15px ${color}1F, inset 0 1px 0 ${color}14`
+          : "0 0 8px rgba(var(--neon-rgb),0.03)",
       }}
     >
       <div className="flex items-center justify-between mb-3">
@@ -403,7 +390,7 @@ function Toggle({ label, desc, on, toggle, last }: { label: string; desc: string
   return (
     <div
       className="flex items-center justify-between px-5 py-4 cursor-default"
-      style={{ borderBottom: last ? "none" : "1px solid rgba(0,255,200,0.06)" }}
+      style={{ borderBottom: last ? "none" : "1px solid rgba(var(--neon-rgb),0.06)" }}
       onClick={toggle}
     >
       <div>
@@ -413,8 +400,8 @@ function Toggle({ label, desc, on, toggle, last }: { label: string; desc: string
       <div
         className="w-[38px] h-[22px] rounded-full relative transition-all shrink-0 ml-4"
         style={{
-          backgroundColor: on ? "var(--bewusstsein)" : "rgba(0,255,200,0.08)",
-          boxShadow: on ? "0 0 12px rgba(0,255,200,0.3)" : "inset 0 1px 2px rgba(0,0,0,0.2)",
+          backgroundColor: on ? "var(--bewusstsein)" : "rgba(var(--neon-rgb),0.08)",
+          boxShadow: on ? "0 0 12px rgba(var(--neon-rgb),0.3)" : "inset 0 1px 2px rgba(var(--black-rgb),0.2)",
         }}
       >
         <div
@@ -422,7 +409,7 @@ function Toggle({ label, desc, on, toggle, last }: { label: string; desc: string
           style={{
             backgroundColor: on ? "#0A0C14" : "#fff",
             left: on ? "calc(100% - 20px)" : "2px",
-            boxShadow: on ? "0 0 4px rgba(0,255,200,0.5)" : "0 1px 3px rgba(0,0,0,0.3)",
+            boxShadow: on ? "0 0 4px rgba(var(--neon-rgb),0.5)" : "0 1px 3px rgba(var(--black-rgb),0.3)",
           }}
         />
       </div>

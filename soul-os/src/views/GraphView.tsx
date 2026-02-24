@@ -6,11 +6,11 @@ interface Relation { from: string; to: string; relationType: string; }
 interface GraphData { entities: Entity[]; relations: Relation[]; }
 
 const TYPE_COLORS: Record<string, string> = {
-  person: "var(--bonds)", concept: "var(--bewusstsein)", project: "var(--manifest)",
-  tool: "var(--interessen)", event: "var(--mem)", place: "var(--wachstum)", emotion: "var(--traeume)",
+  person: "#FF6496", concept: "#00FFC8", project: "#FF9600",
+  tool: "#00C8FF", event: "#FFC800", place: "#00FF64", emotion: "#6464FF",
 };
 
-function getColor(type: string) { return TYPE_COLORS[type.toLowerCase()] || "var(--accent)"; }
+function getColor(type: string) { return TYPE_COLORS[type.toLowerCase()] || "#8B80F0"; }
 
 export default function GraphView() {
   const [data, setData] = useState<GraphData | null>(null);
@@ -76,7 +76,7 @@ export default function GraphView() {
             <button
               onClick={() => setSearch("")}
               className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center text-[10px]"
-              style={{ backgroundColor: "rgba(255,255,255,0.06)", color: "var(--text-dim)" }}
+              style={{ backgroundColor: "rgba(var(--white-rgb),0.06)", color: "var(--text-dim)" }}
             >
               {"\u2715"}
             </button>
@@ -91,7 +91,7 @@ export default function GraphView() {
         <div className="flex-1 overflow-auto pr-1">
           {data.entities.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center">
-              <div className="w-20 h-20 rounded-3xl flex items-center justify-center mb-5" style={{ background: "linear-gradient(135deg, rgba(0,200,255,0.06), rgba(139,128,240,0.04))", border: "1px solid rgba(0,200,255,0.08)" }}>
+              <div className="w-20 h-20 rounded-3xl flex items-center justify-center mb-5" style={{ background: "linear-gradient(135deg, rgba(0,200,255,0.06), rgba(var(--accent-rgb),0.04))", border: "1px solid rgba(0,200,255,0.08)" }}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="w-9 h-9" style={{ color: "var(--interessen)", opacity: 0.4 }}>
                   <circle cx="12" cy="6" r="2" /><circle cx="6" cy="14" r="2" /><circle cx="18" cy="14" r="2" />
                   <path d="M12 8v2M8 13l2-1M16 13l-2-1" /><circle cx="12" cy="12" r="1" fill="currentColor" />
@@ -121,8 +121,8 @@ export default function GraphView() {
                             onClick={() => setSelected(isSel ? null : entity)}
                             className="glass-card glass-card-hover px-5 py-4 text-left cursor-default transition-all"
                             style={{
-                              borderColor: isSel ? `color-mix(in srgb, ${color} 30%, transparent)` : undefined,
-                              background: isSel ? `linear-gradient(135deg, color-mix(in srgb, ${color} 8%, transparent), rgba(255,255,255,0.01))` : undefined,
+                              borderColor: isSel ? `${color}4D` : undefined,
+                              background: isSel ? `linear-gradient(135deg, ${color}14, rgba(var(--white-rgb),0.01))` : undefined,
                             }}
                           >
                             <div className="text-sm font-medium truncate" style={{ color: isSel ? color : "var(--text-bright)" }}>
@@ -154,7 +154,7 @@ export default function GraphView() {
                   <span className="text-[11px] uppercase tracking-wider" style={{ color: getColor(selected.entityType) }}>{selected.entityType}</span>
                 </div>
               </div>
-              <button onClick={() => setSelected(null)} className="w-7 h-7 rounded-lg flex items-center justify-center text-xs" style={{ background: "rgba(255,255,255,0.04)", color: "var(--text-dim)" }}>
+              <button onClick={() => setSelected(null)} className="w-7 h-7 rounded-lg flex items-center justify-center text-xs" style={{ background: "rgba(var(--white-rgb),0.04)", color: "var(--text-dim)" }}>
                 {"\u2715"}
               </button>
             </div>
@@ -164,7 +164,7 @@ export default function GraphView() {
                 <div className="text-[10px] uppercase tracking-[0.15em] font-semibold mb-2.5" style={{ color: "var(--text-dim)" }}>Observations</div>
                 <div className="flex flex-col gap-2.5">
                   {selected.observations.map((obs, i) => (
-                    <div key={i} className="text-xs leading-relaxed pl-3.5 py-2 rounded-r-lg" style={{ color: "var(--text)", borderLeft: `2px solid ${getColor(selected.entityType)}25`, background: "rgba(255,255,255,0.01)" }}>
+                    <div key={i} className="text-xs leading-relaxed pl-3.5 py-2 rounded-r-lg" style={{ color: "var(--text)", borderLeft: `2px solid ${getColor(selected.entityType)}25`, background: "rgba(var(--white-rgb),0.01)" }}>
                       {obs}
                     </div>
                   ))}
@@ -186,7 +186,7 @@ export default function GraphView() {
                     return (
                       <button key={i} onClick={() => { const t = data.entities.find((x) => x.name === other); if (t) setSelected(t); }}
                         className="flex items-center gap-2.5 text-xs text-left px-3.5 py-2.5 rounded-lg transition-all cursor-default"
-                        style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.03)" }}>
+                        style={{ background: "rgba(var(--white-rgb),0.02)", border: "1px solid rgba(var(--white-rgb),0.03)" }}>
                         <span style={{ color: "var(--text-muted)" }}>{isFrom ? "\u2192" : "\u2190"}</span>
                         <span className="flex-1 truncate" style={{ color: "var(--bonds)" }}>{other}</span>
                         <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>{rel.relationType}</span>

@@ -6,7 +6,7 @@ import type { ProtocolStep, ParsedSession } from "./monitor-parse";
 
 const STATUS = {
   done:          { dot: "#00ff82", bg: "rgba(0,255,130,0.06)", icon: "✓" },
-  pending:       { dot: "rgba(255,255,255,0.2)", bg: "rgba(255,255,255,0.02)", icon: "○" },
+  pending:       { dot: "#b8b4cc", bg: "rgba(var(--white-rgb),0.02)", icon: "○" },
   skipped:       { dot: "#ffc800", bg: "rgba(255,200,0,0.04)", icon: "–" },
   failed:        { dot: "#ff5050", bg: "rgba(255,80,80,0.06)", icon: "✗" },
   not_triggered: { dot: "#4488ff", bg: "rgba(68,136,255,0.04)", icon: "◇" },
@@ -14,17 +14,17 @@ const STATUS = {
 
 const SUB_STATUS = {
   running: { dot: "#00ff82", text: "var(--wachstum)" },
-  stopped: { dot: "rgba(255,255,255,0.2)", text: "var(--text-dim)" },
+  stopped: { dot: "rgba(var(--white-rgb),0.2)", text: "var(--text-dim)" },
   error:   { dot: "#ff5050", text: "var(--heartbeat)" },
-  offline: { dot: "rgba(255,255,255,0.1)", text: "var(--text-muted)" },
+  offline: { dot: "rgba(var(--white-rgb),0.1)", text: "var(--text-muted)" },
 } as const;
 
 const EVENT_COLORS: Record<string, string> = {
-  pulse: "var(--bewusstsein)",
-  file: "var(--manifest)",
-  bus: "var(--evolution)",
-  mood: "var(--traeume)",
-  error: "var(--heartbeat)",
+  pulse: "#00ffc8",
+  file: "#ff9600",
+  bus: "#c864ff",
+  mood: "#6464ff",
+  error: "#ff3232",
 };
 
 /* ── Step Item ───────────────────────────────────────────── */
@@ -49,7 +49,7 @@ function StepItem({ step }: { step: ProtocolStep }) {
           </span>
           {step.conditional && (
             <span className="text-[8px] px-1.5 py-0.5 rounded-full uppercase tracking-wider font-mono"
-              style={{ color: "var(--text-muted)", backgroundColor: "rgba(255,255,255,0.04)" }}>
+              style={{ color: "var(--text-muted)", backgroundColor: "rgba(var(--white-rgb),0.04)" }}>
               cond
             </span>
           )}
@@ -100,7 +100,7 @@ function SessionProtocol({ session, latest }: { session: { active: boolean; numb
           <div
             className="w-2.5 h-2.5 rounded-full"
             style={{
-              backgroundColor: session.active ? "#00ff82" : "rgba(255,255,255,0.15)",
+              backgroundColor: session.active ? "#00ff82" : "rgba(var(--white-rgb),0.15)",
               boxShadow: session.active ? "0 0 10px #00ff8260" : "none",
             }}
           />
@@ -119,7 +119,7 @@ function SessionProtocol({ session, latest }: { session: { active: boolean; numb
       </div>
 
       {/* Completion bar */}
-      <div className="h-1 rounded-full mb-5 overflow-hidden" style={{ backgroundColor: "rgba(255,255,255,0.04)" }}>
+      <div className="h-1 rounded-full mb-5 overflow-hidden" style={{ backgroundColor: "rgba(var(--white-rgb),0.04)" }}>
         <div
           className="h-full rounded-full transition-all duration-700"
           style={{
@@ -169,7 +169,7 @@ function EngineGrid({ subsystems, online }: { subsystems: SubsystemInfo[]; onlin
       {subsystems.map(sub => {
         const s = SUB_STATUS[sub.status];
         return (
-          <div key={sub.id} className="rounded-lg px-3 py-2.5" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}>
+          <div key={sub.id} className="rounded-lg px-3 py-2.5" style={{ background: "rgba(var(--white-rgb),0.02)", border: "1px solid rgba(var(--white-rgb),0.04)" }}>
             <div className="flex items-center gap-2 mb-1">
               <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.dot, boxShadow: `0 0 4px ${s.dot}` }} />
               <span className="text-[10px] font-semibold truncate" style={{ color: s.text }}>{sub.name}</span>
@@ -194,11 +194,11 @@ function EventStream({ entries, filter }: { entries: EventEntry[]; filter: strin
         <span className="text-[10px] py-4 text-center" style={{ color: "var(--text-muted)" }}>No events yet</span>
       )}
       {filtered.map(e => (
-        <div key={e.id} className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: "rgba(255,255,255,0.01)" }}>
+        <div key={e.id} className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: "rgba(var(--white-rgb),0.01)" }}>
           <span className="text-[9px] font-mono flex-shrink-0 w-14" style={{ color: "var(--text-muted)" }}>{e.time}</span>
           <span
             className="text-[8px] px-1.5 py-0.5 rounded font-mono uppercase flex-shrink-0 w-10 text-center"
-            style={{ color: EVENT_COLORS[e.type] || "var(--text-dim)", backgroundColor: `${EVENT_COLORS[e.type] || "var(--text-dim)"}10` }}
+            style={{ color: EVENT_COLORS[e.type] || "var(--text-dim)", backgroundColor: `${EVENT_COLORS[e.type] || "#565478"}10` }}
           >
             {e.type}
           </span>
@@ -217,7 +217,7 @@ function FileIntegrity({ files }: { files: FileInfo[] }) {
       {files.map(f => {
         const color = !f.exists ? "#ff5050" : !f.valid ? "#ffc800" : "#00ff82";
         return (
-          <div key={f.path} className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: "rgba(255,255,255,0.01)" }}>
+          <div key={f.path} className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: "rgba(var(--white-rgb),0.01)" }}>
             <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
             <span className="text-[9px] font-mono flex-1 truncate" style={{ color: "var(--text-dim)" }}>{f.path}</span>
             <span className="text-[8px] font-mono flex-shrink-0" style={{ color: "var(--text-muted)" }}>
@@ -249,7 +249,7 @@ function CostPanel({ costs }: { costs: { todayTokens: number; todayCalls: number
           {costs.budgetPercent}% budget
         </span>
       </div>
-      <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(255,255,255,0.04)" }}>
+      <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(var(--white-rgb),0.04)" }}>
         <div
           className="h-full rounded-full transition-all duration-500"
           style={{ width: `${Math.min(costs.budgetPercent, 100)}%`, backgroundColor: barColor, boxShadow: `0 0 6px ${barColor}` }}
@@ -269,14 +269,14 @@ function SessionHistory({ sessions, activeNumber }: { sessions: ParsedSession[];
       {sessions.map(s => {
         const isActive = s.number === activeNumber;
         const isComplete = s.hasEnd;
-        const color = isActive ? "#00ff82" : isComplete ? "var(--text-dim)" : "#ff5050";
+        const color = isActive ? "#00ff82" : isComplete ? "#565478" : "#ff5050";
         return (
           <div
             key={s.number}
             className="px-2 py-1 rounded text-[9px] font-mono"
             style={{
               color,
-              backgroundColor: isActive ? "rgba(0,255,130,0.08)" : "rgba(255,255,255,0.03)",
+              backgroundColor: isActive ? "rgba(0,255,130,0.08)" : "rgba(var(--white-rgb),0.03)",
               border: `1px solid ${color}20`,
             }}
           >
@@ -295,8 +295,8 @@ export default function MonitorView() {
   const [eventFilter, setEventFilter] = useState("all");
 
   const sectionStyle = useMemo(() => ({
-    background: "rgba(255,255,255,0.015)",
-    border: "1px solid rgba(255,255,255,0.04)",
+    background: "rgba(var(--white-rgb),0.015)",
+    border: "1px solid rgba(var(--white-rgb),0.04)",
     borderRadius: "12px",
     padding: "16px",
     marginBottom: "12px",
@@ -314,7 +314,7 @@ export default function MonitorView() {
   return (
     <div className="h-full flex flex-col" style={{ backgroundColor: "var(--bg-base)" }}>
       {/* Header */}
-      <div className="px-6 py-4 flex-shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+      <div className="px-6 py-4 flex-shrink-0" style={{ borderBottom: "1px solid rgba(var(--white-rgb),0.05)" }}>
         <div className="flex items-center gap-3">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4" style={{ color: "var(--heartbeat)" }}>
             <rect x="2" y="3" width="20" height="14" rx="2" />
@@ -361,7 +361,7 @@ export default function MonitorView() {
                   className="text-[8px] px-2 py-0.5 rounded-full font-mono uppercase cursor-default transition-all"
                   style={{
                     color: eventFilter === f ? "#e0e0e0" : "var(--text-muted)",
-                    backgroundColor: eventFilter === f ? "rgba(255,255,255,0.08)" : "transparent",
+                    backgroundColor: eventFilter === f ? "rgba(var(--white-rgb),0.08)" : "transparent",
                   }}
                 >
                   {f}

@@ -18,6 +18,7 @@ import TimelineView from "./views/TimelineView";
 import MemoryMapView from "./views/MemoryMapView";
 import HealthView from "./views/HealthView";
 import MonitorView from "./views/MonitorView";
+import MCPView from "./views/MCPView";
 import SetupWizard from "./views/SetupWizard";
 import FoundingChat from "./views/FoundingChat";
 import { useActiveNodes, useCurrentPulse, useMood, useActivityFeed } from "./lib/store";
@@ -39,6 +40,7 @@ export type ViewId =
   | "health"
   | "monitor"
   | "founding"
+  | "mcp"
   | "terminal"
   | "settings";
 
@@ -63,13 +65,13 @@ const PANELS: PanelDef[] = [
   {
     id: "whisper",
     label: "Whisper",
-    color: "var(--traeume)",
+    color: "#6464FF",
     icon: icon("M2 12c1.5-3 3-4.5 4.5-4.5S9 10.5 10 12s2 4.5 3.5 4.5S16 15 17.5 12 20 7.5 22 12"),
   },
   {
     id: "card",
     label: "Card",
-    color: "var(--seed)",
+    color: "#DCDCFF",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
         <rect x="3" y="4" width="18" height="16" rx="2" />
@@ -81,7 +83,7 @@ const PANELS: PanelDef[] = [
   {
     id: "chain",
     label: "Chain",
-    color: "var(--wachstum)",
+    color: "#00FF64",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
         <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
@@ -92,13 +94,13 @@ const PANELS: PanelDef[] = [
   {
     id: "impulse",
     label: "Impulse",
-    color: "var(--manifest)",
+    color: "#FF9600",
     icon: icon("M13 2L3 14h9l-1 8 10-12h-9l1-8z"),
   },
   {
     id: "graph",
     label: "Graph",
-    color: "var(--interessen)",
+    color: "#00C8FF",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
         <circle cx="12" cy="6" r="2" />
@@ -112,7 +114,7 @@ const PANELS: PanelDef[] = [
   {
     id: "replay",
     label: "Replay",
-    color: "var(--statelog)",
+    color: "#50C8B4",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
         <circle cx="12" cy="12" r="9" />
@@ -123,7 +125,7 @@ const PANELS: PanelDef[] = [
   {
     id: "history",
     label: "History",
-    color: "var(--evolution)",
+    color: "#C864FF",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
         <circle cx="12" cy="5" r="2" />
@@ -136,7 +138,7 @@ const PANELS: PanelDef[] = [
   {
     id: "timeline",
     label: "Timeline",
-    color: "var(--wachstum)",
+    color: "#00FF64",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
         <path d="M12 2v20" />
@@ -150,7 +152,7 @@ const PANELS: PanelDef[] = [
   {
     id: "memorymap",
     label: "Map",
-    color: "var(--graph)",
+    color: "#00DCB4",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
         <circle cx="5" cy="6" r="2" /><circle cx="19" cy="6" r="2" /><circle cx="12" cy="18" r="2" />
@@ -161,7 +163,7 @@ const PANELS: PanelDef[] = [
   {
     id: "health",
     label: "Health",
-    color: "var(--heartbeat)",
+    color: "#FF3232",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
         <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
@@ -181,9 +183,20 @@ const PANELS: PanelDef[] = [
     ),
   },
   {
+    id: "mcp",
+    label: "MCP",
+    color: "#00C8FF",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+      </svg>
+    ),
+  },
+  {
     id: "founding",
     label: "Founding",
-    color: "var(--kern)",
+    color: "#FF3C3C",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
         <path d="M12 22V12" />
@@ -195,7 +208,7 @@ const PANELS: PanelDef[] = [
   {
     id: "settings",
     label: "Settings",
-    color: "var(--accent)",
+    color: "#8B80F0",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
         <circle cx="12" cy="12" r="3" />
@@ -217,6 +230,7 @@ const PANEL_COMPONENTS: Record<PanelId, React.FC> = {
   memorymap: MemoryMapView,
   health: HealthView,
   monitor: MonitorView,
+  mcp: MCPView,
   founding: FoundingView,
   settings: SettingsView,
 };
@@ -235,6 +249,7 @@ const WIDGET_POSITIONS: Record<PanelId, React.CSSProperties> = {
   memorymap: { bottom: "2%", left: "20%" },
   health:    { bottom: "2%", left: "8%" },
   monitor:   { top: "4%", left: "3%" },
+  mcp:       { bottom: "2%", right: "20%" },
   founding:  { bottom: "2%", left: "50%", transform: "translateX(-50%)" },
   settings: { bottom: "2%", right: "3%" },
 };
@@ -266,7 +281,7 @@ function BootSplash({ onDone }: { onDone: () => void }) {
         alt=""
         className="w-24 h-24 mb-6"
         style={{
-          filter: "drop-shadow(0 0 40px rgba(139, 128, 240, 0.4)) drop-shadow(0 0 80px rgba(0, 255, 200, 0.15))",
+          filter: "drop-shadow(0 0 40px rgba(var(--accent-rgb), 0.4)) drop-shadow(0 0 80px rgba(var(--neon-rgb), 0.15))",
           transform: phase === "hold" ? "scale(1)" : "scale(0.95)",
           opacity: phase === "hold" ? 1 : 0,
           transition: "all 0.8s cubic-bezier(0.16, 1, 0.3, 1)",
@@ -277,7 +292,7 @@ function BootSplash({ onDone }: { onDone: () => void }) {
       <div
         className="w-8 h-0.5 rounded-full overflow-hidden mt-8"
         style={{
-          backgroundColor: "rgba(139, 128, 240, 0.15)",
+          backgroundColor: "rgba(var(--accent-rgb), 0.15)",
           opacity: phase === "hold" ? 1 : 0,
           transition: "opacity 0.6s ease 0.3s",
         }}
@@ -285,7 +300,7 @@ function BootSplash({ onDone }: { onDone: () => void }) {
         <div
           className="h-full rounded-full"
           style={{
-            backgroundColor: "rgba(139, 128, 240, 0.5)",
+            backgroundColor: "rgba(var(--accent-rgb), 0.5)",
             width: phase === "hold" ? "100%" : "0%",
             transition: "width 1.8s ease-in-out 0.3s",
           }}
@@ -417,11 +432,11 @@ function App() {
                 src="/logo.png"
                 alt=""
                 className="w-4 h-4"
-                style={{ filter: "drop-shadow(0 0 6px rgba(139,128,240,0.4))", opacity: 0.7 }}
+                style={{ filter: "drop-shadow(0 0 6px rgba(var(--accent-rgb),0.4))", opacity: 0.7 }}
               />
               <span
                 className="text-[11px] font-semibold tracking-[0.2em]"
-                style={{ color: "var(--text-dim)", textShadow: "0 0 10px rgba(0,255,200,0.15)" }}
+                style={{ color: "var(--text-dim)", textShadow: "0 0 10px rgba(var(--neon-rgb),0.15)" }}
               >
                 soulOS
               </span>
@@ -464,19 +479,19 @@ function App() {
                     onClick={() => togglePanel(panel.id)}
                     className="group flex items-center gap-2 px-3 py-2 rounded-xl cursor-default transition-all hover:scale-105"
                     style={{
-                      background: "linear-gradient(160deg, rgba(0,255,200,0.04), rgba(10,12,20,0.7))",
-                      border: `1px solid color-mix(in srgb, ${panel.color} 20%, transparent)`,
+                      background: "linear-gradient(160deg, rgba(var(--neon-rgb),0.04), rgba(var(--bg-base-rgb),0.7))",
+                      border: `1px solid ${panel.color}33`,
                       backdropFilter: "blur(12px)",
                       WebkitBackdropFilter: "blur(12px)",
-                      boxShadow: `0 0 10px color-mix(in srgb, ${panel.color} 8%, transparent), 0 4px 12px rgba(0,0,0,0.3)`,
+                      boxShadow: `0 0 10px ${panel.color}14, 0 4px 12px rgba(var(--black-rgb),0.3)`,
                     }}
                   >
-                    <span style={{ color: panel.color, filter: `drop-shadow(0 0 4px color-mix(in srgb, ${panel.color} 40%, transparent))` }}>
+                    <span style={{ color: panel.color, filter: `drop-shadow(0 0 4px ${panel.color}66)` }}>
                       {panel.icon}
                     </span>
                     <span
                       className="text-[10px] uppercase tracking-[0.12em] font-medium"
-                      style={{ color: panel.color, textShadow: `0 0 8px color-mix(in srgb, ${panel.color} 25%, transparent)` }}
+                      style={{ color: panel.color, textShadow: `0 0 8px ${panel.color}40` }}
                     >
                       {panel.label}
                     </span>
@@ -503,20 +518,20 @@ function App() {
                       left: 20,
                       right: 20,
                       bottom: 20,
-                      background: "linear-gradient(160deg, rgba(0,255,200,0.03) 0%, rgba(10, 12, 20, 0.88) 30%, rgba(10, 12, 20, 0.85) 100%)",
-                      border: "1px solid rgba(0,255,200,0.22)",
-                      boxShadow: "0 0 40px rgba(0,255,200,0.1), 0 0 80px rgba(0,255,200,0.04), 0 24px 64px rgba(0,0,0,0.5), inset 0 1px 0 rgba(0,255,200,0.08)",
+                      background: "linear-gradient(160deg, rgba(var(--neon-rgb),0.03) 0%, rgba(var(--bg-base-rgb), 0.88) 30%, rgba(var(--bg-base-rgb), 0.85) 100%)",
+                      border: "1px solid rgba(var(--neon-rgb),0.22)",
+                      boxShadow: "0 0 40px rgba(var(--neon-rgb),0.1), 0 0 80px rgba(var(--neon-rgb),0.04), 0 24px 64px rgba(var(--black-rgb),0.5), inset 0 1px 0 rgba(var(--neon-rgb),0.08)",
                     }}
                   >
                     <div
                       className="flex items-center justify-between px-5 h-10 flex-shrink-0"
-                      style={{ borderBottom: "1px solid rgba(0,255,200,0.1)" }}
+                      style={{ borderBottom: "1px solid rgba(var(--neon-rgb),0.1)" }}
                     >
                       <div className="flex items-center gap-2">
                         <span style={{ color: panelDef.color, filter: `drop-shadow(0 0 4px ${panelDef.color})` }}>{panelDef.icon}</span>
                         <span
                           className="text-xs font-semibold uppercase tracking-[0.15em]"
-                          style={{ color: panelDef.color, textShadow: `0 0 10px color-mix(in srgb, ${panelDef.color} 40%, transparent)` }}
+                          style={{ color: panelDef.color, textShadow: `0 0 10px ${panelDef.color}66` }}
                         >
                           {panelDef.label}
                         </span>
@@ -526,8 +541,8 @@ function App() {
                         className="text-[9px] px-2.5 py-0.5 rounded-lg cursor-default transition-all"
                         style={{
                           color: "var(--bewusstsein)",
-                          backgroundColor: "rgba(0,255,200,0.06)",
-                          border: "1px solid rgba(0,255,200,0.15)",
+                          backgroundColor: "rgba(var(--neon-rgb),0.06)",
+                          border: "1px solid rgba(var(--neon-rgb),0.15)",
                         }}
                       >
                         ESC

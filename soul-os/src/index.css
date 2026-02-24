@@ -1,30 +1,40 @@
 @import "tailwindcss";
 
 :root {
-  /* Background layers — deeper, richer */
+  /* ═══ CHANNEL TOKENS ═══════════════════════════════════
+     Foundation for theme switching.
+     Change these → entire color scheme follows.           */
+  --neon-rgb: 0, 255, 200;       /* Primary neon — Cyan */
+  --accent-rgb: 139, 128, 240;   /* Secondary — Purple   */
+  --white-rgb: 255, 255, 255;    /* Glass / highlights    */
+  --dark-rgb: 0, 0, 20;          /* Deep neon dark        */
+  --black-rgb: 0, 0, 0;          /* Pure dark             */
+  --bg-base-rgb: 10, 12, 20;     /* Base background       */
+
+  /* ═══ BACKGROUND LAYERS ════════════════════════════════ */
   --bg-base: #0A0C14;
   --bg-surface: #12142A;
   --bg-surface-light: #1A1D3A;
   --bg-elevated: #222548;
 
-  /* Glass layers */
-  --glass: rgba(255, 255, 255, 0.03);
-  --glass-border: rgba(255, 255, 255, 0.07);
-  --glass-hover: rgba(255, 255, 255, 0.06);
-  --glass-strong: rgba(255, 255, 255, 0.05);
+  /* ═══ GLASS LAYERS ═════════════════════════════════════ */
+  --glass: rgba(var(--white-rgb), 0.03);
+  --glass-border: rgba(var(--white-rgb), 0.07);
+  --glass-hover: rgba(var(--white-rgb), 0.06);
+  --glass-strong: rgba(var(--white-rgb), 0.05);
 
-  /* Accent */
+  /* ═══ ACCENT ═══════════════════════════════════════════ */
   --accent: #8B80F0;
-  --accent-dim: rgba(139, 128, 240, 0.3);
-  --accent-glow: rgba(139, 128, 240, 0.15);
+  --accent-dim: rgba(var(--accent-rgb), 0.3);
+  --accent-glow: rgba(var(--accent-rgb), 0.15);
 
-  /* Text */
+  /* ═══ TEXT ══════════════════════════════════════════════ */
   --text: #B8B4CC;
   --text-dim: #565478;
   --text-bright: #E8E6FF;
   --text-muted: #3E3C5A;
 
-  /* Node colors (from soul-monitor PALETTE) */
+  /* ═══ NODE COLORS (soul-monitor PALETTE) ═══════════════ */
   --seed: #DCDCFF;
   --kern: #FF3C3C;
   --bewusstsein: #00FFC8;
@@ -41,13 +51,31 @@
   --statelog: #50C8B4;
   --graph: #00DCB4;
 
-  /* Layout */
+  /* ═══ LAYOUT ═══════════════════════════════════════════ */
   --statusbar-height: 30px;
   --radius-2xl: 20px;
   --radius-xl: 16px;
   --radius-lg: 12px;
   --radius-md: 10px;
   --radius-sm: 8px;
+
+  /* ═══ BLUR & SATURATE ══════════════════════════════════ */
+  --blur-heavy: 40px;
+  --blur-medium: 16px;
+  --blur-light: 12px;
+  --saturate-heavy: 200%;
+  --saturate-medium: 150%;
+
+  /* ═══ TIMING & EASING ══════════════════════════════════ */
+  --duration-instant: 180ms;
+  --duration-fast: 200ms;
+  --duration-glow: 2s;
+  --duration-breath: 3s;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-bounce: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ═══ NEON TYPOGRAPHY ══════════════════════════════════ */
+  --tracking-neon: 0.15em;
 
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", system-ui, sans-serif;
   color: var(--text);
@@ -79,44 +107,44 @@ html, body, #root {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(139, 128, 240, 0.12);
+  background: rgba(var(--accent-rgb), 0.12);
   border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(139, 128, 240, 0.25);
+  background: rgba(var(--accent-rgb), 0.25);
 }
 
 /* ── Glass Effects ─────────────────────────────────────── */
 .frosted {
-  backdrop-filter: blur(40px) saturate(200%);
-  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  backdrop-filter: blur(var(--blur-heavy)) saturate(var(--saturate-heavy));
+  -webkit-backdrop-filter: blur(var(--blur-heavy)) saturate(var(--saturate-heavy));
 }
 
 .glass {
   background: var(--glass);
-  backdrop-filter: blur(16px) saturate(150%);
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(var(--blur-medium)) saturate(var(--saturate-medium));
+  -webkit-backdrop-filter: blur(var(--blur-medium)) saturate(var(--saturate-medium));
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-xl);
 }
 
 .glass-card {
-  background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: linear-gradient(135deg, rgba(var(--white-rgb), 0.04) 0%, rgba(var(--white-rgb), 0.01) 100%);
+  backdrop-filter: blur(var(--blur-light));
+  -webkit-backdrop-filter: blur(var(--blur-light));
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-xl);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: 0 4px 24px rgba(var(--black-rgb), 0.2), inset 0 1px 0 rgba(var(--white-rgb), 0.04);
 }
 
 .glass-card-hover:hover {
-  background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(135deg, rgba(var(--white-rgb), 0.06) 0%, rgba(var(--white-rgb), 0.02) 100%);
+  border-color: rgba(var(--white-rgb), 0.1);
 }
 
 .glass-inset {
-  background: rgba(0, 0, 0, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(var(--black-rgb), 0.15);
+  border: 1px solid rgba(var(--white-rgb), 0.04);
   border-radius: var(--radius-md);
 }
 
@@ -127,7 +155,7 @@ html, body, #root {
 }
 
 .glow-pulse {
-  animation: glow-pulse 2s ease-in-out infinite;
+  animation: glow-pulse var(--duration-glow) ease-in-out infinite;
 }
 
 @keyframes breathe {
@@ -136,7 +164,7 @@ html, body, #root {
 }
 
 .animate-breathe {
-  animation: breathe 3s ease-in-out infinite;
+  animation: breathe var(--duration-breath) ease-in-out infinite;
 }
 
 @keyframes shimmer {
@@ -145,14 +173,14 @@ html, body, #root {
 }
 
 .shimmer {
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--white-rgb), 0.03), transparent);
   background-size: 200% 100%;
-  animation: shimmer 3s ease-in-out infinite;
+  animation: shimmer var(--duration-breath) ease-in-out infinite;
 }
 
 /* ── View transition ───────────────────────────────────── */
 .view-transition {
-  transition: opacity 200ms ease, transform 200ms ease;
+  transition: opacity var(--duration-fast) ease, transform var(--duration-fast) ease;
 }
 
 /* ── Terminal ──────────────────────────────────────────── */
@@ -164,7 +192,7 @@ html, body, #root {
 /* ── Form Elements ─────────────────────────────────────── */
 input:focus, select:focus, textarea:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(139, 128, 240, 0.25), 0 0 12px rgba(139, 128, 240, 0.1);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.25), 0 0 12px rgba(var(--accent-rgb), 0.1);
 }
 
 select {
@@ -178,7 +206,7 @@ select {
 
 /* ── Interactions ──────────────────────────────────────── */
 button, a, input, select {
-  transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--duration-instant) var(--ease-standard);
 }
 
 button:active:not(:disabled) {
@@ -196,74 +224,74 @@ button:active:not(:disabled) {
 /* ── Neon Design System ──────────────────────────────── */
 
 .neon-frame {
-  background: linear-gradient(160deg, rgba(0,255,200,0.03) 0%, rgba(0,0,20,0.8) 40%, rgba(0,255,200,0.02) 100%);
-  border: 1px solid rgba(0,255,200,0.18);
+  background: linear-gradient(160deg, rgba(var(--neon-rgb), 0.03) 0%, rgba(var(--dark-rgb), 0.8) 40%, rgba(var(--neon-rgb), 0.02) 100%);
+  border: 1px solid rgba(var(--neon-rgb), 0.18);
   border-radius: var(--radius-2xl);
   box-shadow:
-    0 0 20px rgba(0,255,200,0.06),
-    0 0 60px rgba(0,255,200,0.03),
-    inset 0 1px 0 rgba(0,255,200,0.06),
-    inset 0 0 30px rgba(0,255,200,0.02);
+    0 0 20px rgba(var(--neon-rgb), 0.06),
+    0 0 60px rgba(var(--neon-rgb), 0.03),
+    inset 0 1px 0 rgba(var(--neon-rgb), 0.06),
+    inset 0 0 30px rgba(var(--neon-rgb), 0.02);
 }
 
 .neon-card {
-  background: linear-gradient(160deg, rgba(0,255,200,0.04) 0%, rgba(0,0,20,0.6) 100%);
-  border: 1px solid rgba(0,255,200,0.12);
+  background: linear-gradient(160deg, rgba(var(--neon-rgb), 0.04) 0%, rgba(var(--dark-rgb), 0.6) 100%);
+  border: 1px solid rgba(var(--neon-rgb), 0.12);
   border-radius: var(--radius-xl);
   box-shadow:
-    0 0 12px rgba(0,255,200,0.04),
-    inset 0 1px 0 rgba(0,255,200,0.04);
-  transition: all 200ms ease;
+    0 0 12px rgba(var(--neon-rgb), 0.04),
+    inset 0 1px 0 rgba(var(--neon-rgb), 0.04);
+  transition: all var(--duration-fast) ease;
 }
 
 .neon-card:hover {
-  border-color: rgba(0,255,200,0.22);
+  border-color: rgba(var(--neon-rgb), 0.22);
   box-shadow:
-    0 0 18px rgba(0,255,200,0.08),
-    inset 0 1px 0 rgba(0,255,200,0.06);
+    0 0 18px rgba(var(--neon-rgb), 0.08),
+    inset 0 1px 0 rgba(var(--neon-rgb), 0.06);
 }
 
 .neon-card-accent {
-  background: linear-gradient(160deg, rgba(139,128,240,0.05) 0%, rgba(0,0,20,0.6) 100%);
-  border: 1px solid rgba(139,128,240,0.15);
+  background: linear-gradient(160deg, rgba(var(--accent-rgb), 0.05) 0%, rgba(var(--dark-rgb), 0.6) 100%);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
   border-radius: var(--radius-xl);
   box-shadow:
-    0 0 12px rgba(139,128,240,0.05),
-    inset 0 1px 0 rgba(139,128,240,0.05);
+    0 0 12px rgba(var(--accent-rgb), 0.05),
+    inset 0 1px 0 rgba(var(--accent-rgb), 0.05);
 }
 
 .neon-input {
-  background: rgba(0,5,15,0.6) !important;
-  border: 1px solid rgba(0,255,200,0.08) !important;
+  background: rgba(0, 5, 15, 0.6) !important;
+  border: 1px solid rgba(var(--neon-rgb), 0.08) !important;
   color: var(--text) !important;
-  transition: all 200ms ease;
+  transition: all var(--duration-fast) ease;
 }
 
 .neon-input:focus {
-  border-color: rgba(0,255,200,0.35) !important;
-  box-shadow: 0 0 15px rgba(0,255,200,0.1), 0 0 4px rgba(0,255,200,0.15) !important;
+  border-color: rgba(var(--neon-rgb), 0.35) !important;
+  box-shadow: 0 0 15px rgba(var(--neon-rgb), 0.1), 0 0 4px rgba(var(--neon-rgb), 0.15) !important;
 }
 
 .neon-title {
   color: var(--bewusstsein);
-  text-shadow: 0 0 20px rgba(0,255,200,0.3), 0 0 40px rgba(0,255,200,0.1);
-  letter-spacing: 0.15em;
+  text-shadow: 0 0 20px rgba(var(--neon-rgb), 0.3), 0 0 40px rgba(var(--neon-rgb), 0.1);
+  letter-spacing: var(--tracking-neon);
 }
 
 .neon-label {
   color: var(--bewusstsein);
-  text-shadow: 0 0 8px rgba(0,255,200,0.2);
-  letter-spacing: 0.15em;
+  text-shadow: 0 0 8px rgba(var(--neon-rgb), 0.2);
+  letter-spacing: var(--tracking-neon);
 }
 
 .neon-divider {
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(0,255,200,0.12), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--neon-rgb), 0.12), transparent);
 }
 
 @keyframes neon-pulse {
-  0%, 100% { box-shadow: 0 0 12px rgba(0,255,200,0.04), inset 0 1px 0 rgba(0,255,200,0.04); }
-  50% { box-shadow: 0 0 20px rgba(0,255,200,0.08), inset 0 1px 0 rgba(0,255,200,0.06); }
+  0%, 100% { box-shadow: 0 0 12px rgba(var(--neon-rgb), 0.04), inset 0 1px 0 rgba(var(--neon-rgb), 0.04); }
+  50% { box-shadow: 0 0 20px rgba(var(--neon-rgb), 0.08), inset 0 1px 0 rgba(var(--neon-rgb), 0.06); }
 }
 
 @keyframes panel-expand {
@@ -272,7 +300,7 @@ button:active:not(:disabled) {
 }
 
 .panel-expand {
-  animation: panel-expand 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: panel-expand var(--duration-fast) var(--ease-bounce);
 }
 
 /* Scan-line overlay for panels */
@@ -288,8 +316,8 @@ button:active:not(:disabled) {
     0deg,
     transparent,
     transparent 2px,
-    rgba(0,255,200,0.008) 2px,
-    rgba(0,255,200,0.008) 4px
+    rgba(var(--neon-rgb), 0.008) 2px,
+    rgba(var(--neon-rgb), 0.008) 4px
   );
   border-radius: inherit;
 }

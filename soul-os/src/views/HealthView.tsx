@@ -99,7 +99,7 @@ export default function HealthView() {
   return (
     <div className="h-full flex flex-col" style={{ backgroundColor: "var(--bg-base)" }}>
       {/* Header with overall status */}
-      <div className="px-8 py-5 flex-shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+      <div className="px-8 py-5 flex-shrink-0" style={{ borderBottom: "1px solid rgba(var(--white-rgb),0.05)" }}>
         <div className="flex items-center gap-4">
           <div
             className="w-3 h-3 rounded-full"
@@ -111,7 +111,7 @@ export default function HealthView() {
           <button
             onClick={refresh}
             className="ml-auto text-xs px-4 py-2 rounded-xl cursor-default transition-all"
-            style={{ color: "var(--text-dim)", background: "linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))", border: "1px solid rgba(255,255,255,0.06)" }}
+            style={{ color: "var(--text-dim)", background: "linear-gradient(135deg, rgba(var(--white-rgb),0.04), rgba(var(--white-rgb),0.01))", border: "1px solid rgba(var(--white-rgb),0.06)" }}
           >
             Refresh
           </button>
@@ -175,7 +175,7 @@ export default function HealthView() {
                     <span className="text-[10px] w-16 text-right font-mono" style={{ color: "var(--text-dim)" }}>
                       {label}
                     </span>
-                    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(255,255,255,0.04)" }}>
+                    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(var(--white-rgb),0.04)" }}>
                       <div
                         className="h-full rounded-full transition-all duration-500"
                         style={{

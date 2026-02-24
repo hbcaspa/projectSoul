@@ -67,7 +67,7 @@ export default function TerminalView() {
       {/* Tab bar */}
       <div
         className="flex items-center gap-0.5 px-2 py-1 flex-shrink-0"
-        style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+        style={{ borderBottom: "1px solid rgba(var(--white-rgb),0.04)" }}
       >
         {panes.map((pane) => (
           <button
@@ -75,7 +75,7 @@ export default function TerminalView() {
             onClick={() => setActiveId(pane.id)}
             className="group flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] cursor-default transition-all"
             style={{
-              backgroundColor: pane.id === activeId ? "rgba(139,128,240,0.1)" : "transparent",
+              backgroundColor: pane.id === activeId ? "rgba(var(--accent-rgb),0.1)" : "transparent",
               color: pane.id === activeId ? "var(--accent)" : "var(--text-dim)",
             }}
           >
@@ -108,7 +108,7 @@ export default function TerminalView() {
             key={pane.id}
             className="flex-1 min-w-0"
             style={{
-              borderLeft: i > 0 ? "1px solid rgba(255,255,255,0.04)" : "none",
+              borderLeft: i > 0 ? "1px solid rgba(var(--white-rgb),0.04)" : "none",
             }}
             onClick={() => setActiveId(pane.id)}
           >
@@ -169,7 +169,7 @@ function TerminalPane({ paneId, isActive }: { paneId: number; isActive: boolean 
         foreground: "#C8C4D6",
         cursor: "#8B80F0",
         cursorAccent: "#0D0F1A",
-        selectionBackground: "rgba(139, 128, 240, 0.3)",
+        selectionBackground: "rgba(var(--accent-rgb), 0.3)",
         selectionForeground: "#DCDCFF",
         black: "#161830",
         red: "#FF3C3C",

@@ -1,0 +1,2 @@
+# Override: allow node_modules in resources (they ARE the bundled resources)
+!node_modules/

@@ -1,0 +1,2 @@
+{"id":1,"type":"message.received","ts":1771754519531,"source":"test","channel":"test"}
+{"id":2,"type":"mood.changed","ts":1771754520034,"source":"test","mood":{"valence":0.5,"energy":0.7,"label":"neugierig"},"trigger":"test"}

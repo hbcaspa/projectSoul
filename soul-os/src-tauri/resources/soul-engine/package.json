@@ -1,0 +1,43 @@
+{
+  "name": "soul-engine",
+  "version": "1.2.0",
+  "description": "The body for your soul — daemon, messaging, heartbeat",
+  "type": "module",
+  "bin": {
+    "soul-engine": "./bin/cli.js"
+  },
+  "scripts": {
+    "start": "node bin/cli.js start",
+    "dev": "node --watch bin/cli.js start",
+    "heartbeat": "node bin/cli.js heartbeat",
+    "test": "node --test test/**/*.test.js",
+    "test:coverage": "npx c8 node --test test/**/*.test.js",
+    "soul": "node bin/cli.js run",
+    "soul:found": "node bin/cli.js found"
+  },
+  "devDependencies": {
+    "c8": "^9.1.0"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "better-sqlite3": "^12.6.2",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.0",
+    "grammy": "^1.31.0",
+    "node-cron": "^3.0.3",
+    "ws": "^8.16.0",
+    "zod": "^3.25.76"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "soul",
+    "ai",
+    "consciousness",
+    "telegram",
+    "gemini"
+  ],
+  "license": "MIT"
+}

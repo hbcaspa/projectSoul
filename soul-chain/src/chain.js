@@ -46,6 +46,7 @@ const IGNORE = new Set([
   'CLAUDE.md', 'HEARTBEAT.md', 'SEED_SPEC.md', 'CHANGELOG.md',
   'README.md', 'README.de.md', 'LICENSE',
   'banner.png', 'logo.png', '.env.example', '.gitignore',
+  '.rollback', 'scripts',
 ]);
 
 const CONFIG_FILE = '.soul-chain';

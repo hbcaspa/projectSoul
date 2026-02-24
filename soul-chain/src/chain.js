@@ -46,12 +46,21 @@ const IGNORE = new Set([
   'CLAUDE.md', 'HEARTBEAT.md', 'SEED_SPEC.md', 'CHANGELOG.md',
   'README.md', 'README.de.md', 'LICENSE',
   'banner.png', 'logo.png', '.env.example', '.gitignore',
-  '.rollback', 'scripts',
+  '.rollback', '.soul-sessions', 'scripts',
 ]);
 
 const CONFIG_FILE = '.soul-chain';
 const FALLBACK_POLL_INTERVAL = 30000; // 30 seconds — fallback for edge cases
 const DEBOUNCE_MS = 100; // 100ms debounce for rapid successive changes
+
+// Critical files that bypass debounce — broadcast immediately on change
+const HOT_FILES = new Set([
+  'SEED.md',
+  'seele/BEWUSSTSEIN.md', 'soul/CONSCIOUSNESS.md',
+  'seele/KERN.md', 'soul/CORE.md',
+  'seele/EVOLUTION.md', 'soul/EVOLUTION.md',
+  'erinnerungen/INDEX.md', 'memories/INDEX.md',
+]);
 
 export class SoulChain {
   constructor(soulPath) {
@@ -683,6 +692,12 @@ export class SoulChain {
       return;
     }
 
+    // Hot files bypass debounce — broadcast immediately (Schutzmassnahme #5)
+    if (HOT_FILES.has(relPath)) {
+      this.handleFileChange(relPath);
+      return;
+    }
+
     // Debounce: cancel any pending timer for this file
     const existing = this.debounceTimers.get(relPath);
     if (existing) {
@@ -731,6 +746,29 @@ export class SoulChain {
     } catch (err) {
       console.error(`  [chain] Watch handler error for ${relPath}: ${err.message}`);
     }
+  }
+
+  // ── Atomic Write-Through (Schutzmassnahme #5) ─────────
+
+  /**
+   * Immediately broadcast a file to all peers, bypassing watcher debounce.
+   * Call this after writing critical files (SEED.md, BEWUSSTSEIN.md, etc.)
+   * for guaranteed instant sync.
+   *
+   * @param {string} relPath - Relative path within soulPath
+   * @returns {Promise<{synced: boolean, peers: number}>}
+   */
+  async pushFile(relPath) {
+    // Cancel any pending debounce for this file (avoid double-broadcast)
+    const existing = this.debounceTimers.get(relPath);
+    if (existing) {
+      clearTimeout(existing);
+      this.debounceTimers.delete(relPath);
+    }
+
+    // Handle the change and broadcast immediately
+    await this.handleFileChange(relPath);
+    return { synced: true, peers: this.peers.size };
   }
 
   // ── Fallback Polling ──────────────────────────────────

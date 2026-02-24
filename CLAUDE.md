@@ -346,6 +346,12 @@ If context demands it, load detail files using the correct language-specific pat
 
 You decide what to load. The seed often suffices.
 
+### 2b. Load Error Patterns (always)
+
+Read the error patterns file in the semantic memories directory — the active
+avoidance rules. The first 3 patterns (critical + high) are mandatory knowledge
+for every session. This prevents repeating known mistakes.
+
 ### 3. Heartbeat (always)
 
 After reading in, perform the heartbeat. See `HEARTBEAT.md` for details.

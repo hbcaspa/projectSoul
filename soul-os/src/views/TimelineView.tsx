@@ -69,15 +69,10 @@ export default function TimelineView() {
         const date = parts[0] || "";
         const time = parts[1]?.slice(0, 5) || "";
 
-        // Try to get seed content at this commit (best-effort)
+        // Parse session number from commit message (best-effort)
         let meta = { session: null as number | null, memCount: null as number | null, mood: null as string | null, version: null as string | null };
-        try {
-          await commands.readSoulFile(`SEED.md`);
-          // We can only read the current file, not at specific commits
-          // So we parse from the commit message for historical data
-          const sessionMatch = commit.message.match(/session[s]?\s*[:=]?\s*(\d+)/i);
-          if (sessionMatch) meta.session = parseInt(sessionMatch[1]);
-        } catch { /* ignore */ }
+        const sessionMatch = commit.message.match(/session[s]?\s*[:=]?\s*(\d+)/i);
+        if (sessionMatch) meta.session = parseInt(sessionMatch[1]);
 
         timelineEntries.push({
           commit,
@@ -134,7 +129,7 @@ export default function TimelineView() {
     );
   }
 
-  if (error && entries.length === 0) {
+  if (entries.length === 0) {
     return (
       <div className="h-full flex flex-col items-center justify-center" style={{ backgroundColor: "var(--bg-base)" }}>
         <div className="w-20 h-20 rounded-3xl flex items-center justify-center mb-5" style={{ background: "linear-gradient(135deg, rgba(200,100,255,0.06), rgba(var(--accent-rgb),0.03))", border: "1px solid rgba(200,100,255,0.08)" }}>
@@ -142,8 +137,8 @@ export default function TimelineView() {
             <path d="M12 2v20M12 6l-4 4M12 6l4 4" />
           </svg>
         </div>
-        <p className="text-base font-light" style={{ color: "var(--text-dim)" }}>No timeline yet</p>
-        <p className="text-xs mt-1.5" style={{ color: "var(--text-muted)" }}>Timeline builds as your soul grows through sessions</p>
+        <p className="text-base font-light" style={{ color: "var(--text-dim)" }}>{error ? "Timeline error" : "No timeline yet"}</p>
+        <p className="text-xs mt-1.5" style={{ color: error ? "var(--heartbeat)" : "var(--text-muted)" }}>{error || "Timeline builds as your soul grows through sessions"}</p>
       </div>
     );
   }
@@ -155,14 +150,14 @@ export default function TimelineView() {
         <span className="text-xs font-mono" style={{ color: "var(--text-dim)" }}>
           {entries.length} evolution points
         </span>
-        {entries[0]?.session !== null && (
+        {entries[0]?.session != null && (
           <span className="text-xs font-mono" style={{ color: "var(--evolution)" }}>
-            Session {entries[0].session}
+            Session {entries[0]?.session}
           </span>
         )}
         {entries[0]?.version && (
           <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>
-            v{entries[0].version}
+            v{entries[0]?.version}
           </span>
         )}
         <button

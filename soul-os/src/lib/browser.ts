@@ -3,16 +3,30 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 let lastUrl: string | null = null;
 let fullMode = false;
+let browserOpen = false;
 
 export async function openUrl(url: string, full = false): Promise<void> {
   lastUrl = url;
   fullMode = full;
+  browserOpen = true;
   await invoke("open_browser", { url, fullMode: full });
 }
 
 export async function closeBrowser(): Promise<void> {
-  lastUrl = null;
-  await invoke("close_browser");
+  browserOpen = false;
+  try {
+    await invoke("close_browser");
+  } catch {
+    // window already closed
+  }
+}
+
+export async function toggleBrowser(): Promise<void> {
+  if (browserOpen && lastUrl) {
+    await closeBrowser();
+  } else if (lastUrl) {
+    await openUrl(lastUrl, fullMode);
+  }
 }
 
 export async function toggleBrowserMode(): Promise<void> {
@@ -23,6 +37,10 @@ export async function toggleBrowserMode(): Promise<void> {
 
 export function getLastUrl(): string | null {
   return lastUrl;
+}
+
+export function isBrowserOpen(): boolean {
+  return browserOpen;
 }
 
 export function isFullMode(): boolean {

@@ -27,7 +27,7 @@ import SetupWizard from "./views/SetupWizard";
 import FoundingChat from "./views/FoundingChat";
 import { useActiveNodes, useCurrentPulse, useMood, useActivityFeed } from "./lib/store";
 import { commands } from "./lib/tauri";
-import { openUrl, closeBrowser, toggleBrowserMode, getLastUrl, onBrowserOpenUrl } from "./lib/browser";
+import { openUrl, toggleBrowser, toggleBrowserMode, onBrowserOpenUrl } from "./lib/browser";
 
 /* ── Types ─────────────────────────────────────────────────── */
 
@@ -437,12 +437,7 @@ function App() {
       // Cmd+B — toggle browser (close if open, reopen last URL if closed)
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
         e.preventDefault();
-        const url = getLastUrl();
-        if (url) {
-          closeBrowser().then(() => {
-            // If it was open, just close; if closed, reopen
-          });
-        }
+        toggleBrowser();
         return;
       }
 

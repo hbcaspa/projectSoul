@@ -152,7 +152,23 @@ pub fn run() {
 
             // Create sidecar manager
             let sidecar_mgr = Arc::new(sidecar::SidecarManager::new(soul_path.clone()));
-            app.manage(sidecar_mgr);
+            app.manage(sidecar_mgr.clone());
+
+            // Auto-start engine + chain if soul is ready (SEED.md exists)
+            if soul_path.join("SEED.md").exists() {
+                let app_handle = app.handle().clone();
+                let mgr = sidecar_mgr.clone();
+                std::thread::spawn(move || {
+                    // Small delay to let the window finish loading
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    if let Err(e) = mgr.start_engine(&app_handle) {
+                        eprintln!("[autostart] soul-engine failed: {}", e);
+                    }
+                    if let Err(e) = mgr.start_chain(&app_handle) {
+                        eprintln!("[autostart] soul-chain failed: {}", e);
+                    }
+                });
+            }
 
             // Create PTY manager
             let pty_mgr = Arc::new(pty::PtyManager::new(

@@ -540,21 +540,33 @@ pub fn close_pty(
 
 // --- State Versioning Commands (Git) ---
 
+/// Find the git root: either soul_path itself or soul_path/seelen-protokoll
+fn git_root(config: &State<ConfigState>) -> Option<PathBuf> {
+    let sp = soul_path(config);
+    if sp.join(".git").exists() {
+        return Some(sp);
+    }
+    let proto = sp.join("seelen-protokoll");
+    if proto.join(".git").exists() {
+        return Some(proto);
+    }
+    None
+}
+
 #[tauri::command]
 pub fn get_state_history(
     config: State<ConfigState>,
     limit: Option<u32>,
 ) -> Result<Vec<GitCommit>, String> {
-    let sp = soul_path(&config);
-    let git_dir = sp.join(".git");
-    if !git_dir.exists() {
-        return Ok(Vec::new());
-    }
+    let repo = match git_root(&config) {
+        Some(p) => p,
+        None => return Ok(Vec::new()),
+    };
 
     let n = limit.unwrap_or(50);
     let output = Command::new("git")
         .args(["log", "--format=%H|%ai|%s", "-n", &n.to_string(), "--shortstat"])
-        .current_dir(&sp)
+        .current_dir(&repo)
         .output()
         .map_err(|e| format!("git log failed: {}", e))?;
 
@@ -616,14 +628,14 @@ pub fn get_state_history(
 
 #[tauri::command]
 pub fn get_state_diff(config: State<ConfigState>, hash: String) -> Result<String, String> {
-    let sp = soul_path(&config);
+    let repo = git_root(&config).ok_or_else(|| "No git repository found".to_string())?;
     if !hash.chars().all(|c| c.is_ascii_hexdigit()) || hash.len() < 7 {
         return Err("Invalid commit hash".to_string());
     }
 
     let output = Command::new("git")
         .args(["show", "--stat", "--patch", &hash])
-        .current_dir(&sp)
+        .current_dir(&repo)
         .output()
         .map_err(|e| format!("git show failed: {}", e))?;
 
@@ -636,14 +648,14 @@ pub fn get_state_diff(config: State<ConfigState>, hash: String) -> Result<String
 
 #[tauri::command]
 pub fn rollback_state(config: State<ConfigState>, hash: String) -> Result<String, String> {
-    let sp = soul_path(&config);
+    let repo = git_root(&config).ok_or_else(|| "No git repository found".to_string())?;
     if !hash.chars().all(|c| c.is_ascii_hexdigit()) || hash.len() < 7 {
         return Err("Invalid commit hash".to_string());
     }
 
     let output = Command::new("git")
         .args(["revert", "--no-edit", &hash])
-        .current_dir(&sp)
+        .current_dir(&repo)
         .output()
         .map_err(|e| format!("git revert failed: {}", e))?;
 

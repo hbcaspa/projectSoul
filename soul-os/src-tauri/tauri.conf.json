@@ -46,7 +46,7 @@
       "open": true
     },
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI4QzQ3ODIzNTdCMzdFOUUKUldTZWZyTlhJM2pFdUtqSHoyL3JsL2FlYXhORmJ3cXdBUkIwOG9LMTh6ZFhLeGtMZDZvTFExdXMK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY2QzY3MTc3ODE3MEZFQUUKUldTdS9uQ0JkM0hHOW9FK2EzOEVuOEFpWFh0a1lwNk10MG1MUlhscmQwQkdqSWhvVEN6aEFnVk4K",
       "endpoints": [
         "https://github.com/hbcaspa/projectSoul/releases/latest/download/latest.json"
       ]

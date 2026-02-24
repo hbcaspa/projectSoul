@@ -68,11 +68,8 @@ jobs:
         working-directory: soul-os
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
-        run: |
-          echo "Key length: ${#TAURI_SIGNING_PRIVATE_KEY}"
-          echo "Key starts with: ${TAURI_SIGNING_PRIVATE_KEY:0:20}..."
-          npx tauri build --verbose
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build --verbose
 
       - name: List build artifacts
         if: always()
@@ -93,19 +90,8 @@ jobs:
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/SoulOS.app.tar.gz"
 
-          cat > latest.json << EOF
-          {
-            "version": "${VERSION}",
-            "notes": "See commit history for changes.",
-            "pub_date": "${PUB_DATE}",
-            "platforms": {
-              "darwin-aarch64": {
-                "signature": "${SIGNATURE}",
-                "url": "${DOWNLOAD_URL}"
-              }
-            }
-          }
-          EOF
+          printf '{\n  "version": "%s",\n  "notes": "See commit history for changes.",\n  "pub_date": "%s",\n  "platforms": {\n    "darwin-aarch64": {\n      "signature": "%s",\n      "url": "%s"\n    }\n  }\n}\n' \
+            "${VERSION}" "${PUB_DATE}" "${SIGNATURE}" "${DOWNLOAD_URL}" > latest.json
 
       - name: Create GitHub Release
         env:

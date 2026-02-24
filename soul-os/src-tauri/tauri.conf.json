@@ -10,6 +10,8 @@
     "beforeBuildCommand": "npm run build"
   },
   "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": "v2",
     "icon": ["icons/icon.icns", "icons/icon.png"],
     "macOS": {
       "dmg": {

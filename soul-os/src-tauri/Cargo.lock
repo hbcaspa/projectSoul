@@ -3808,7 +3808,7 @@ dependencies = [
 
 [[package]]
 name = "soul-os"
-version = "0.3.2"
+version = "0.3.4"
 dependencies = [
  "dirs-next",
  "libc",

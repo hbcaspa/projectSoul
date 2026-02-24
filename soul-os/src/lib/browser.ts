@@ -21,18 +21,19 @@ export async function closeBrowser(): Promise<void> {
   }
 }
 
+const DEFAULT_URL = "https://duckduckgo.com";
+
 export async function toggleBrowser(): Promise<void> {
-  if (browserOpen && lastUrl) {
+  if (browserOpen) {
     await closeBrowser();
-  } else if (lastUrl) {
-    await openUrl(lastUrl, fullMode);
+  } else {
+    await openUrl(lastUrl || DEFAULT_URL, fullMode);
   }
 }
 
 export async function toggleBrowserMode(): Promise<void> {
-  if (!lastUrl) return;
   fullMode = !fullMode;
-  await invoke("open_browser", { url: lastUrl, fullMode });
+  await invoke("open_browser", { url: lastUrl || DEFAULT_URL, fullMode });
 }
 
 export function getLastUrl(): string | null {

@@ -108,6 +108,11 @@ export default function WhisperView() {
               setLoading(false);
               break;
 
+            case "browser":
+              // Remote browser open (e.g. from Claude Code via API)
+              if (msg.url) openUrl(msg.url, false);
+              break;
+
             case "pulse":
               // Ignore pulse events in chat view
               break;

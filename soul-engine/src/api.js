@@ -315,6 +315,27 @@ export class SoulAPI {
       }
     });
 
+    // Open URL in Soul OS embedded browser (broadcast to all WS clients)
+    // Uses "response" type with [BROWSER:url] tag so existing WhisperView can parse it
+    app.post('/api/browser', (req, res) => {
+      const { url } = req.body;
+      if (!url) return res.status(400).json({ error: 'url required' });
+
+      const msg = JSON.stringify({
+        type: 'response',
+        text: `[BROWSER:${url}]`,
+        timestamp: new Date().toISOString(),
+      });
+      let sent = 0;
+      for (const client of this.clients) {
+        if (client.readyState === 1) {
+          client.send(msg);
+          sent++;
+        }
+      }
+      res.json({ ok: true, url, clientsNotified: sent });
+    });
+
     // Chat (HTTP fallback)
     app.post('/api/chat', async (req, res) => {
       try {

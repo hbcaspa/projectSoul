@@ -11,8 +11,9 @@
     "test": "node --test test/**/*.test.js"
   },
   "dependencies": {
-    "hyperswarm": "^4.7.15",
-    "b4a": "^1.6.7"
+    "b4a": "^1.6.7",
+    "chokidar": "^4.0.3",
+    "hyperswarm": "^4.7.15"
   },
   "engines": {
     "node": ">=20.0.0"

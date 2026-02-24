@@ -1,4 +1,5 @@
 import Hyperswarm from 'hyperswarm';
+import chokidar from 'chokidar';
 import fs from 'node:fs/promises';
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -47,7 +48,8 @@ const IGNORE = new Set([
 ]);
 
 const CONFIG_FILE = '.soul-chain';
-const POLL_INTERVAL = 5000; // 5 seconds
+const FALLBACK_POLL_INTERVAL = 30000; // 30 seconds — fallback for edge cases
+const DEBOUNCE_MS = 100; // 100ms debounce for rapid successive changes
 
 export class SoulChain {
   constructor(soulPath) {
@@ -59,8 +61,10 @@ export class SoulChain {
     this.swarm = null;
     this.peers = new Map();       // peerId → { socket, connectedAt, filesReceived, filesSent, lastSync, lastManifestExchange }
     this.manifest = new Map();    // path → { hash, mtime }
-    this.pollTimer = null;
+    this.watcher = null;          // chokidar watcher instance
+    this.pollTimer = null;        // fallback poll timer
     this.statusTimer = null;
+    this.debounceTimers = new Map(); // filePath → timeout (debounce per file)
     this.totalSynced = 0;
     this.startedAt = null;
   }
@@ -161,8 +165,11 @@ export class SoulChain {
     await discovery.flushed();
     console.log(`  [chain] Listening for peers...`);
 
-    // Start file polling
-    this.startPolling();
+    // Start chokidar file watcher for instant change detection
+    this.startWatcher();
+
+    // Start fallback polling (30s) for edge cases chokidar might miss
+    this.startFallbackPolling();
 
     // Periodic status refresh (every 30s so monitor sees fresh timestamps)
     this.statusTimer = setInterval(() => this.writeStatus(), 30000);
@@ -171,6 +178,19 @@ export class SoulChain {
   }
 
   async stop() {
+    // Clean up chokidar watcher
+    if (this.watcher) {
+      await this.watcher.close();
+      this.watcher = null;
+      console.log('  [chain] File watcher closed.');
+    }
+
+    // Clear all debounce timers
+    for (const timer of this.debounceTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.debounceTimers.clear();
+
     if (this.pollTimer) clearInterval(this.pollTimer);
     if (this.statusTimer) clearInterval(this.statusTimer);
     if (this.swarm) await this.swarm.destroy();
@@ -576,22 +596,165 @@ export class SoulChain {
     }));
   }
 
-  // ── File Polling ────────────────────────────────────
+  // ── File Watching (chokidar) ────────────────────────
 
-  startPolling() {
+  /**
+   * Start chokidar file watcher on all SYNC_DIRS and SYNC_FILES.
+   * Detects changes within ~100ms (debounced) instead of 5s polling.
+   */
+  startWatcher() {
+    // Build watch paths: existing directories and individual files
+    const watchPaths = [];
+
+    for (const dir of SYNC_DIRS) {
+      const full = path.resolve(this.soulPath, dir);
+      if (existsSync(full)) {
+        watchPaths.push(full);
+      }
+    }
+
+    for (const file of SYNC_FILES) {
+      const full = path.resolve(this.soulPath, file);
+      // Watch the file even if it doesn't exist yet — chokidar handles creation
+      watchPaths.push(full);
+    }
+
+    if (watchPaths.length === 0) {
+      console.warn('  [chain] No paths to watch — falling back to polling only.');
+      return;
+    }
+
+    this.watcher = chokidar.watch(watchPaths, {
+      persistent: true,
+      ignoreInitial: true,           // Don't fire for existing files on startup
+      awaitWriteFinish: {            // Wait for writes to complete
+        stabilityThreshold: 50,
+        pollInterval: 20,
+      },
+      ignored: (filePath) => {
+        const name = path.basename(filePath);
+        // Ignore dotfiles, IGNORE set entries, and non-syncable paths
+        if (name.startsWith('.') && name !== '.language'
+            && name !== '.soul-impulse-state'
+            && name !== '.soul-impulse-log'
+            && name !== '.soul-state-tick') {
+          return true;
+        }
+        return IGNORE.has(name);
+      },
+      depth: 10,                     // Reasonable depth for nested dirs
+    });
+
+    this.watcher.on('change', (absPath) => this.onWatchEvent('change', absPath));
+    this.watcher.on('add', (absPath) => this.onWatchEvent('add', absPath));
+    this.watcher.on('unlink', (absPath) => this.onWatchEvent('unlink', absPath));
+
+    this.watcher.on('ready', () => {
+      const watched = this.watcher.getWatched();
+      const dirCount = Object.keys(watched).length;
+      console.log(`  [chain] File watcher ready — watching ${dirCount} directories for instant sync.`);
+    });
+
+    this.watcher.on('error', (err) => {
+      console.error(`  [chain] Watcher error: ${err.message}`);
+    });
+  }
+
+  /**
+   * Handle a chokidar file event with per-file debouncing.
+   * Multiple rapid changes to the same file within DEBOUNCE_MS
+   * are collapsed into a single broadcast.
+   */
+  onWatchEvent(event, absPath) {
+    // Convert absolute path to relative path within soulPath
+    const relPath = path.relative(this.soulPath, absPath);
+
+    // Safety: skip if the path escapes soulPath
+    if (relPath.startsWith('..') || path.isAbsolute(relPath)) return;
+
+    // Skip unlink events — we don't propagate deletions
+    if (event === 'unlink') {
+      console.log(`  [chain] Watch: ${relPath} deleted (not propagated)`);
+      return;
+    }
+
+    // Debounce: cancel any pending timer for this file
+    const existing = this.debounceTimers.get(relPath);
+    if (existing) {
+      clearTimeout(existing);
+    }
+
+    // Set debounced handler
+    const timer = setTimeout(async () => {
+      this.debounceTimers.delete(relPath);
+      await this.handleFileChange(relPath);
+    }, DEBOUNCE_MS);
+
+    this.debounceTimers.set(relPath, timer);
+  }
+
+  /**
+   * Process a detected file change: update manifest and broadcast to peers.
+   */
+  async handleFileChange(relPath) {
+    const fullPath = path.resolve(this.soulPath, relPath);
+
+    if (!existsSync(fullPath)) return;
+
+    try {
+      const content = await fs.readFile(fullPath);
+      // Skip empty files
+      if (content.length === 0) return;
+
+      const newHash = hashFile(content);
+      const stat = statSync(fullPath);
+      const old = this.manifest.get(relPath);
+
+      // Only broadcast if the hash actually changed
+      if (old && old.hash === newHash) return;
+
+      // Update manifest
+      this.manifest.set(relPath, {
+        hash: newHash,
+        mtime: stat.mtimeMs,
+      });
+
+      console.log(`  [chain] Detected: ${relPath} (${old ? 'changed' : 'new'})`);
+
+      // Broadcast to all connected peers
+      await this.broadcastFile(relPath);
+    } catch (err) {
+      console.error(`  [chain] Watch handler error for ${relPath}: ${err.message}`);
+    }
+  }
+
+  // ── Fallback Polling ──────────────────────────────────
+
+  /**
+   * Fallback polling at 30s intervals.
+   * Catches edge cases that chokidar might miss (network mounts,
+   * files created in new directories, etc.)
+   */
+  startFallbackPolling() {
     this.pollTimer = setInterval(async () => {
       const oldManifest = new Map(this.manifest);
       await this.buildManifest();
 
       // Find changed files
+      let changesFound = 0;
       for (const [filePath, info] of this.manifest) {
         const old = oldManifest.get(filePath);
         if (!old || old.hash !== info.hash) {
           // File changed locally — broadcast to all peers
+          changesFound++;
           this.broadcastFile(filePath);
         }
       }
-    }, POLL_INTERVAL);
+
+      if (changesFound > 0) {
+        console.log(`  [chain] Fallback poll found ${changesFound} change(s).`);
+      }
+    }, FALLBACK_POLL_INTERVAL);
   }
 
   async broadcastFile(filePath) {

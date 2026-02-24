@@ -99,6 +99,9 @@ pub fn run() {
                         if let Some(sidecar) = app.try_state::<Arc<sidecar::SidecarManager>>() {
                             sidecar.shutdown();
                         }
+                        if let Some(pty) = app.try_state::<Arc<pty::PtyManager>>() {
+                            pty.shutdown();
+                        }
                         app.exit(0);
                     }
                     _ => {}
@@ -161,15 +164,22 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             match event {
-                // Close to tray instead of quitting
+                // Close to tray instead of quitting (main window only)
                 tauri::WindowEvent::CloseRequested { api, .. } => {
-                    api.prevent_close();
-                    let _ = window.hide();
+                    if window.label() == "main" {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
                 }
                 // Graceful shutdown on actual destroy (via Quit menu)
                 tauri::WindowEvent::Destroyed => {
-                    if let Some(sidecar) = window.try_state::<Arc<sidecar::SidecarManager>>() {
-                        sidecar.shutdown();
+                    if window.label() == "main" {
+                        if let Some(sidecar) = window.try_state::<Arc<sidecar::SidecarManager>>() {
+                            sidecar.shutdown();
+                        }
+                        if let Some(pty) = window.try_state::<Arc<pty::PtyManager>>() {
+                            pty.shutdown();
+                        }
                     }
                 }
                 _ => {}
@@ -206,6 +216,8 @@ pub fn run() {
             commands::stop_founding,
             commands::founding_chat,
             commands::founding_create,
+            commands::open_browser,
+            commands::close_browser,
         ])
         .run(tauri::generate_context!())
         .expect("error while running SoulOS");

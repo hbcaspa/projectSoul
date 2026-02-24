@@ -27,6 +27,7 @@ import SetupWizard from "./views/SetupWizard";
 import FoundingChat from "./views/FoundingChat";
 import { useActiveNodes, useCurrentPulse, useMood, useActivityFeed } from "./lib/store";
 import { commands } from "./lib/tauri";
+import { openUrl, closeBrowser, toggleBrowserMode, getLastUrl, onBrowserOpenUrl } from "./lib/browser";
 
 /* ── Types ─────────────────────────────────────────────────── */
 
@@ -419,12 +420,31 @@ function App() {
     setOpenPanel((prev) => (prev === id ? null : id));
   }, []);
 
-  /* Keyboard: 1-9 toggle panels, ESC close (only in ready phase) */
+  /* Keyboard: 1-9 toggle panels, ESC close, Cmd+B browser, Cmd+Shift+B mode toggle */
   useEffect(() => {
     if (booting || appPhase !== "ready") return;
     const handler = (e: KeyboardEvent) => {
       const el = document.activeElement;
       if (el?.closest(".xterm") || el?.tagName === "INPUT" || el?.tagName === "TEXTAREA") return;
+
+      // Cmd+Shift+B — toggle browser popup/full mode
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        toggleBrowserMode();
+        return;
+      }
+
+      // Cmd+B — toggle browser (close if open, reopen last URL if closed)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        const url = getLastUrl();
+        if (url) {
+          closeBrowser().then(() => {
+            // If it was open, just close; if closed, reopen
+          });
+        }
+        return;
+      }
 
       if (e.key === "Escape") {
         setOpenPanel(null);
@@ -440,6 +460,33 @@ function App() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [togglePanel, booting, appPhase]);
+
+  /* Intercept external URLs from Rust on_navigation + link clicks */
+  useEffect(() => {
+    if (booting || appPhase !== "ready") return;
+
+    // Listen for URLs intercepted by Rust's on_navigation handler
+    const unlistenPromise = onBrowserOpenUrl((url) => {
+      openUrl(url);
+    });
+
+    // Intercept <a> clicks with external hrefs
+    const clickHandler = (e: MouseEvent) => {
+      const link = (e.target as HTMLElement).closest("a[href]");
+      if (!link) return;
+      const href = link.getAttribute("href");
+      if (href && (href.startsWith("http://") || href.startsWith("https://"))) {
+        e.preventDefault();
+        openUrl(href);
+      }
+    };
+    document.addEventListener("click", clickHandler);
+
+    return () => {
+      unlistenPromise.then((fn) => fn());
+      document.removeEventListener("click", clickHandler);
+    };
+  }, [booting, appPhase]);
 
   const PanelComponent = openPanel ? PANEL_COMPONENTS[openPanel] : null;
   const panelDef = openPanel ? PANELS.find((p) => p.id === openPanel) : null;

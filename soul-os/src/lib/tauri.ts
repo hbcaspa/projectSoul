@@ -107,6 +107,11 @@ export const commands = {
 
   // Directory listing
   listDirectory: (name: string) => invoke<string[]>("list_directory", { name }),
+
+  // Embedded Browser
+  openBrowser: (url: string, fullMode: boolean) =>
+    invoke<void>("open_browser", { url, fullMode }),
+  closeBrowser: () => invoke<void>("close_browser"),
 };
 
 // --- Events (Rust → Frontend) ---

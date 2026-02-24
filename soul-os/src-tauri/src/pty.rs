@@ -56,7 +56,9 @@ impl PtyManager {
         // Remove Claude Code nesting guard — SoulOS terminal is independent,
         // not a nested session. Without this, `claude` refuses to start with
         // "cannot be launched inside another Claude Code session".
-        std::env::remove_var("CLAUDECODE");
+        // Note: use cmd.env() with empty value instead of std::env::remove_var()
+        // to avoid modifying global process environment (unsound in multithreaded code)
+        cmd.env("CLAUDECODE", "");
 
         // Terminal identification — helps CLIs detect capabilities
         cmd.env("TERM", "xterm-256color");
@@ -89,8 +91,8 @@ impl PtyManager {
             "HOMEBREW_REPOSITORY",
             // SSH agent for git operations
             "SSH_AUTH_SOCK",
-            // API keys the soul needs
-            "ANTHROPIC_API_KEY",
+            // Note: API keys (ANTHROPIC_API_KEY etc.) are NOT passed to the terminal
+            // to prevent accidental exposure to arbitrary commands run by the user
         ] {
             if let Ok(val) = std::env::var(key) {
                 cmd.env(key, &val);
@@ -262,7 +264,20 @@ impl PtyManager {
 
     pub fn close(&self, id: u32) -> Result<(), String> {
         let mut sessions = self.sessions.lock().unwrap();
-        sessions.remove(&id);
+        if let Some(mut session) = sessions.remove(&id) {
+            // Kill the child process to prevent orphans
+            let _ = session._child.kill();
+            let _ = session._child.wait();
+        }
         Ok(())
+    }
+
+    /// Shutdown all PTY sessions — called on application exit
+    pub fn shutdown(&self) {
+        let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        for (_id, mut session) in sessions.drain() {
+            let _ = session._child.kill();
+            let _ = session._child.wait();
+        }
     }
 }

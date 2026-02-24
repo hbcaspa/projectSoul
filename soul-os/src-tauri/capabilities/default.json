@@ -1,7 +1,7 @@
 {
   "identifier": "default",
   "description": "Default capabilities for SoulOS",
-  "windows": ["main"],
+  "windows": ["main", "soul-browser"],
   "permissions": [
     "core:default",
     "shell:default",

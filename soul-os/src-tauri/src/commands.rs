@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
-use tauri::State;
+use tauri::{Manager, State};
 
 use crate::config::AppConfig;
 use crate::pty::PtyManager;
@@ -33,8 +33,24 @@ pub fn get_soul_path(config: State<ConfigState>) -> String {
 
 #[tauri::command]
 pub fn set_soul_path(config: State<ConfigState>, path: String) -> Result<(), String> {
+    let p = PathBuf::from(&path);
+    // Security: validate the path
+    if !p.is_absolute() {
+        return Err("Soul path must be absolute".to_string());
+    }
+    if !p.exists() || !p.is_dir() {
+        return Err("Soul path must be an existing directory".to_string());
+    }
+    // Block dangerous system directories
+    let danger = ["/", "/etc", "/usr", "/bin", "/sbin", "/var", "/tmp", "/System", "/Library"];
+    let path_str = p.to_string_lossy();
+    for d in &danger {
+        if path_str == *d {
+            return Err("Cannot use a system directory as soul path".to_string());
+        }
+    }
     let mut cfg = config.lock().map_err(|e| e.to_string())?;
-    cfg.soul_path = PathBuf::from(&path);
+    cfg.soul_path = p;
     cfg.first_run = false;
     cfg.save()
 }
@@ -45,16 +61,30 @@ pub fn write_soul_file(
     name: String,
     content: String,
 ) -> Result<(), String> {
+    // Security: reject path traversal attempts
+    if name.contains("..") {
+        return Err("Access denied: path traversal not allowed".to_string());
+    }
+
     let sp = soul_path(&config);
     let file_path = sp.join(&name);
 
-    // Security: prevent path traversal
+    // Security: verify resolved path stays within soul directory
+    let sp_canonical = sp.canonicalize().unwrap_or_else(|_| sp.clone());
     let target = file_path
         .canonicalize()
-        .unwrap_or_else(|_| file_path.clone());
-    if !target.starts_with(&sp)
-        && !file_path.starts_with(&sp)
-    {
+        .unwrap_or_else(|_| {
+            // For new files: canonicalize parent, then append filename
+            if let Some(parent) = file_path.parent() {
+                if let Ok(canonical_parent) = parent.canonicalize() {
+                    if let Some(fname) = file_path.file_name() {
+                        return canonical_parent.join(fname);
+                    }
+                }
+            }
+            file_path.clone()
+        });
+    if !target.starts_with(&sp_canonical) {
         return Err("Access denied: path outside soul directory".to_string());
     }
 
@@ -63,7 +93,18 @@ pub fn write_soul_file(
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
 
-    fs::write(&file_path, content).map_err(|e| e.to_string())
+    // Write file
+    fs::write(&file_path, &content).map_err(|e| e.to_string())?;
+
+    // Security: restrict .env file permissions
+    #[cfg(unix)]
+    if name == ".env" {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::Permissions::from_mode(0o600);
+        let _ = std::fs::set_permissions(&file_path, perms);
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -84,7 +125,8 @@ pub fn read_env(config: State<ConfigState>) -> Result<HashMap<String, String>, S
             continue;
         }
         if let Some((key, val)) = trimmed.split_once('=') {
-            map.insert(key.trim().to_string(), val.trim().to_string());
+            let val = val.trim().trim_matches('"').trim_matches('\'');
+            map.insert(key.trim().to_string(), val.to_string());
         }
     }
 
@@ -143,7 +185,17 @@ pub fn write_env(
     }
 
     let content = result_lines.join("\n") + "\n";
-    fs::write(&env_path, content).map_err(|e| e.to_string())
+    fs::write(&env_path, &content).map_err(|e| e.to_string())?;
+
+    // Security: restrict .env file permissions (contains API keys)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::Permissions::from_mode(0o600);
+        let _ = std::fs::set_permissions(&env_path, perms);
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -602,20 +654,134 @@ pub fn rollback_state(config: State<ConfigState>, hash: String) -> Result<String
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+// --- Embedded Browser ---
+
+const BROWSER_LABEL: &str = "soul-browser";
+
+const BROWSER_POPUP_INIT: &str = r#"
+(function() {
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') window.location.href = 'soul://close';
+    });
+    function addUI() {
+        var btn = document.createElement('div');
+        btn.innerHTML = '\u2715';
+        Object.assign(btn.style, {
+            position:'fixed', top:'10px', right:'10px', zIndex:'2147483647',
+            width:'30px', height:'30px', borderRadius:'50%',
+            background:'rgba(15,18,25,0.75)', color:'rgba(255,255,255,0.6)',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            cursor:'pointer', fontSize:'14px',
+            backdropFilter:'blur(16px)', WebkitBackdropFilter:'blur(16px)',
+            border:'1px solid rgba(100,200,255,0.15)',
+            boxShadow:'0 2px 12px rgba(0,0,0,0.3),0 0 20px rgba(100,200,255,0.05)',
+            transition:'all 0.25s cubic-bezier(0.4,0,0.2,1)',
+            userSelect:'none', WebkitUserSelect:'none'
+        });
+        btn.onmouseenter = function(){
+            this.style.background='rgba(255,50,80,0.85)';
+            this.style.color='#fff';
+            this.style.borderColor='rgba(255,50,80,0.4)';
+            this.style.boxShadow='0 2px 12px rgba(0,0,0,0.3),0 0 20px rgba(255,50,80,0.2)';
+        };
+        btn.onmouseleave = function(){
+            this.style.background='rgba(15,18,25,0.75)';
+            this.style.color='rgba(255,255,255,0.6)';
+            this.style.borderColor='rgba(100,200,255,0.15)';
+            this.style.boxShadow='0 2px 12px rgba(0,0,0,0.3),0 0 20px rgba(100,200,255,0.05)';
+        };
+        btn.onclick = function(){ window.location.href = 'soul://close'; };
+        document.body.appendChild(btn);
+    }
+    if (document.body) addUI();
+    else document.addEventListener('DOMContentLoaded', addUI);
+})();
+"#;
+
+#[tauri::command]
+pub async fn open_browser(
+    app: tauri::AppHandle,
+    url: String,
+    full_mode: bool,
+) -> Result<(), String> {
+    // Destroy existing browser window if any
+    if let Some(existing) = app.get_webview_window(BROWSER_LABEL) {
+        let _ = existing.destroy();
+    }
+
+    let url_parsed = url::Url::parse(&url).map_err(|e| e.to_string())?;
+
+    // Security: only allow http and https URLs
+    match url_parsed.scheme() {
+        "http" | "https" => {}
+        scheme => return Err(format!("Blocked URL scheme: {}. Only http/https allowed.", scheme)),
+    }
+
+    let app_clone = app.clone();
+    let mut builder = tauri::WebviewWindowBuilder::new(
+        &app,
+        BROWSER_LABEL,
+        tauri::WebviewUrl::External(url_parsed),
+    )
+    .title("SoulOS Browser")
+    .center()
+    .on_navigation(move |nav_url| {
+        if nav_url.scheme() == "soul" {
+            let app = app_clone.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Some(w) = app.get_webview_window(BROWSER_LABEL) {
+                    let _ = w.destroy();
+                }
+            });
+            return false;
+        }
+        true
+    });
+
+    if full_mode {
+        builder = builder
+            .inner_size(1100.0, 800.0)
+            .decorations(true);
+    } else {
+        builder = builder
+            .inner_size(900.0, 700.0)
+            .decorations(false)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .initialization_script(BROWSER_POPUP_INIT);
+    }
+
+    builder.build().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn close_browser(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window(BROWSER_LABEL) {
+        w.destroy().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 // --- Directory Listing ---
 
 #[tauri::command]
 pub fn list_directory(config: State<ConfigState>, name: String) -> Result<Vec<String>, String> {
+    // Security: reject path traversal attempts
+    if name.contains("..") {
+        return Err("Access denied: path traversal not allowed".to_string());
+    }
+
     let sp = soul_path(&config);
     let dir_path = sp.join(&name);
 
-    // Security: prevent path traversal
-    if let Ok(canonical) = dir_path.canonicalize() {
-        if let Ok(soul_canonical) = sp.canonicalize() {
-            if !canonical.starts_with(&soul_canonical) {
-                return Err("Access denied: path outside soul directory".to_string());
-            }
-        }
+    // Security: verify resolved path stays within soul directory
+    let sp_canonical = sp.canonicalize()
+        .map_err(|e| format!("Cannot resolve soul directory: {}", e))?;
+    let dir_canonical = dir_path.canonicalize()
+        .map_err(|_| "Directory not found".to_string())?;
+    if !dir_canonical.starts_with(&sp_canonical) {
+        return Err("Access denied: path outside soul directory".to_string());
     }
 
     if !dir_path.exists() {

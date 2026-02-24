@@ -17,6 +17,7 @@ import OnboardingView from "./views/OnboardingView";
 import TimelineView from "./views/TimelineView";
 import MemoryMapView from "./views/MemoryMapView";
 import HealthView from "./views/HealthView";
+import MonitorView from "./views/MonitorView";
 import SetupWizard from "./views/SetupWizard";
 import FoundingChat from "./views/FoundingChat";
 import { useActiveNodes, useCurrentPulse, useMood, useActivityFeed } from "./lib/store";
@@ -36,6 +37,7 @@ export type ViewId =
   | "timeline"
   | "memorymap"
   | "health"
+  | "monitor"
   | "founding"
   | "terminal"
   | "settings";
@@ -167,6 +169,18 @@ const PANELS: PanelDef[] = [
     ),
   },
   {
+    id: "monitor",
+    label: "Monitor",
+    color: "#ff3232",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+        <rect x="2" y="3" width="20" height="14" rx="2" />
+        <path d="M8 21h8M12 17v4" />
+        <path d="M7 10h2l2-3 2 6 2-3h2" />
+      </svg>
+    ),
+  },
+  {
     id: "founding",
     label: "Founding",
     color: "var(--kern)",
@@ -202,6 +216,7 @@ const PANEL_COMPONENTS: Record<PanelId, React.FC> = {
   timeline: TimelineView,
   memorymap: MemoryMapView,
   health: HealthView,
+  monitor: MonitorView,
   founding: FoundingView,
   settings: SettingsView,
 };
@@ -219,6 +234,7 @@ const WIDGET_POSITIONS: Record<PanelId, React.CSSProperties> = {
   timeline: { bottom: "18%", left: "50%", transform: "translateX(-50%)" },
   memorymap: { bottom: "2%", left: "20%" },
   health:    { bottom: "2%", left: "8%" },
+  monitor:   { top: "4%", left: "3%" },
   founding:  { bottom: "2%", left: "50%", transform: "translateX(-50%)" },
   settings: { bottom: "2%", right: "3%" },
 };

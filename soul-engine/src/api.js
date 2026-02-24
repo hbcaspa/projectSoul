@@ -291,6 +291,18 @@ export class SoulAPI {
       }
     });
 
+    // System Monitor — comprehensive session + engine status
+    app.get('/api/monitor', async (req, res) => {
+      try {
+        const { SessionTracker } = await import('./session-tracker.js');
+        const tracker = new SessionTracker(soulPath, this.engine);
+        const result = await tracker.getMonitorData();
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     app.get('/api/events', (req, res) => {
       try {
         const since = parseInt(req.query.since) || 0;

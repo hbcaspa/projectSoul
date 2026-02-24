@@ -64,10 +64,14 @@ jobs:
           echo "=== soul-chain ==="
           ls soul-os/src-tauri/resources/soul-chain/
 
+      - name: Write signing key
+        run: |
+          echo "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" > /tmp/tauri-signing.key
+
       - name: Build Tauri app
         working-directory: soul-os
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PATH: /tmp/tauri-signing.key
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
         run: npx tauri build --verbose
 

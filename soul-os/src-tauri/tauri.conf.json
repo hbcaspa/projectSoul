@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/nicegui/nicegui/main/.schemas/tauri.v2.schema.json",
   "productName": "SoulOS",
   "identifier": "com.projectsoul.soulosnew",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",

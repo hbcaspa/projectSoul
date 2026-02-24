@@ -307,7 +307,7 @@ const WIDGET_POSITIONS: Record<PanelId, React.CSSProperties> = {
   timeline: { bottom: "18%", left: "50%", transform: "translateX(-50%)" },
   memorymap: { bottom: "2%", left: "20%" },
   health:    { bottom: "2%", left: "8%" },
-  monitor:   { top: "4%", left: "3%" },
+  monitor:   { bottom: "10%", left: "3%" },
   mcp:         { bottom: "2%", right: "20%" },
   garden:      { top: "36%", right: "3%" },
   innerworld:  { top: "12%", left: "18%" },

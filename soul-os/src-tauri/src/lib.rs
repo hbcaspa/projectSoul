@@ -9,9 +9,36 @@ mod watcher;
 
 use std::sync::{Arc, Mutex};
 
+use tauri::image::Image;
+use tauri::menu::{MenuBuilder, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::Manager;
 
 use config::AppConfig;
+
+/// Start the breathing animation for the tray icon.
+/// Alternates between bright and dim frames every 1.5 seconds.
+fn start_tray_breathing(app_handle: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        let bright = include_bytes!("../icons/tray-bright.png");
+        let dim = include_bytes!("../icons/tray-dim.png");
+        let mut is_bright = true;
+
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+            is_bright = !is_bright;
+            let bytes: &[u8] = if is_bright { bright } else { dim };
+
+            if let Some(tray) = app_handle.tray_by_id("soul-tray") {
+                if let Ok(img) = Image::from_bytes(bytes) {
+                    let _ = tray.set_icon(Some(img));
+                    #[cfg(target_os = "macos")]
+                    let _ = tray.set_icon_as_template(true);
+                }
+            }
+        }
+    });
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -34,6 +61,75 @@ pub fn run() {
                 apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None)
                     .ok();
             }
+
+            // ── System Tray (Ambient Presence) ─────────────────────
+            let show_i = MenuItem::with_id(app, "show", "Show SoulOS", true, None::<&str>)?;
+            let hide_i = MenuItem::with_id(app, "hide", "Hide to Tray", true, None::<&str>)?;
+            let quit_i = MenuItem::with_id(app, "quit", "Quit SoulOS", true, None::<&str>)?;
+
+            let tray_menu = MenuBuilder::new(app)
+                .item(&show_i)
+                .item(&hide_i)
+                .separator()
+                .item(&quit_i)
+                .build()?;
+
+            let tray_icon = Image::from_bytes(include_bytes!("../icons/tray-icon.png"))?;
+
+            let _tray = TrayIconBuilder::with_id("soul-tray")
+                .icon(tray_icon)
+                .tooltip("SoulOS — Ambient Presence")
+                .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.unminimize();
+                            let _ = w.set_focus();
+                        }
+                    }
+                    "hide" => {
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.hide();
+                        }
+                    }
+                    "quit" => {
+                        // Graceful shutdown
+                        if let Some(sidecar) = app.try_state::<Arc<sidecar::SidecarManager>>() {
+                            sidecar.shutdown();
+                        }
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    // Left-click toggles window visibility
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(w) = app.get_webview_window("main") {
+                            if w.is_visible().unwrap_or(false) {
+                                let _ = w.hide();
+                            } else {
+                                let _ = w.show();
+                                let _ = w.unminimize();
+                                let _ = w.set_focus();
+                            }
+                        }
+                    }
+                })
+                .build(app)?;
+
+            #[cfg(target_os = "macos")]
+            let _ = _tray.set_icon_as_template(true);
+
+            // Start breathing animation
+            start_tray_breathing(app.handle().clone());
 
             // Load config
             let config = AppConfig::load();
@@ -64,11 +160,19 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Graceful shutdown: stop sidecar when window closes
-            if let tauri::WindowEvent::Destroyed = event {
-                if let Some(sidecar) = window.try_state::<Arc<sidecar::SidecarManager>>() {
-                    sidecar.shutdown();
+            match event {
+                // Close to tray instead of quitting
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    let _ = window.hide();
                 }
+                // Graceful shutdown on actual destroy (via Quit menu)
+                tauri::WindowEvent::Destroyed => {
+                    if let Some(sidecar) = window.try_state::<Arc<sidecar::SidecarManager>>() {
+                        sidecar.shutdown();
+                    }
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![

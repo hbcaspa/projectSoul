@@ -417,18 +417,6 @@ function Toggle({ label, desc, on, toggle, last }: { label: string; desc: string
   );
 }
 
-function Inp({ placeholder, value, onChange, pw }: { placeholder: string; value: string; onChange: (v: string) => void; pw?: boolean }) {
-  return (
-    <input
-      type={pw ? "password" : "text"}
-      placeholder={placeholder}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full px-3.5 py-2.5 rounded-xl text-xs font-mono outline-none neon-input"
-    />
-  );
-}
-
 function Sys({ label, value, mono, color }: { label: string; value: string; mono?: boolean; color?: string }) {
   return (
     <div className="flex items-center justify-between">

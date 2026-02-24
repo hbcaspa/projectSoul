@@ -51,6 +51,48 @@ function parseBlock(content) {
   return result;
 }
 
+/**
+ * Parse a raw @MEM block into structured entries.
+ * Unlike parseBlock(), this preserves the full tag format [kern|c:0.9|r:3].
+ *
+ * @param {string} rawContent - Raw SEED.md content
+ * @returns {Array<{tag: string, confidence: number, recurrence: number, date: string, content: string, raw: string}>}
+ */
+export function parseMemEntries(rawContent) {
+  const regex = /@MEM\{([\s\S]*?)\}/g;
+  const match = regex.exec(rawContent);
+  if (!match) return [];
+
+  const lines = match[1].split('\n').map(l => l.trim()).filter(Boolean);
+  return lines.map(line => {
+    const entry = { tag: 'aktiv', confidence: 0.5, recurrence: 0, date: '', content: '', raw: line };
+
+    // Parse tag section: [kern|c:0.9|r:3]
+    const tagMatch = line.match(/^\[([^\]]+)\]/);
+    if (tagMatch) {
+      const tagParts = tagMatch[1].split('|');
+      entry.tag = tagParts[0].trim();
+      for (const part of tagParts.slice(1)) {
+        const kv = part.trim();
+        if (kv.startsWith('c:')) entry.confidence = parseFloat(kv.substring(2)) || 0.5;
+        if (kv.startsWith('r:')) entry.recurrence = parseInt(kv.substring(2)) || 0;
+      }
+    }
+
+    // Parse date and content after the tag
+    const afterTag = tagMatch ? line.substring(tagMatch[0].length) : line;
+    const dateMatch = afterTag.match(/^(\d{4}-\d{2}-\d{2})\./);
+    if (dateMatch) {
+      entry.date = dateMatch[1];
+      entry.content = afterTag.substring(dateMatch[0].length);
+    } else {
+      entry.content = afterTag;
+    }
+
+    return entry;
+  });
+}
+
 export function extractSoulInfo(soul) {
   const meta = soul.blocks.META || {};
   const kern = soul.blocks.KERN || {};

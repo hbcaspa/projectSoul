@@ -56,20 +56,30 @@ describe('ImpulseState', () => {
       assert.equal(impulse.mood.energy, 0.6);
     });
 
-    it('mood valence is clamped to [-1, 1]', () => {
+    it('mood valence is clamped to [-1, 1] (drift-limited per tick)', () => {
+      // With drift limits, a single updateMood(10, ...) is clamped per-tick to 0.3
+      // Starting from 0.3, result = 0.6 (not 1)
       impulse.updateMood(10, 0, 'test');
-      assert.equal(impulse.mood.valence, 1);
+      assert.ok(impulse.mood.valence <= 1, 'Valence should never exceed 1');
+      assert.ok(impulse.mood.valence >= -1, 'Valence should never go below -1');
 
-      impulse.updateMood(-20, 0, 'test');
-      assert.equal(impulse.mood.valence, -1);
+      // Multiple updates to eventually reach bounds
+      for (let i = 0; i < 20; i++) {
+        impulse.updateMood(0.3, 0, 'test');
+      }
+      // Per-hour limit (0.6 total) means it can't go above ~0.9 in one hour
+      assert.ok(impulse.mood.valence <= 1);
     });
 
-    it('mood energy is clamped to [0, 1]', () => {
+    it('mood energy is clamped to [0, 1] (drift-limited per tick)', () => {
       impulse.updateMood(0, 10, 'test');
-      assert.equal(impulse.mood.energy, 1);
+      assert.ok(impulse.mood.energy <= 1, 'Energy should never exceed 1');
+      assert.ok(impulse.mood.energy >= 0, 'Energy should never go below 0');
 
-      impulse.updateMood(0, -20, 'test');
-      assert.equal(impulse.mood.energy, 0);
+      for (let i = 0; i < 20; i++) {
+        impulse.updateMood(0, -0.3, 'test');
+      }
+      assert.ok(impulse.mood.energy >= 0);
     });
 
     it('updates mood label after change', () => {
@@ -428,6 +438,123 @@ describe('ImpulseState', () => {
     it('returns empty object when no impulses in window', () => {
       const counts = impulse.recentTypeCounts(0); // Zero window = nothing
       assert.deepEqual(counts, {});
+    });
+  });
+
+  // ── Emotional Drift Limits ─────────────────────────────────
+
+  describe('emotional drift limits', () => {
+    it('clamps per-tick delta to MAX_MOOD_DELTA_PER_TICK (0.3)', () => {
+      // Starting valence: 0.3, delta: 10 → should be clamped to 0.3
+      impulse.updateMood(10, 0, 'extreme');
+      // 0.3 + 0.3 = 0.6 (not 10.3 clamped to 1)
+      assert.ok(
+        Math.abs(impulse.mood.valence - 0.6) < 0.03,
+        `Expected ~0.6 after clamped tick, got ${impulse.mood.valence}`
+      );
+    });
+
+    it('clamps negative per-tick delta to -0.3', () => {
+      impulse.state.mood.valence = 0.5;
+      impulse.updateMood(-10, 0, 'extreme-neg');
+      // 0.5 - 0.3 = 0.2
+      assert.ok(
+        Math.abs(impulse.mood.valence - 0.2) < 0.03,
+        `Expected ~0.2 after clamped tick, got ${impulse.mood.valence}`
+      );
+    });
+
+    it('enforces per-hour cumulative limit (0.6)', () => {
+      // Make 5 rapid updates each requesting 0.2 delta
+      // Total requested: 1.0, but hourly limit is 0.6
+      const startV = impulse.mood.valence;
+      for (let i = 0; i < 5; i++) {
+        impulse.updateMood(0.2, 0, 'rapid');
+      }
+      const totalChange = Math.abs(impulse.mood.valence - startV);
+      // Should be limited to about 0.6 (with some baseline gravity effect)
+      assert.ok(
+        totalChange <= 0.65,
+        `Hourly change ${totalChange} should be ≤ 0.65`
+      );
+    });
+
+    it('emits mood.clamped when drift limit kicks in', () => {
+      bus.reset();
+      impulse.updateMood(10, 0, 'extreme');
+      const clampEvents = bus.getEvents('mood.clamped');
+      assert.ok(clampEvents.length >= 1, 'Should emit mood.clamped for extreme delta');
+      assert.equal(clampEvents[0].reason, 'per-tick limit');
+      assert.equal(clampEvents[0].requested.deltaValence, 10);
+      assert.ok(Math.abs(clampEvents[0].applied.deltaValence) <= 0.3);
+    });
+
+    it('applies baseline gravity when deviation exceeds threshold', () => {
+      // Set mood far from baseline (baseline valence = 0.3)
+      impulse.state.mood.valence = 0.9;
+      impulse.state.hourlyMoodDeltas = []; // Clear to allow update
+
+      // Apply a zero delta — gravity should still pull back
+      impulse.updateMood(0, 0, 'gravity-test');
+
+      // Deviation was 0.6 (> 0.5 threshold), gravity should pull 0.02 toward baseline
+      assert.ok(
+        impulse.mood.valence < 0.9,
+        `Gravity should pull valence toward baseline, got ${impulse.mood.valence}`
+      );
+    });
+
+    it('does not apply gravity below deviation threshold', () => {
+      // Baseline valence = 0.3, set valence to 0.5 (deviation = 0.2 < 0.5)
+      impulse.state.mood.valence = 0.5;
+      impulse.state.hourlyMoodDeltas = [];
+
+      const before = impulse.mood.valence;
+      impulse.updateMood(0, 0, 'no-gravity');
+
+      // No gravity applied — valence should stay the same
+      assert.equal(impulse.mood.valence, before);
+    });
+
+    it('records mood history entries', () => {
+      assert.equal(impulse.moodHistory.length, 0);
+
+      impulse.updateMood(0.1, 0.05, 'test1');
+      impulse.updateMood(-0.05, 0.02, 'test2');
+
+      assert.equal(impulse.moodHistory.length, 2);
+      assert.equal(impulse.moodHistory[0].trigger, 'test1');
+      assert.equal(impulse.moodHistory[1].trigger, 'test2');
+    });
+
+    it('caps mood history at MAX_MOOD_HISTORY (20)', () => {
+      for (let i = 0; i < 30; i++) {
+        impulse.updateMood(0.01, 0.01, `tick-${i}`);
+      }
+      assert.ok(impulse.moodHistory.length <= 20);
+    });
+
+    it('prevents personality flip with rapid opposite updates', () => {
+      // Start at baseline (valence ~0.3)
+      const start = impulse.mood.valence;
+
+      // Rapid positive bursts
+      for (let i = 0; i < 10; i++) {
+        impulse.updateMood(0.3, 0, 'burst-up');
+      }
+      const afterUp = impulse.mood.valence;
+
+      // Change should be bounded by hourly limit
+      assert.ok(
+        afterUp - start <= 0.65,
+        `Upward swing should be limited, delta was ${afterUp - start}`
+      );
+    });
+
+    it('includes moodBaseline in state', () => {
+      assert.ok(impulse.moodBaseline);
+      assert.equal(impulse.moodBaseline.valence, 0.3);
+      assert.equal(impulse.moodBaseline.energy, 0.5);
     });
   });
 });

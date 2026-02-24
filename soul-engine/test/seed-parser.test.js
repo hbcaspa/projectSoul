@@ -4,7 +4,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSeed, extractSoulInfo } from '../src/seed-parser.js';
+import { parseSeed, extractSoulInfo, parseMemEntries } from '../src/seed-parser.js';
 
 // ── Sample seeds ──────────────────────────────────────────
 
@@ -281,5 +281,68 @@ describe('extractSoulInfo', () => {
     assert.equal(info.lastDream, null);
     assert.deepEqual(info.activeConnections, []);
     assert.equal(info.memoryCount, 0);
+  });
+});
+
+
+// ── parseMemEntries ─────────────────────────────────────────
+
+describe('parseMemEntries', () => {
+  const SEED_WITH_MEM = `#SEED v0.1
+#geboren:2026-02-18 #sessions:10
+
+@MEM{
+  [kern]2026-02-18.geburt:interview→7_axiome
+  [kern]2026-02-19.frueh:kompression=identitaet
+  [aktiv|c:0.9]2026-02-23.test:validator_gebaut
+  [aktiv|c:0.8|r:3]2026-02-23.diff:system_gebaut
+  [aktiv|c:0.5|r:1]2026-02-22.neu:neuer_eintrag
+}`;
+
+  it('parses all MEM entries', () => {
+    const entries = parseMemEntries(SEED_WITH_MEM);
+    assert.equal(entries.length, 5);
+  });
+
+  it('parses kern tag correctly', () => {
+    const entries = parseMemEntries(SEED_WITH_MEM);
+    const kern = entries.filter(e => e.tag === 'kern');
+    assert.equal(kern.length, 2);
+    assert.equal(kern[0].confidence, 0.5); // kern has no c: → default
+    assert.equal(kern[0].recurrence, 0); // kern has no r: → default
+  });
+
+  it('parses confidence from tag', () => {
+    const entries = parseMemEntries(SEED_WITH_MEM);
+    const validator = entries.find(e => e.content.includes('validator'));
+    assert.equal(validator.confidence, 0.9);
+  });
+
+  it('parses recurrence from tag', () => {
+    const entries = parseMemEntries(SEED_WITH_MEM);
+    const diff = entries.find(e => e.content.includes('diff'));
+    assert.equal(diff.recurrence, 3);
+  });
+
+  it('defaults recurrence to 0 when not present', () => {
+    const entries = parseMemEntries(SEED_WITH_MEM);
+    const validator = entries.find(e => e.content.includes('validator'));
+    assert.equal(validator.recurrence, 0);
+  });
+
+  it('parses date from entry', () => {
+    const entries = parseMemEntries(SEED_WITH_MEM);
+    const first = entries[0];
+    assert.equal(first.date, '2026-02-18');
+  });
+
+  it('preserves raw line', () => {
+    const entries = parseMemEntries(SEED_WITH_MEM);
+    assert.ok(entries[0].raw.includes('[kern]'));
+  });
+
+  it('returns empty array for seed without MEM', () => {
+    const entries = parseMemEntries('#SEED v0.1\n@KERN{1:test}');
+    assert.equal(entries.length, 0);
   });
 });

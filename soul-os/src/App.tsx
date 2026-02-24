@@ -13,6 +13,10 @@ import ReplayView from "./views/ReplayView";
 import HistoryView from "./views/HistoryView";
 import FoundingView from "./views/FoundingView";
 import SettingsView from "./views/SettingsView";
+import OnboardingView from "./views/OnboardingView";
+import TimelineView from "./views/TimelineView";
+import MemoryMapView from "./views/MemoryMapView";
+import HealthView from "./views/HealthView";
 import SetupWizard from "./views/SetupWizard";
 import FoundingChat from "./views/FoundingChat";
 import { useActiveNodes, useCurrentPulse, useMood, useActivityFeed } from "./lib/store";
@@ -29,6 +33,9 @@ export type ViewId =
   | "graph"
   | "replay"
   | "history"
+  | "timeline"
+  | "memorymap"
+  | "health"
   | "founding"
   | "terminal"
   | "settings";
@@ -125,6 +132,41 @@ const PANELS: PanelDef[] = [
     ),
   },
   {
+    id: "timeline",
+    label: "Timeline",
+    color: "var(--wachstum)",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+        <path d="M12 2v20" />
+        <circle cx="12" cy="6" r="2" />
+        <circle cx="12" cy="12" r="2" />
+        <circle cx="12" cy="18" r="2" />
+        <path d="M14 6h4M14 12h4M14 18h4" />
+      </svg>
+    ),
+  },
+  {
+    id: "memorymap",
+    label: "Map",
+    color: "var(--graph)",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+        <circle cx="5" cy="6" r="2" /><circle cx="19" cy="6" r="2" /><circle cx="12" cy="18" r="2" />
+        <path d="M7 6h10M5 8l7 8M19 8l-7 8" />
+      </svg>
+    ),
+  },
+  {
+    id: "health",
+    label: "Health",
+    color: "var(--heartbeat)",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+      </svg>
+    ),
+  },
+  {
     id: "founding",
     label: "Founding",
     color: "var(--kern)",
@@ -157,6 +199,9 @@ const PANEL_COMPONENTS: Record<PanelId, React.FC> = {
   graph: GraphView,
   replay: ReplayView,
   history: HistoryView,
+  timeline: TimelineView,
+  memorymap: MemoryMapView,
+  health: HealthView,
   founding: FoundingView,
   settings: SettingsView,
 };
@@ -171,7 +216,10 @@ const WIDGET_POSITIONS: Record<PanelId, React.CSSProperties> = {
   graph:    { top: "50%", right: "2%", transform: "translateY(-50%)" },
   replay:   { bottom: "18%", left: "5%" },
   history:  { bottom: "18%", right: "5%" },
-  founding: { bottom: "2%", left: "50%", transform: "translateX(-50%)" },
+  timeline: { bottom: "18%", left: "50%", transform: "translateX(-50%)" },
+  memorymap: { bottom: "2%", left: "20%" },
+  health:    { bottom: "2%", left: "8%" },
+  founding:  { bottom: "2%", left: "50%", transform: "translateX(-50%)" },
   settings: { bottom: "2%", right: "3%" },
 };
 
@@ -241,6 +289,7 @@ function App() {
   const [booting, setBooting] = useState(true);
   const [appPhase, setAppPhase] = useState<AppPhase>("loading");
   const [openPanel, setOpenPanel] = useState<PanelId | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const { nodes, isWorking } = useActiveNodes();
   const currentPulse = useCurrentPulse();
   const mood = useMood();
@@ -255,6 +304,22 @@ function App() {
       .then((state) => setAppPhase(state as AppPhase))
       .catch(() => setAppPhase("setup")); // fallback to setup on error
   }, [booting]);
+
+  // Show onboarding for new souls (sessions < 5, not dismissed)
+  useEffect(() => {
+    if (appPhase !== "ready") return;
+    if (localStorage.getItem("soul-onboarding-dismissed")) return;
+    commands.getSoulStatus()
+      .then((status) => {
+        if (status.sessions < 5) setShowOnboarding(true);
+      })
+      .catch(() => {}); // ignore — no onboarding if status unavailable
+  }, [appPhase]);
+
+  const dismissOnboarding = useCallback(() => {
+    setShowOnboarding(false);
+    localStorage.setItem("soul-onboarding-dismissed", "true");
+  }, []);
 
   const togglePanel = useCallback((id: PanelId) => {
     setOpenPanel((prev) => (prev === id ? null : id));
@@ -476,6 +541,13 @@ function App() {
             currentPulse={currentPulse}
             mood={mood}
           />
+
+          {/* Onboarding overlay for new souls */}
+          {showOnboarding && (
+            <div className="absolute inset-0 z-40 frosted" style={{ backgroundColor: "rgba(5, 8, 15, 0.85)" }}>
+              <OnboardingView onDismiss={dismissOnboarding} />
+            </div>
+          )}
         </div>
       )}
 

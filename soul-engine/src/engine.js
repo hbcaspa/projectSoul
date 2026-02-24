@@ -27,6 +27,8 @@ import { ReflectionEngine } from './reflection.js';
 import { SelfCorrector } from './self-correction.js';
 import { EncryptionLayer } from './encryption.js';
 import { MultimodalStore } from './multimodal.js';
+import { AuditLogger } from './audit-log.js';
+import { CostTracker } from './cost-tracker.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -54,6 +56,8 @@ export class SoulEngine {
     this.corrector = null;
     this.encryption = null;
     this.multimodal = null;
+    this.audit = null;
+    this.costs = null;
     this.running = false;
   }
 
@@ -83,6 +87,9 @@ export class SoulEngine {
       console.error('  No LLM configured. Set OPENAI_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY, or OLLAMA_URL in .env');
       process.exit(1);
     }
+
+    // Cost Tracker — wraps LLM for token estimation
+    this.costs = new CostTracker(this.soulPath, { bus: this.bus });
 
     return { name: this.context.extractName(), lang: this.context.language, model };
   }
@@ -211,6 +218,18 @@ export class SoulEngine {
     // Event Bus — reactive handlers
     this._registerHandlers();
     console.log(`  Event Bus: active (${this.bus.listenerCount('message.received') + this.bus.listenerCount('mood.changed') + this.bus.listenerCount('interest.detected')} handlers)`);
+
+    // Audit Logger — append-only security event log
+    this.audit = new AuditLogger(this.soulPath, { bus: this.bus });
+    this.audit.registerListeners();
+    console.log('  Audit:     active (.soul-audit.jsonl)');
+
+    // Cost Tracker — token usage monitoring
+    if (this.costs) {
+      const today = this.costs.getToday();
+      const budgetInfo = this.costs.budgetPerDay > 0 ? `, budget: ${this.costs.budgetPerDay}/day` : '';
+      console.log(`  Costs:     active (today: ${today.total.calls} calls, ~${today.total.input + today.total.output} tokens${budgetInfo})`);
+    }
 
     // State Versioning — git-based auto-commit for soul files
     if (process.env.SOUL_VERSIONING !== 'false') {
@@ -416,6 +435,7 @@ export class SoulEngine {
     const history = await this.telegram.loadHistory(chatId);
     const llmOptions = this._buildLLMOptions('conversation');
     let response = await this.llm.generate(systemPrompt, history, text, llmOptions) || '';
+    this._trackCost('conversation', systemPrompt, history, text, response);
 
     // Anti-performance check: detect performative patterns, re-generate once if score > 0.7
     if (this.detector && response) {
@@ -428,6 +448,7 @@ export class SoulEngine {
           systemPrompt + '\n\n[AUTHENTICITY HINT: ' + hint + ']',
           history, text, llmOptions
         ) || response;
+        this._trackCost('conversation', systemPrompt, history, text, retryResponse);
         response = retryResponse;
       }
       this._antiPerfRetried = false;
@@ -652,6 +673,7 @@ export class SoulEngine {
 
     const llmOptions = this._buildLLMOptions('conversation');
     const response = await this.llm.generate(systemPrompt, [], text, llmOptions) || '';
+    this._trackCost('conversation', systemPrompt, [], text, response);
 
     // Send response back via WhatsApp bridge
     if (this.whatsapp && response) {
@@ -681,6 +703,7 @@ export class SoulEngine {
     // Heartbeat also gets MCP tools (e.g. for web search during world-check)
     const llmOptions = this._buildLLMOptions('heartbeat');
     const result = await this.llm.generate(systemPrompt, [], trigger, llmOptions);
+    this._trackCost('heartbeat', systemPrompt, [], trigger, result);
 
     await this.memory.writeHeartbeat(result);
     await this.memory.persistHeartbeatState(result, this.context.language);
@@ -700,6 +723,19 @@ export class SoulEngine {
 
     await writePulse(this.soulPath, 'heartbeat', 'Heartbeat complete', this.bus);
     console.log('  [heartbeat] Complete.');
+  }
+
+  /**
+   * Track an LLM call's token usage.
+   */
+  _trackCost(category, systemPrompt, history, userMessage, response) {
+    if (!this.costs) return;
+    const inputChars =
+      (systemPrompt?.length || 0) +
+      (history || []).reduce((sum, m) => sum + (m.content?.length || 0), 0) +
+      (userMessage?.length || 0);
+    const outputChars = response?.length || 0;
+    this.costs.record(category, Math.ceil(inputChars / 4), Math.ceil(outputChars / 4));
   }
 
   /**
@@ -797,6 +833,7 @@ export class SoulEngine {
       }
     }
 
+    if (this.costs) this.costs.flush();
     if (this.reflection) this.reflection.stop();
     if (this.db) this.db.close();
     if (this.impulse) await this.impulse.stop();

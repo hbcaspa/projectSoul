@@ -101,6 +101,11 @@ export class AttentionModel {
       if (charCount + entry.length > MAX_CONTEXT_CHARS) break;
       contextStr += entry + '\n';
       charCount += entry.length;
+
+      // Touch accessed memories to reset decay clock
+      if (typeof mem.id === 'number' && this.db.touchMemory) {
+        try { this.db.touchMemory(mem.id); } catch { /* best-effort */ }
+      }
     }
 
     if (this.bus && contextStr) {
@@ -118,11 +123,12 @@ export class AttentionModel {
 
   /**
    * Compute composite relevance score for a memory.
-   * 0.5 * semantic + 0.3 * recency + 0.2 * confidence
+   * 0.4 * semantic + 0.25 * recency + 0.15 * confidence + 0.2 * importance
    */
   scoreRelevance(memory, now = Date.now()) {
-    const semantic = memory.semanticScore || 0;
-    const confidence = memory.confidence || 0.5;
+    const semantic = memory.semanticScore ?? 0;
+    const confidence = memory.confidence ?? 0.5;
+    const importance = memory.importance ?? 0.5;
 
     // Recency: exponential decay, half-life of 7 days
     const createdAt = memory.created_at ? new Date(memory.created_at).getTime() : now;
@@ -130,7 +136,7 @@ export class AttentionModel {
     const ageDays = ageMs / (24 * 60 * 60 * 1000);
     const recency = Math.exp(-0.693 * ageDays / 7);
 
-    return 0.5 * semantic + 0.3 * recency + 0.2 * confidence;
+    return 0.4 * semantic + 0.25 * recency + 0.15 * confidence + 0.2 * importance;
   }
 
   _formatMemory(memory) {

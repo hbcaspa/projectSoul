@@ -7,6 +7,16 @@ const LOG_FILE = '.soul-impulse-log';
 const MAX_HISTORY = 20;
 const MAX_LOG = 50;
 
+// ── Emotional Drift Limits ──────────────────────────────────
+// Prevent personality-flip scenarios where rapid mood updates
+// swing the soul from melancholic to euphoric in seconds.
+
+const MAX_MOOD_DELTA_PER_TICK = 0.3;      // Max change per single updateMood() call
+const MAX_MOOD_DELTA_PER_HOUR = 0.6;      // Max cumulative change within 1 hour
+const BASELINE_GRAVITY = 0.02;             // Pull-back per tick toward baseline
+const BASELINE_DEVIATION_THRESHOLD = 0.5;  // Only apply gravity above this deviation
+const MAX_MOOD_HISTORY = 20;               // Rolling mood state history
+
 // Common tech/nerd keywords for interest extraction
 const INTEREST_PATTERNS = [
   // Programming & Tech
@@ -60,6 +70,9 @@ export class ImpulseState {
   _defaultState() {
     return {
       mood: { valence: 0.3, energy: 0.5, label: 'neugierig' },
+      moodBaseline: { valence: 0.3, energy: 0.5 },
+      moodHistory: [],
+      hourlyMoodDeltas: [],
       lastImpulse: null,
       lastUserMessage: null,
       engagementScore: 0.5,
@@ -95,12 +108,86 @@ export class ImpulseState {
 
   updateMood(deltaValence, deltaEnergy, trigger) {
     const prev = { valence: this.state.mood.valence, energy: this.state.mood.energy, label: this.state.mood.label };
-    this.state.mood.valence = clamp(this.state.mood.valence + deltaValence, -1, 1);
-    this.state.mood.energy = clamp(this.state.mood.energy + deltaEnergy, 0, 1);
+
+    // ── Per-tick clamping ──
+    let clampedDV = clamp(deltaValence, -MAX_MOOD_DELTA_PER_TICK, MAX_MOOD_DELTA_PER_TICK);
+    let clampedDE = clamp(deltaEnergy, -MAX_MOOD_DELTA_PER_TICK, MAX_MOOD_DELTA_PER_TICK);
+    const wasClamped = (clampedDV !== deltaValence || clampedDE !== deltaEnergy);
+
+    // ── Per-hour cumulative clamping ──
+    const now = Date.now();
+    this.state.hourlyMoodDeltas = (this.state.hourlyMoodDeltas || [])
+      .filter(d => (now - d.ts) < 3600000); // Keep last hour only
+
+    const hourlySum = this.state.hourlyMoodDeltas.reduce(
+      (acc, d) => ({ v: acc.v + Math.abs(d.dv), e: acc.e + Math.abs(d.de) }),
+      { v: 0, e: 0 }
+    );
+
+    const remainingV = Math.max(0, MAX_MOOD_DELTA_PER_HOUR - hourlySum.v);
+    const remainingE = Math.max(0, MAX_MOOD_DELTA_PER_HOUR - hourlySum.e);
+
+    const hourClamped = (
+      Math.abs(clampedDV) > remainingV || Math.abs(clampedDE) > remainingE
+    );
+
+    if (Math.abs(clampedDV) > remainingV) {
+      clampedDV = Math.sign(clampedDV) * remainingV;
+    }
+    if (Math.abs(clampedDE) > remainingE) {
+      clampedDE = Math.sign(clampedDE) * remainingE;
+    }
+
+    // Record this delta
+    this.state.hourlyMoodDeltas.push({ ts: now, dv: clampedDV, de: clampedDE });
+
+    // ── Apply clamped delta ──
+    this.state.mood.valence = clamp(this.state.mood.valence + clampedDV, -1, 1);
+    this.state.mood.energy = clamp(this.state.mood.energy + clampedDE, 0, 1);
+
+    // ── Personality baseline gravity ──
+    const baseline = this.state.moodBaseline || { valence: 0.3, energy: 0.5 };
+    const deviationV = Math.abs(this.state.mood.valence - baseline.valence);
+    const deviationE = Math.abs(this.state.mood.energy - baseline.energy);
+
+    if (deviationV > BASELINE_DEVIATION_THRESHOLD) {
+      const pullV = BASELINE_GRAVITY * Math.sign(baseline.valence - this.state.mood.valence);
+      this.state.mood.valence = clamp(this.state.mood.valence + pullV, -1, 1);
+    }
+    if (deviationE > BASELINE_DEVIATION_THRESHOLD) {
+      const pullE = BASELINE_GRAVITY * Math.sign(baseline.energy - this.state.mood.energy);
+      this.state.mood.energy = clamp(this.state.mood.energy + pullE, 0, 1);
+    }
+
     this.state.mood.label = this._pickMoodLabel();
 
-    // Emit mood.changed only when the shift exceeds a threshold
+    // ── Mood history ──
+    if (!this.state.moodHistory) this.state.moodHistory = [];
+    this.state.moodHistory.push({
+      valence: this.state.mood.valence,
+      energy: this.state.mood.energy,
+      label: this.state.mood.label,
+      trigger: trigger || 'update',
+      ts: now,
+    });
+    if (this.state.moodHistory.length > MAX_MOOD_HISTORY) {
+      this.state.moodHistory = this.state.moodHistory.slice(-MAX_MOOD_HISTORY);
+    }
+
+    // ── Event emission ──
     if (this.bus) {
+      // Emit mood.clamped when drift limits kicked in
+      if (wasClamped || hourClamped) {
+        this.bus.safeEmit('mood.clamped', {
+          source: 'impulse-state',
+          requested: { deltaValence, deltaEnergy },
+          applied: { deltaValence: clampedDV, deltaEnergy: clampedDE },
+          reason: wasClamped ? 'per-tick limit' : 'per-hour limit',
+          trigger: trigger || 'update',
+        });
+      }
+
+      // Emit mood.changed only when the shift exceeds a threshold
       const dv = Math.abs(this.state.mood.valence - prev.valence);
       const de = Math.abs(this.state.mood.energy - prev.energy);
       if (dv > 0.1 || de > 0.15 || this.state.mood.label !== prev.label) {
@@ -341,6 +428,8 @@ export class ImpulseState {
   // ── Getters ───────────────────────────────────────────
 
   get mood() { return this.state.mood; }
+  get moodBaseline() { return this.state.moodBaseline || { valence: 0.3, energy: 0.5 }; }
+  get moodHistory() { return this.state.moodHistory || []; }
   get engagement() { return this.state.engagementScore; }
   get consecutiveIgnored() { return this.state.consecutiveIgnored; }
   get dailyCount() { return this.state.dailyImpulseCount; }

@@ -16,6 +16,7 @@ import { promisify } from 'util';
 import { readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
+import { diffSeedsWithEvents } from './seed-diff.js';
 
 const execFile = promisify(execFileCb);
 
@@ -196,6 +197,19 @@ export class StateVersioner {
     if (!this.gitAvailable) return null;
 
     try {
+      // Capture SEED.md before staging for drift detection
+      let seedBefore = null;
+      const seedPath = resolve(this.soulPath, 'SEED.md');
+      const seedChanged = await this._isSeedDirty();
+      if (seedChanged) {
+        try {
+          const committed = await this._git('show', 'HEAD:SEED.md');
+          seedBefore = committed;
+        } catch {
+          // First commit or SEED.md not yet tracked — no diff possible
+        }
+      }
+
       // Stage all changes
       await this._git('add', '-A');
 
@@ -216,10 +230,36 @@ export class StateVersioner {
         message,
       });
 
+      // Run seed drift detection after commit
+      if (seedBefore && existsSync(seedPath)) {
+        try {
+          const seedAfter = await readFile(seedPath, 'utf-8');
+          diffSeedsWithEvents(seedBefore, seedAfter, {
+            bus: this.bus,
+            source: 'state-versioning',
+          });
+        } catch {
+          // Drift detection is best-effort
+        }
+      }
+
       return hash;
     } catch (err) {
       console.error(`  [versioning] Commit failed: ${err.message}`);
       return null;
+    }
+  }
+
+  /**
+   * Check if SEED.md has uncommitted changes.
+   * @returns {boolean}
+   */
+  async _isSeedDirty() {
+    try {
+      const status = await this._git('status', '--porcelain', 'SEED.md');
+      return status.trim().length > 0;
+    } catch {
+      return false;
     }
   }
 

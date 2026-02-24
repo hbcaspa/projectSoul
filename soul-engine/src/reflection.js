@@ -170,8 +170,20 @@ export class ReflectionEngine {
     if (!this.db) return null;
     const memories = this.db.searchStructured({ limit: 30 });
     if (memories.length === 0) return null;
-    const lines = memories.map(m => `[${m.type}|conf:${m.confidence}] ${(m.content || '').substring(0, 80)}`).join('\n');
-    return `Review these memories and suggest which should have confidence raised or lowered.\n\n${lines}\n\nList max 5 adjustments.`;
+    const lines = memories.map(m =>
+      `[${m.type}|conf:${m.confidence}|imp:${m.importance ?? 0.5}] ${(m.content || '').substring(0, 80)}`
+    ).join('\n');
+    return `Review these memories. For each, suggest adjustments to both confidence AND importance (0.0-1.0).
+
+Importance guidelines:
+- Recurring themes (referenced in multiple memories) → higher importance
+- Foundational experiences (identity, relationships) → high importance (0.7-1.0)
+- Routine/trivial observations → lower importance (0.2-0.4)
+- Contradicted or outdated → lower importance
+
+${lines}
+
+List max 5 adjustments with format: id:N conf:X.X imp:X.X reason`;
   }
 
   async _buildRelationshipPrompt() {

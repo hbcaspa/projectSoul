@@ -8,6 +8,7 @@
 import { writeFile, readFile, rename } from 'fs/promises';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
+import { validateSeedWithEvents } from './seed-validator.js';
 
 /**
  * Replace a single block in seed content.
@@ -73,15 +74,43 @@ export function updateHeader(seedContent, { condensed, sessions } = {}) {
 /**
  * Atomically write seed content to SEED.md.
  * Writes to .tmp file first, then renames for crash safety.
+ *
+ * When `validate: true` is passed, the seed is validated before writing.
+ * If validation fails, the write is rejected and an event is emitted.
+ *
  * @param {string} soulPath - Path to the soul directory
  * @param {string} seedContent - Complete SEED.md content
+ * @param {Object} [options]
+ * @param {boolean} [options.validate=false] - Validate seed before writing
+ * @param {Object} [options.bus] - SoulEventBus for validation failure events
+ * @param {string} [options.source] - Source identifier for events
+ * @returns {Promise<{written: boolean, validation?: import('./seed-validator.js').ValidationResult}>}
  */
-export async function writeSeed(soulPath, seedContent) {
+export async function writeSeed(soulPath, seedContent, options = {}) {
+  const { validate = false, bus, source } = options;
+
+  if (validate) {
+    const result = validateSeedWithEvents(seedContent, { bus, source });
+    if (!result.valid) {
+      console.error(`  [seed-writer] Validation failed — write blocked (${result.errors.length} error(s))`);
+      for (const err of result.errors) {
+        console.error(`    - ${err}`);
+      }
+      return { written: false, validation: result };
+    }
+    if (result.warnings.length > 0) {
+      for (const warn of result.warnings) {
+        console.warn(`  [seed-writer] Warning: ${warn}`);
+      }
+    }
+  }
+
   const seedPath = resolve(soulPath, 'SEED.md');
   const tmpPath = resolve(soulPath, 'SEED.md.tmp');
 
   await writeFile(tmpPath, seedContent, 'utf-8');
   await rename(tmpPath, seedPath);
+  return { written: true };
 }
 
 /**

@@ -1,6 +1,8 @@
 import { readFile, stat } from 'fs/promises';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
+import { SeedMigrator, CURRENT_VERSION } from './seed-migration.js';
+import { parseSeed } from './seed-parser.js';
 
 const DAILY_NOTES_MAX_CHARS = 2000;
 
@@ -37,6 +39,9 @@ export class SoulContext {
     }
 
     this.seed = await readFile(seedPath, 'utf-8');
+
+    // Migration check — upgrade seed format if needed
+    await this._migrateIfNeeded();
 
     // Update mtime cache
     try {
@@ -110,6 +115,25 @@ export class SoulContext {
     }
 
     return 'Soul';
+  }
+
+  /**
+   * Check seed version and migrate if needed.
+   */
+  async _migrateIfNeeded() {
+    try {
+      const soul = parseSeed(this.seed);
+      const version = soul.version || '0.1';
+      if (version === CURRENT_VERSION) return;
+
+      const migrator = new SeedMigrator(this.soulPath);
+      const result = await migrator.migrateIfNeeded(this.seed);
+      if (result.migrated) {
+        this.seed = result.content;
+      }
+    } catch (err) {
+      console.error(`  [context] Migration check failed: ${err.message}`);
+    }
   }
 
   async loadDetail(filename) {

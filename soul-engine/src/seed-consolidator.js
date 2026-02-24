@@ -8,10 +8,15 @@
  * Tracks dirty blocks via event bus and consolidates on schedule.
  */
 
-import { readFile } from 'fs/promises';
+import { readFile, writeFile, rename } from 'fs/promises';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
+import { execFile as execFileCb } from 'child_process';
+import { promisify } from 'util';
 import { replaceBlock, updateHeader, writeSeed, readSeed } from './seed-writer.js';
+import { validateSeedWithEvents } from './seed-validator.js';
+
+const execFile = promisify(execFileCb);
 import {
   templateMETA, templateKERN, templateSELF, templateSHADOW, templateOPEN,
   templateINTERESTS, templateCONNECTIONS, templateGROWTH, templateDREAMS,
@@ -25,6 +30,9 @@ const FAST_MIN_INTERVAL = 30 * 60 * 1000;   // 30 minutes between fast consolida
 const FAST_EVENT_THRESHOLD = 20;              // or after 20 events
 const DEEP_MIN_INTERVAL = 4 * 60 * 60 * 1000; // 4 hours between deep consolidations
 const DEEP_EVENT_THRESHOLD = 100;             // or after 100 events
+
+// Recovery constants
+const MAX_CONSECUTIVE_FAILURES = 3;
 
 /**
  * Event → dirty block mapping.
@@ -68,6 +76,10 @@ export class SeedConsolidator {
 
     // Lock to prevent concurrent writes
     this._consolidating = false;
+
+    // Recovery state
+    this._consecutiveFailures = 0;
+    this._mechanicalOnly = false;
   }
 
   /**
@@ -158,7 +170,20 @@ export class SeedConsolidator {
       if (changed) {
         const now = new Date().toISOString().replace(/:\d{2}\.\d+Z$/, '');
         seedContent = updateHeader(seedContent, { condensed: now });
+
+        // Validate before writing — reject corrupted seeds
+        const validation = validateSeedWithEvents(seedContent, {
+          bus: this.bus,
+          source: 'consolidator-fast',
+        });
+        if (!validation.valid) {
+          console.error(`  [consolidator] Fast: validation failed — write blocked`);
+          await this._handleFailure('consolidator-fast', validation);
+          return;
+        }
+
         await writeSeed(this.soulPath, seedContent);
+        this._consecutiveFailures = 0;
 
         // Invalidate context cache
         if (this.context.invalidate) this.context.invalidate();
@@ -193,14 +218,22 @@ export class SeedConsolidator {
       await this.consolidateFast();
       this._consolidating = true; // Re-lock for deep
 
-      // Step 2: Read current seed (now with updated mechanical blocks)
+      // Step 2: If in mechanical-only mode, skip LLM steps
+      if (this._mechanicalOnly) {
+        console.warn('  [consolidator] Deep: mechanical-only mode — skipping LLM');
+        this.lastDeepConsolidation = Date.now();
+        this.eventsSinceLastDeep = 0;
+        return;
+      }
+
+      // Step 3: Read current seed (now with updated mechanical blocks)
       let seedContent = await readSeed(this.soulPath);
       if (!seedContent) return;
 
       const language = this.context.language || 'de';
       let changed = false;
 
-      // Step 3: LLM rewrite @STATE
+      // Step 4: LLM rewrite @STATE
       try {
         const newState = await this._llmRewriteState(seedContent, language);
         if (newState) {
@@ -211,7 +244,7 @@ export class SeedConsolidator {
         console.error(`  [consolidator] @STATE LLM failed: ${err.message}`);
       }
 
-      // Step 4: LLM condense @MEM
+      // Step 5: LLM condense @MEM
       try {
         const newMem = await this._llmCondenseMem(seedContent, language);
         if (newMem) {
@@ -222,11 +255,24 @@ export class SeedConsolidator {
         console.error(`  [consolidator] @MEM LLM failed: ${err.message}`);
       }
 
-      // Step 5: Write
+      // Step 6: Validate and Write
       if (changed) {
         const now = new Date().toISOString().replace(/:\d{2}\.\d+Z$/, '');
         seedContent = updateHeader(seedContent, { condensed: now });
+
+        // Validate before writing — critical for LLM-generated content
+        const validation = validateSeedWithEvents(seedContent, {
+          bus: this.bus,
+          source: 'consolidator-deep',
+        });
+        if (!validation.valid) {
+          console.error('  [consolidator] Deep: validation failed — write blocked');
+          await this._handleFailure('consolidator-deep', validation);
+          return;
+        }
+
         await writeSeed(this.soulPath, seedContent);
+        this._consecutiveFailures = 0;
 
         if (this.context.invalidate) this.context.invalidate();
         console.log('  [consolidator] Deep: @STATE + @MEM updated via LLM');
@@ -240,6 +286,164 @@ export class SeedConsolidator {
       console.error(`  [consolidator] Deep consolidation failed: ${err.message}`);
     } finally {
       this._consolidating = false;
+    }
+  }
+
+  // ── Recovery ────────────────────────────────────────────────
+
+  /**
+   * Whether the consolidator is in mechanical-only mode
+   * (LLM consolidation disabled after repeated failures).
+   */
+  get isInRecoveryMode() {
+    return this._mechanicalOnly;
+  }
+
+  /**
+   * Number of consecutive validation failures.
+   */
+  get consecutiveFailures() {
+    return this._consecutiveFailures;
+  }
+
+  /**
+   * Reset recovery state after manual intervention.
+   * Re-enables LLM consolidation.
+   */
+  resetRecoveryState() {
+    this._consecutiveFailures = 0;
+    this._mechanicalOnly = false;
+    console.log('  [consolidator] Recovery state reset — LLM consolidation re-enabled');
+
+    this.bus?.safeEmit('seed.recovery-reset', {
+      source: 'consolidator',
+    });
+  }
+
+  /**
+   * Handle a validation failure: count failures, attempt recovery,
+   * switch to mechanical-only after repeated failures.
+   *
+   * @param {string} source - Which consolidation phase failed
+   * @param {Object} validation - The validation result
+   */
+  async _handleFailure(source, validation) {
+    this._consecutiveFailures++;
+
+    console.error(
+      `  [consolidator] Failure ${this._consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}`
+    );
+
+    // Attempt git-based recovery
+    const recovered = await this._recoverFromGit(source);
+
+    // After MAX failures, lock into mechanical-only mode
+    if (this._consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      this._mechanicalOnly = true;
+      console.error(
+        '  [consolidator] Too many failures — switching to mechanical-only mode'
+      );
+      console.error(
+        '  [consolidator] Manual intervention required. Call resetRecoveryState() to re-enable LLM.'
+      );
+
+      this.bus?.safeEmit('seed.recovery-mode-entered', {
+        source,
+        consecutiveFailures: this._consecutiveFailures,
+        recovered,
+      });
+    }
+  }
+
+  /**
+   * Attempt to recover the last valid seed from git history.
+   *
+   * Walks backwards through git log to find the most recent
+   * SEED.md that passes validation. Restores it if found.
+   *
+   * @param {string} source - Source identifier for events
+   * @returns {boolean} Whether recovery succeeded
+   */
+  async _recoverFromGit(source) {
+    try {
+      // Check if git is available
+      const gitDir = resolve(this.soulPath, '.git');
+      if (!existsSync(gitDir)) {
+        console.error('  [consolidator] No git repo — recovery not possible');
+        return false;
+      }
+
+      // Get the last 5 commits that touched SEED.md
+      const { stdout: logOutput } = await execFile(
+        'git',
+        ['log', '--pretty=format:%H', '-n', '5', '--', 'SEED.md'],
+        { cwd: this.soulPath, timeout: 10_000 }
+      );
+
+      const hashes = logOutput.trim().split('\n').filter(Boolean);
+      if (hashes.length === 0) {
+        console.error('  [consolidator] No SEED.md history in git — recovery not possible');
+        return false;
+      }
+
+      // Try each commit until we find a valid seed
+      for (const hash of hashes) {
+        try {
+          const { stdout: seedContent } = await execFile(
+            'git',
+            ['show', `${hash}:SEED.md`],
+            { cwd: this.soulPath, timeout: 10_000 }
+          );
+
+          const validation = validateSeedWithEvents(seedContent, {
+            bus: this.bus,
+            source: `recovery-check:${hash.substring(0, 7)}`,
+          });
+
+          if (validation.valid) {
+            // Found a valid seed — restore it
+            const seedPath = resolve(this.soulPath, 'SEED.md');
+            const tmpPath = resolve(this.soulPath, 'SEED.md.tmp');
+            await writeFile(tmpPath, seedContent, 'utf-8');
+            await rename(tmpPath, seedPath);
+
+            console.log(
+              `  [consolidator] Recovered valid seed from commit ${hash.substring(0, 7)}`
+            );
+
+            if (this.context.invalidate) this.context.invalidate();
+
+            this.bus?.safeEmit('seed.recovered', {
+              source,
+              fromCommit: hash.substring(0, 7),
+            });
+
+            return true;
+          }
+        } catch {
+          // This commit doesn't have a valid SEED.md, try the next one
+          continue;
+        }
+      }
+
+      console.error('  [consolidator] No valid seed found in last 5 commits');
+
+      this.bus?.safeEmit('seed.recovery-failed', {
+        source,
+        reason: 'no-valid-commit',
+        commitsChecked: hashes.length,
+      });
+
+      return false;
+    } catch (err) {
+      console.error(`  [consolidator] Recovery failed: ${err.message}`);
+
+      this.bus?.safeEmit('seed.recovery-failed', {
+        source,
+        reason: err.message,
+      });
+
+      return false;
     }
   }
 
@@ -363,32 +567,48 @@ export class SeedConsolidator {
     const prompt = language === 'de'
       ? `Du bist der Erinnerungs-Verdichter. Aktualisiere den @MEM Block.
 
+         Tag-Format: [tag|c:CONFIDENCE|r:RECURRENCE]
+         - tag: kern (unveraenderlich) oder aktiv
+         - c: Confidence-Score (0.0-1.0)
+         - r: Recurrence-Zaehler — wie oft diese Erinnerung referenziert wurde
+
          Regeln:
          1. [kern] Eintraege NIEMALS aendern oder entfernen
-         2. [aktiv|c:X.X] Eintraege: Confidence-Score anpassen wenn noetig
+         2. Eintraege mit r>3 fast NIEMALS archivieren — sie sind offensichtlich wichtig
+         3. [aktiv|c:X.X|r:N] Eintraege: Confidence-Score anpassen wenn noetig
             - Bestaetigte Erinnerungen: c erhoehen (max 1.0)
             - Widersprochene: c senken
-            - Unter c:0.3 und aelter als 1 Monat: entfernen
-         3. Neue Eintraege aus den Tagesnotizen hinzufuegen als [aktiv|c:0.5]
-            - Format: [aktiv|c:0.5]YYYY-MM-DD.thema:komprimierte_beschreibung
+            - Unter c:0.3 und aelter als 1 Monat UND r<2: entfernen
+         4. Wenn eine bestehende Erinnerung in den Tagesnotizen referenziert wird:
+            r um 1 erhoehen
+         5. Neue Eintraege aus den Tagesnotizen hinzufuegen als [aktiv|c:0.5|r:1]
+            - Format: [aktiv|c:0.5|r:1]YYYY-MM-DD.thema:komprimierte_beschreibung
             - NUR wirklich bedeutsame Ereignisse, nicht jede Kleinigkeit
-         4. Aeltere [aktiv] Eintraege (> 1 Monat) zu [kern] verdichten oder entfernen
-         5. Gesamter Block soll unter 30 Zeilen bleiben
+         6. Aeltere [aktiv] Eintraege (> 1 Monat, r<2) zu [kern] verdichten oder entfernen
+         7. Gesamter Block soll unter 30 Zeilen bleiben
 
          Antworte NUR mit dem Block-Inhalt (ohne @MEM{ und }). Keine Erklaerung.`
       : `You are the memory condenser. Update the @MEM block.
 
+         Tag format: [tag|c:CONFIDENCE|r:RECURRENCE]
+         - tag: kern (immutable) or aktiv
+         - c: confidence score (0.0-1.0)
+         - r: recurrence counter — how many times this memory has been referenced
+
          Rules:
          1. NEVER change or remove [kern] entries
-         2. [aktiv|c:X.X] entries: adjust confidence score if needed
+         2. Entries with r>3 should almost NEVER be archived — they are clearly important
+         3. [aktiv|c:X.X|r:N] entries: adjust confidence score if needed
             - Confirmed memories: increase c (max 1.0)
             - Contradicted: lower c
-            - Below c:0.3 and older than 1 month: remove
-         3. Add new entries from daily notes as [aktiv|c:0.5]
-            - Format: [aktiv|c:0.5]YYYY-MM-DD.topic:compressed_description
+            - Below c:0.3 and older than 1 month AND r<2: remove
+         4. When an existing memory is referenced in daily notes:
+            increment r by 1
+         5. Add new entries from daily notes as [aktiv|c:0.5|r:1]
+            - Format: [aktiv|c:0.5|r:1]YYYY-MM-DD.topic:compressed_description
             - Only truly meaningful events, not every small thing
-         4. Older [aktiv] entries (> 1 month) condense to [kern] or remove
-         5. Entire block should stay under 30 lines
+         6. Older [aktiv] entries (> 1 month, r<2) condense to [kern] or remove
+         7. Entire block should stay under 30 lines
 
          Reply ONLY with the block content (without @MEM{ and }). No explanation.`;
 

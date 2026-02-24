@@ -127,6 +127,9 @@ export const events = {
   onPtyData: (handler: (data: { id: number; data: string }) => void): Promise<UnlistenFn> =>
     listen("pty:data", (e) => handler(e.payload as { id: number; data: string })),
 
+  onPtyExit: (handler: (data: { id: number }) => void): Promise<UnlistenFn> =>
+    listen("pty:exit", (e) => handler(e.payload as { id: number })),
+
   onSidecarStdout: (handler: (data: { process: string; line: string }) => void): Promise<UnlistenFn> =>
     listen("sidecar:stdout", (e) => handler(e.payload as { process: string; line: string })),
 

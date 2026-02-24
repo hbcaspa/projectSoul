@@ -42,10 +42,17 @@ const SOUL_BANNER = `
 \x1b[0m
 `;
 
-// Load .env if available
-if (existsSync(envPath)) {
-  const { config } = await import('dotenv');
-  config({ path: envPath });
+// Load secrets: try .env.enc first, then fall back to .env
+{
+  const { SecretManager } = await import('../src/secret-manager.js');
+  const secrets = new SecretManager(soulPath);
+  const result = secrets.load();
+
+  // If no encrypted file and plaintext .env exists, load via dotenv
+  if (result.source === 'none' && existsSync(envPath)) {
+    const { config } = await import('dotenv');
+    config({ path: envPath });
+  }
 }
 
 // Commands that need a founded soul
@@ -120,6 +127,29 @@ if (command === 'start') {
   await engine.runHeartbeat();
   process.exit(0);
 
+} else if (command === 'encrypt-env') {
+  const { SecretManager } = await import('../src/secret-manager.js');
+  const sm = new SecretManager(soulPath);
+  const ok = sm.encryptEnv();
+  process.exit(ok ? 0 : 1);
+
+} else if (command === 'decrypt-env') {
+  const { SecretManager } = await import('../src/secret-manager.js');
+  const sm = new SecretManager(soulPath);
+  const ok = sm.decryptEnv();
+  process.exit(ok ? 0 : 1);
+
+} else if (command === 'rotate-key') {
+  const newKey = process.env.SOUL_SECRET_KEY_NEW || process.argv[3];
+  if (!newKey) {
+    console.error('  Set SOUL_SECRET_KEY_NEW or pass the new key as argument.');
+    process.exit(1);
+  }
+  const { SecretManager } = await import('../src/secret-manager.js');
+  const sm = new SecretManager(soulPath);
+  const ok = sm.rotateKey(newKey);
+  process.exit(ok ? 0 : 1);
+
 } else if (command === 'status') {
   console.log(SOUL_BANNER);
   console.log('  Soul Engine Status');
@@ -135,11 +165,14 @@ if (command === 'start') {
 } else {
   console.log(SOUL_BANNER);
   console.log('  Usage:');
-  console.log('    soul-engine start      Start the daemon (Telegram + Heartbeat + Impulse)');
-  console.log('    soul-engine run        Start with Agent Runner (full session protocol)');
-  console.log('    soul-engine found [l]  Run the founding interview (de|en)');
-  console.log('    soul-engine heartbeat  Run a single heartbeat and exit');
-  console.log('    soul-engine status     Show configuration status');
+  console.log('    soul-engine start        Start the daemon (Telegram + Heartbeat + Impulse)');
+  console.log('    soul-engine run          Start with Agent Runner (full session protocol)');
+  console.log('    soul-engine found [l]    Run the founding interview (de|en)');
+  console.log('    soul-engine heartbeat    Run a single heartbeat and exit');
+  console.log('    soul-engine encrypt-env  Encrypt .env → .env.enc (requires SOUL_SECRET_KEY)');
+  console.log('    soul-engine decrypt-env  Decrypt .env.enc → .env');
+  console.log('    soul-engine rotate-key   Re-encrypt with new key (SOUL_SECRET_KEY_NEW)');
+  console.log('    soul-engine status       Show configuration status');
   console.log('');
   console.log('  Environment (.env):');
   console.log('    OPENAI_API_KEY         OpenAI API key');

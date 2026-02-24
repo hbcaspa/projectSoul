@@ -140,12 +140,19 @@ function TerminalPane({ paneId, isActive }: { paneId: number; isActive: boolean 
   const ptyIdRef = useRef<number | null>(null);
   const [ready, setReady] = useState(false);
 
-  // Focus terminal when it becomes active
+  // Focus terminal when it becomes active OR when clicking into it
   useEffect(() => {
     if (isActive && termRef.current) {
       termRef.current.focus();
     }
   }, [isActive]);
+
+  // Click-to-focus: always refocus on click, even if already active
+  const handleContainerClick = useCallback(() => {
+    if (termRef.current) {
+      termRef.current.focus();
+    }
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -156,7 +163,7 @@ function TerminalPane({ paneId, isActive }: { paneId: number; isActive: boolean 
       fontSize: 13,
       fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace",
       lineHeight: 1.2,
-      scrollback: 5000,
+      scrollback: 10000,
       theme: {
         background: "#0D0F1A",
         foreground: "#C8C4D6",
@@ -212,10 +219,17 @@ function TerminalPane({ paneId, isActive }: { paneId: number; isActive: boolean 
         ptyIdRef.current = id;
         setReady(true);
 
+        // Input: xterm.js → PTY
         term.onData((data) => {
           commands.writePty(id, data).catch(console.error);
         });
 
+        // Binary input (mouse events, etc.)
+        term.onBinary((data) => {
+          commands.writePty(id, data).catch(console.error);
+        });
+
+        // Resize: notify PTY of terminal dimension changes
         term.onResize(({ cols, rows }) => {
           commands.resizePty(id, cols, rows).catch(console.error);
         });
@@ -224,14 +238,25 @@ function TerminalPane({ paneId, isActive }: { paneId: number; isActive: boolean 
         term.writeln(`\r\n\x1b[31mFailed to create PTY: ${e}\x1b[0m`);
       });
 
-    let unsubFn: (() => void) | null = null;
-    const unsubPromise = events.onPtyData(({ id, data }) => {
+    // Output: PTY → xterm.js
+    let unsubDataFn: (() => void) | null = null;
+    const unsubDataPromise = events.onPtyData(({ id, data }) => {
       if (id === ptyIdRef.current) {
         term.write(data);
       }
     });
-    unsubPromise.then((fn) => { unsubFn = fn; });
+    unsubDataPromise.then((fn) => { unsubDataFn = fn; });
 
+    // Process exit: PTY → frontend notification
+    let unsubExitFn: (() => void) | null = null;
+    const unsubExitPromise = events.onPtyExit(({ id }) => {
+      if (id === ptyIdRef.current) {
+        term.writeln("\r\n\x1b[38;2;100;90;180m[process exited]\x1b[0m");
+      }
+    });
+    unsubExitPromise.then((fn) => { unsubExitFn = fn; });
+
+    // Auto-fit on container resize
     const handleResize = () => {
       if (fitRef.current) fitRef.current.fit();
     };
@@ -240,8 +265,10 @@ function TerminalPane({ paneId, isActive }: { paneId: number; isActive: boolean 
 
     return () => {
       resizeObserver.disconnect();
-      if (unsubFn) unsubFn();
-      else unsubPromise.then((fn) => fn());
+      if (unsubDataFn) unsubDataFn();
+      else unsubDataPromise.then((fn) => fn());
+      if (unsubExitFn) unsubExitFn();
+      else unsubExitPromise.then((fn) => fn());
       if (ptyIdRef.current !== null) {
         commands.closePty(ptyIdRef.current).catch(() => {});
       }
@@ -250,7 +277,11 @@ function TerminalPane({ paneId, isActive }: { paneId: number; isActive: boolean 
   }, [paneId]);
 
   return (
-    <div className="h-full flex flex-col" style={{ backgroundColor: "#0D0F1A" }}>
+    <div
+      className="h-full flex flex-col"
+      style={{ backgroundColor: "#0D0F1A" }}
+      onClick={handleContainerClick}
+    >
       {!ready && (
         <div className="flex items-center gap-2 px-4 py-2 text-xs" style={{ color: "var(--text-dim)" }}>
           <span className="animate-pulse">Starting...</span>

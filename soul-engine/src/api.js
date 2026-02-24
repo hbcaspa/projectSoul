@@ -250,6 +250,47 @@ export class SoulAPI {
     });
 
     // Event log (from bus)
+    // Cost tracking
+    app.get('/api/costs', (req, res) => {
+      try {
+        const days = parseInt(req.query.days) || 7;
+        if (!this.engine.costs) {
+          return res.json({ today: { categories: {}, total: { input: 0, output: 0, calls: 0 } }, summary: { days: {}, total: { input: 0, output: 0, calls: 0 } } });
+        }
+        res.json({
+          today: this.engine.costs.getToday(),
+          summary: this.engine.costs.getSummary(days),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Health dashboard
+    app.get('/api/health', async (req, res) => {
+      try {
+        const { checkHealth } = await import('./health.js');
+        const result = await checkHealth(soulPath, {
+          language: this.engine.context.language,
+          costs: this.engine.costs,
+        });
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Maturity indicator
+    app.get('/api/maturity', async (req, res) => {
+      try {
+        const { computeMaturity } = await import('./maturity.js');
+        const result = await computeMaturity(soulPath, { language: this.engine.context.language });
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     app.get('/api/events', (req, res) => {
       try {
         const since = parseInt(req.query.since) || 0;

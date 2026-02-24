@@ -29,11 +29,13 @@ export class MemoryDB {
     this.db = new Database(this.dbPath);
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
-    this._createSchema();
+    this._createTables();
+    this._migrateSchema();
+    this._createIndexes();
     return this;
   }
 
-  _createSchema() {
+  _createTables() {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS memories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,6 +46,8 @@ export class MemoryDB {
         metadata TEXT DEFAULT '{}',
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         confidence REAL NOT NULL DEFAULT 0.5,
+        importance REAL NOT NULL DEFAULT 0.5,
+        last_accessed TEXT NOT NULL DEFAULT (datetime('now')),
         tags TEXT DEFAULT ''
       );
 
@@ -75,10 +79,15 @@ export class MemoryDB {
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         UNIQUE(from_entity, to_entity, relation_type)
       );
+    `);
+  }
 
+  _createIndexes() {
+    this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type);
       CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(created_at);
       CREATE INDEX IF NOT EXISTS idx_memories_confidence ON memories(confidence);
+      CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(importance);
       CREATE INDEX IF NOT EXISTS idx_memories_tags ON memories(tags);
       CREATE INDEX IF NOT EXISTS idx_interactions_channel ON interactions(channel);
       CREATE INDEX IF NOT EXISTS idx_interactions_user ON interactions(user);
@@ -90,14 +99,33 @@ export class MemoryDB {
     `);
   }
 
+  /**
+   * Migrate existing databases that lack new columns.
+   * Idempotent — safe to call on every init.
+   */
+  _migrateSchema() {
+    const columns = this.db.prepare("PRAGMA table_info(memories)").all().map(c => c.name);
+
+    if (!columns.includes('importance')) {
+      this.db.exec("ALTER TABLE memories ADD COLUMN importance REAL NOT NULL DEFAULT 0.5");
+      this.db.exec("CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(importance)");
+    }
+    if (!columns.includes('last_accessed')) {
+      // SQLite ALTER TABLE DEFAULT must be a literal, not an expression
+      this.db.exec("ALTER TABLE memories ADD COLUMN last_accessed TEXT DEFAULT ''");
+      // Backfill existing rows: set last_accessed = created_at
+      this.db.exec("UPDATE memories SET last_accessed = created_at WHERE last_accessed = ''");
+    }
+  }
+
   // ── Memory CRUD ────────────────────────────────────────
 
-  insertMemory({ type = 'general', source = 'unknown', content, embedding = null, metadata = {}, confidence = 0.5, tags = '' }) {
+  insertMemory({ type = 'general', source = 'unknown', content, embedding = null, metadata = {}, confidence = 0.5, importance = 0.5, tags = '' }) {
     const stmt = this.db.prepare(`
-      INSERT INTO memories (type, source, content, embedding, metadata, confidence, tags)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO memories (type, source, content, embedding, metadata, confidence, importance, tags)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    const info = stmt.run(type, source, content, embedding, JSON.stringify(metadata), confidence, tags);
+    const info = stmt.run(type, source, content, embedding, JSON.stringify(metadata), confidence, importance, tags);
     if (this.bus) this.bus.safeEmit('memory.indexed', { source: 'memory-db', memoryId: info.lastInsertRowid, type });
     return info.lastInsertRowid;
   }
@@ -144,6 +172,74 @@ export class MemoryDB {
 
   deleteMemory(memoryId) {
     this.db.prepare('DELETE FROM memories WHERE id = ?').run(memoryId);
+  }
+
+  /**
+   * Update the last_accessed timestamp for a memory (marks it as "used").
+   * Resets the decay clock for this memory.
+   */
+  touchMemory(memoryId) {
+    this.db.prepare("UPDATE memories SET last_accessed = datetime('now') WHERE id = ?").run(memoryId);
+  }
+
+  /**
+   * Update the importance score for a memory.
+   * @param {number} memoryId
+   * @param {number} newImportance - 0.0 to 1.0
+   */
+  updateImportance(memoryId, newImportance) {
+    const clamped = Math.max(0, Math.min(1, newImportance));
+    this.db.prepare('UPDATE memories SET importance = ? WHERE id = ?').run(clamped, memoryId);
+  }
+
+  /**
+   * Apply importance decay to all non-core memories that haven't been
+   * accessed in the last 7 days.
+   *
+   * Decay rate: -0.01 per day since last access (after 7-day grace period).
+   * Minimum importance: 0.1 (memories never fully disappear).
+   * Core memories (tags containing 'core' or 'kern') are exempt.
+   *
+   * @returns {{ decayed: number, total: number }} Count of affected memories
+   */
+  applyDecay() {
+    const DECAY_RATE = 0.01;
+    const GRACE_DAYS = 7;
+    const MIN_IMPORTANCE = 0.1;
+
+    // Get memories that haven't been accessed in > GRACE_DAYS
+    // and aren't core memories
+    const staleMemories = this.db.prepare(`
+      SELECT id, importance, last_accessed, tags
+      FROM memories
+      WHERE julianday('now') - julianday(last_accessed) > ?
+        AND tags NOT LIKE '%core%'
+        AND tags NOT LIKE '%kern%'
+        AND importance > ?
+    `).all(GRACE_DAYS, MIN_IMPORTANCE);
+
+    if (staleMemories.length === 0) return { decayed: 0, total: 0 };
+
+    const update = this.db.prepare('UPDATE memories SET importance = ? WHERE id = ?');
+    let decayed = 0;
+
+    const txn = this.db.transaction(() => {
+      for (const mem of staleMemories) {
+        const lastAccessed = new Date(mem.last_accessed).getTime();
+        const daysSinceAccess = (Date.now() - lastAccessed) / (24 * 60 * 60 * 1000);
+        const decayDays = daysSinceAccess - GRACE_DAYS;
+        const decayAmount = DECAY_RATE * decayDays;
+        const newImportance = Math.max(MIN_IMPORTANCE, mem.importance - decayAmount);
+
+        if (newImportance < mem.importance) {
+          update.run(newImportance, mem.id);
+          decayed++;
+        }
+      }
+    });
+    txn();
+
+    return { decayed, total: staleMemories.length };
   }
 
   // ── Interaction CRUD ───────────────────────────────────
@@ -260,8 +356,13 @@ export class MemoryDB {
     const relations = this.db.prepare('SELECT COUNT(*) as count FROM relations').get().count;
     const withEmbeddings = this.db.prepare('SELECT COUNT(*) as count FROM memories WHERE embedding IS NOT NULL').get().count;
     const avgConfidence = this.db.prepare('SELECT AVG(confidence) as avg FROM memories').get().avg || 0;
+    const avgImportance = this.db.prepare('SELECT AVG(importance) as avg FROM memories').get().avg || 0;
 
-    return { memories, interactions, entities, relations, withEmbeddings, avgConfidence: Math.round(avgConfidence * 100) / 100 };
+    return {
+      memories, interactions, entities, relations, withEmbeddings,
+      avgConfidence: Math.round(avgConfidence * 100) / 100,
+      avgImportance: Math.round(avgImportance * 100) / 100,
+    };
   }
 
   // ── Internal ───────────────────────────────────────────

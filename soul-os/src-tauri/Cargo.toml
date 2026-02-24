@@ -1,6 +1,6 @@
 [package]
 name = "soul-os"
-version = "0.3.1"
+version = "0.3.2"
 description = "SoulOS — Operating System for AI Souls"
 authors = ["ProjectSoul"]
 edition = "2021"

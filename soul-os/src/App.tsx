@@ -312,8 +312,8 @@ const WIDGET_POSITIONS: Record<PanelId, React.CSSProperties> = {
   garden:      { top: "36%", right: "3%" },
   innerworld:  { top: "12%", left: "18%" },
   worldwindow: { top: "12%", right: "18%" },
-  bonds:       { bottom: "10%", left: "50%", transform: "translateX(-50%)" },
-  founding:    { bottom: "2%", left: "50%", transform: "translateX(-50%)" },
+  bonds:       { bottom: "2%", left: "38%" },
+  founding:    { bottom: "2%", right: "38%" },
   settings:    { bottom: "2%", right: "3%" },
 };
 

@@ -28,6 +28,7 @@ import FoundingChat from "./views/FoundingChat";
 import { useActiveNodes, useCurrentPulse, useMood, useActivityFeed } from "./lib/store";
 import { commands } from "./lib/tauri";
 import { openUrl, toggleBrowser, toggleBrowserMode, onBrowserOpenUrl } from "./lib/browser";
+import { useEngineSocket } from "./lib/useEngineSocket";
 
 /* ── Types ─────────────────────────────────────────────────── */
 
@@ -391,6 +392,9 @@ function App() {
   const feed = useActivityFeed();
 
   const handleBootDone = useCallback(() => setBooting(false), []);
+
+  // Global WS to engine — receives browser commands from Claude Code etc.
+  useEngineSocket();
 
   // Determine app phase after boot
   useEffect(() => {

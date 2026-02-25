@@ -112,6 +112,10 @@ export const commands = {
   openBrowser: (url: string, fullMode: boolean) =>
     invoke<void>("open_browser", { url, fullMode }),
   closeBrowser: () => invoke<void>("close_browser"),
+
+  // Engine Monitor (server-side proxy to avoid webview fetch issues)
+  fetchEngineSubsystems: () =>
+    invoke<{ subsystems: Array<{ id: string; name: string; status: string; detail: string; metric?: string | null }> }>("fetch_engine_subsystems"),
 };
 
 // --- Events (Rust → Frontend) ---

@@ -21,6 +21,7 @@ export class ImpulseScheduler {
     this.bus = bus;
     this.state = new ImpulseState(soulPath, { bus });
     this.consolidator = null; // Set by engine after construction
+    this.field = null;       // Set by engine after construction (AllostaticField)
     this.timer = null;
     this.tickTimer = null;
     this.running = false;
@@ -54,6 +55,7 @@ export class ImpulseScheduler {
       this.timer = null;
     }
     await this.state.save();
+    if (this.field) await this.field.save();
   }
 
   /**
@@ -94,8 +96,8 @@ export class ImpulseScheduler {
     // Reload context (SEED.md may have changed)
     await this.context.load();
 
-    // Select impulse type
-    const { type, config } = selectImpulseType(this.state);
+    // Select impulse type (field modulates weights if available)
+    const { type, config } = selectImpulseType(this.state, this.field);
 
     console.log(`  [impulse] Running: ${type} (mood: ${this.state.mood.label}, engagement: ${this.state.engagement.toFixed(2)})`);
     await writePulse(this.soulPath, 'impulse', `${type} — ${config.description}`);
@@ -214,6 +216,12 @@ export class ImpulseScheduler {
       baseDelay *= backoffMultiplier;
     }
 
+    // Allostatic field: arousal modulates interval
+    if (this.field) {
+      const fieldMod = this.field.getModulations();
+      baseDelay *= fieldMod.impulse.interval_factor;
+    }
+
     // Jitter: +/- 30%
     const jitter = 0.7 + Math.random() * 0.6;
     baseDelay *= jitter;
@@ -295,6 +303,12 @@ export class ImpulseScheduler {
       // Natural mood drift (tiny, accumulates over time)
       this.state.driftMood();
       this.state.applyTimeInfluence();
+
+      // Allostatic Field tick — 8D state modulation
+      if (this.field) {
+        this.field.tick();
+        await this.field.save();
+      }
 
       // Light engagement decay
       if (this.state.engagement > 0.1) {

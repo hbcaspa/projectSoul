@@ -1,3 +1,4 @@
+use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -101,6 +102,22 @@ impl SidecarManager {
     }
 
     pub fn start_engine(&self, app: &AppHandle) -> Result<(), String> {
+        // If engine is already reachable (external process), skip spawning
+        if self.check_engine_port() {
+            let mut proc = self.engine.lock().map_err(|e| e.to_string())?;
+            proc.status = "running".to_string();
+            let _ = app.emit(
+                "sidecar:status",
+                SidecarStatus {
+                    process: "soul-engine".to_string(),
+                    status: "running".to_string(),
+                    pid: None,
+                    uptime_secs: None,
+                },
+            );
+            return Ok(());
+        }
+
         let engine_path = self.find_engine_path(app)?;
         let node_path = node::find_node(Some(app))
             .ok_or_else(|| "Node.js not found (neither bundled nor system)".to_string())?;
@@ -341,6 +358,17 @@ impl SidecarManager {
     pub fn get_status(&self) -> SidecarStatus {
         let proc = self.engine.lock().unwrap();
         let uptime = proc.start_time.map(|t| t.elapsed().as_secs());
+
+        // If no managed child but port is reachable → external engine
+        if proc.child.is_none() && self.check_engine_port() {
+            return SidecarStatus {
+                process: "soul-engine".to_string(),
+                status: "running".to_string(),
+                pid: None, // Unknown PID (external process)
+                uptime_secs: None,
+            };
+        }
+
         SidecarStatus {
             process: "soul-engine".to_string(),
             status: proc.status.clone(),
@@ -372,8 +400,35 @@ impl SidecarManager {
                 Err(_) => false,
             }
         } else {
-            false
+            // Fallback: check if engine API port is reachable (external engine)
+            self.check_engine_port()
         }
+    }
+
+    /// Check if the engine API port is reachable via TCP connect.
+    /// Detects externally started engines (CLI, other terminal).
+    fn check_engine_port(&self) -> bool {
+        let port = self.get_api_port();
+        let addr = format!("127.0.0.1:{}", port);
+        TcpStream::connect_timeout(
+            &addr.parse().unwrap(),
+            Duration::from_millis(200),
+        ).is_ok()
+    }
+
+    /// Read API_PORT from .env, default 3001.
+    fn get_api_port(&self) -> u16 {
+        let env_path = self.soul_path.join(".env");
+        if let Ok(content) = std::fs::read_to_string(&env_path) {
+            for line in content.lines() {
+                if let Some(val) = line.strip_prefix("API_PORT=") {
+                    if let Ok(port) = val.trim().parse::<u16>() {
+                        return port;
+                    }
+                }
+            }
+        }
+        3001
     }
 
     /// Graceful shutdown — called when app closes

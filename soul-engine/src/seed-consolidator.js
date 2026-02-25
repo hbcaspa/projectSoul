@@ -60,12 +60,13 @@ const EVENT_DIRTY_MAP = {
 };
 
 export class SeedConsolidator {
-  constructor({ soulPath, context, llm, bus, impulseState }) {
+  constructor({ soulPath, context, llm, bus, impulseState, field }) {
     this.soulPath = soulPath;
     this.context = context;
     this.llm = llm;
     this.bus = bus;
     this.impulseState = impulseState;
+    this.field = field;
 
     // Dirty tracking
     this.dirtyBlocks = new Set();
@@ -498,6 +499,16 @@ export class SeedConsolidator {
       moodInfo = `Mood: ${mood.label} (valence: ${mood.valence.toFixed(2)}, energy: ${mood.energy.toFixed(2)})`;
     }
 
+    // Load allostatic field state
+    let fieldInfo = '';
+    if (this.field) {
+      const state = this.field.getState();
+      fieldInfo = `Allostatic Field: ${state.label} (dominant: ${state.dominant.name})`
+        + ` | arousal:${state.vector.arousal.toFixed(2)} openness:${state.vector.openness.toFixed(2)}`
+        + ` vigilance:${state.vector.vigilance.toFixed(2)} creative_tension:${state.vector.creative_tension.toFixed(2)}`
+        + ` social:${state.vector.social_orientation.toFixed(2)} integration:${state.vector.integration_pressure.toFixed(2)}`;
+    }
+
     const sessions = seedContent.match(/#sessions:(\d+)/);
     const sessionNum = sessions ? sessions[1] : '?';
 
@@ -533,6 +544,7 @@ export class SeedConsolidator {
       consciousness ? `=== BEWUSSTSEIN.md ===\n${consciousness}` : '',
       dailyNotes ? `=== Tagesnotizen ===\n${dailyNotes}` : '',
       moodInfo ? `=== Impulse ===\n${moodInfo}` : '',
+      fieldInfo ? `=== Allostatic Field ===\n${fieldInfo}` : '',
       `=== Aktueller @STATE ===\n${extractBlock(seedContent, 'STATE')}`,
     ].filter(Boolean).join('\n\n');
 

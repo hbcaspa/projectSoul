@@ -315,6 +315,18 @@ export class SoulAPI {
       }
     });
 
+    // Allostatic Identity Field — 8D state vector
+    app.get('/api/field', (req, res) => {
+      try {
+        if (!this.engine.field) {
+          return res.json({ enabled: false });
+        }
+        res.json({ enabled: true, ...this.engine.field.getState() });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     // Open URL in Soul OS embedded browser (broadcast to all WS clients)
     // Uses "response" type with [BROWSER:url] tag so existing WhisperView can parse it
     app.post('/api/browser', (req, res) => {

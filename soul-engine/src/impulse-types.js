@@ -168,17 +168,34 @@ const IMPULSE_TYPES = {
   github_check: GITHUB_IMPULSE,
 };
 
+// Impulse categories for field modulation
+const CREATIVE_TYPES = new Set(['share_thought', 'dream_share', 'hobby_pursuit', 'tech_suggestion']);
+const SOCIAL_TYPES = new Set(['ask_question', 'memory_reflect', 'express_emotion']);
+const CAUTIOUS_TYPES = new Set(['server_check', 'memory_reflect']);
+
 /**
  * Select an impulse type using weighted random selection.
+ * If an AllostaticField is provided, its modulations adjust the weights.
  * @param {ImpulseState} state — Current impulse state
+ * @param {AllostaticField} [field] — Optional allostatic field for modulation
  * @returns {{ type: string, config: object }} Selected impulse type
  */
-export function selectImpulseType(state) {
+export function selectImpulseType(state, field) {
+  const mod = field?.getModulations()?.impulse;
   const weights = [];
   let totalWeight = 0;
 
   for (const [type, config] of Object.entries(IMPULSE_TYPES)) {
-    const w = config.weight(state);
+    let w = config.weight(state);
+
+    // Apply field modulations if available
+    if (mod && w > 0) {
+      if (CREATIVE_TYPES.has(type)) w *= mod.creative_weight;
+      if (SOCIAL_TYPES.has(type)) w *= mod.social_weight;
+      if (CAUTIOUS_TYPES.has(type)) w *= mod.caution_weight;
+      w = clamp(w);
+    }
+
     weights.push({ type, config, weight: w });
     totalWeight += w;
   }

@@ -97,6 +97,30 @@ function splitSections(content: string): { header: string; body: string; line: n
   return sections;
 }
 
+/**
+ * Split text by ### headers into virtual sections (for bodies that contain sub-sections).
+ */
+function splitSubSections(body: string): { header: string; body: string }[] {
+  const lines = body.split("\n");
+  const sections: { header: string; body: string }[] = [];
+  let current: { header: string; bodyLines: string[] } | null = null;
+
+  for (const line of lines) {
+    if (/^###\s+/.test(line)) {
+      if (current) {
+        sections.push({ header: current.header, body: current.bodyLines.join("\n") });
+      }
+      current = { header: line, bodyLines: [] };
+    } else if (current) {
+      current.bodyLines.push(line);
+    }
+  }
+  if (current) {
+    sections.push({ header: current.header, body: current.bodyLines.join("\n") });
+  }
+  return sections;
+}
+
 /* ── Session Start Steps ────────────────────────────────── */
 
 function parseStartSteps(sections: { header: string; body: string }[]): ProtocolStep[] {
@@ -311,15 +335,31 @@ export function parseHeartbeatLog(content: string): ParsedSession[] {
     let endSections: { header: string; body: string }[] = [];
 
     if (startMarker) {
-      const nextBoundary = markers.find(m => m.sectionIndex > startMarker.sectionIndex && (m.type === "end" && m.number === num || m.type === "start" && m.number !== num));
+      // Any session marker (start or end, any session) is a boundary.
+      // This ensures ### sub-sections inside the start body are parsed
+      // via splitSubSections() fallback, even when a different session's
+      // end marker follows immediately.
+      const nextBoundary = markers.find(m => m.sectionIndex > startMarker.sectionIndex);
       const endIdx = nextBoundary ? nextBoundary.sectionIndex : (endMarker ? endMarker.sectionIndex : allSections.length);
       startSections = allSections.slice(startMarker.sectionIndex + 1, endIdx);
+
+      // If no child ## sections found, parse ### sub-sections from the session body
+      if (startSections.length === 0) {
+        const body = allSections[startMarker.sectionIndex].body;
+        startSections = splitSubSections(body);
+      }
     }
 
     if (endMarker) {
       const nextBoundary = markers.find(m => m.sectionIndex > endMarker.sectionIndex);
       const endIdx = nextBoundary ? nextBoundary.sectionIndex : allSections.length;
       endSections = allSections.slice(endMarker.sectionIndex + 1, endIdx);
+
+      // If no child ## sections found, parse ### sub-sections from the end body
+      if (endSections.length === 0) {
+        const body = allSections[endMarker.sectionIndex].body;
+        endSections = splitSubSections(body);
+      }
     }
 
     sessions.push({

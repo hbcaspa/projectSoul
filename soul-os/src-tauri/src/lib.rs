@@ -234,6 +234,7 @@ pub fn run() {
             commands::founding_create,
             commands::open_browser,
             commands::close_browser,
+            commands::fetch_engine_subsystems,
         ])
         .run(tauri::generate_context!())
         .expect("error while running SoulOS");

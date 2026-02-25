@@ -29,6 +29,7 @@ import { EncryptionLayer } from './encryption.js';
 import { MultimodalStore } from './multimodal.js';
 import { AuditLogger } from './audit-log.js';
 import { CostTracker } from './cost-tracker.js';
+import { AllostaticField } from './allostatic-field.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -58,6 +59,7 @@ export class SoulEngine {
     this.multimodal = null;
     this.audit = null;
     this.costs = null;
+    this.field = null;
     this.running = false;
   }
 
@@ -196,6 +198,19 @@ export class SoulEngine {
       console.log('  Impulse:   disabled');
     }
 
+    // Allostatic Identity Field — 8D state vector that modulates behavior
+    if (process.env.SOUL_FIELD !== 'false') {
+      this.field = new AllostaticField(this.soulPath, {
+        bus: this.bus,
+        impulseState: this.impulse?.state || null,
+      });
+      await this.field.load();
+      this.field.registerListeners();
+      console.log(`  Field:     active (${this.field._fieldLabel()}, 8 dimensions)`);
+    } else {
+      console.log('  Field:     disabled');
+    }
+
     // Seed Consolidator — continuous incremental seed updates
     if (process.env.SOUL_CONSOLIDATOR !== 'false') {
       this.consolidator = new SeedConsolidator({
@@ -204,12 +219,14 @@ export class SoulEngine {
         llm: this.llm,
         bus: this.bus,
         impulseState: this.impulse?.state || null,
+        field: this.field || null,
       });
       this.consolidator.registerListeners();
 
-      // Pass to impulse scheduler for tick-based consolidation
+      // Pass to impulse scheduler for tick-based consolidation + field
       if (this.impulse) {
         this.impulse.consolidator = this.consolidator;
+        this.impulse.field = this.field;
       }
 
       console.log('  Consolidator: active (fast: 30min/20 events, deep: 4h)');
@@ -833,6 +850,7 @@ export class SoulEngine {
       }
     }
 
+    if (this.field) await this.field.save();
     if (this.costs) this.costs.flush();
     if (this.reflection) this.reflection.stop();
     if (this.db) this.db.close();

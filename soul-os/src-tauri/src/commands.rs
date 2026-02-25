@@ -474,6 +474,58 @@ pub async fn founding_create(
     Ok(json)
 }
 
+// --- Engine Monitor Proxy ---
+
+#[tauri::command]
+pub async fn fetch_engine_subsystems(
+    config: State<'_, ConfigState>,
+) -> Result<serde_json::Value, String> {
+    let sp = soul_path(&config);
+    let env_path = sp.join(".env");
+
+    // Read port and key from .env
+    let mut port: u16 = 3001;
+    let mut api_key = String::new();
+
+    if let Ok(content) = fs::read_to_string(&env_path) {
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if let Some(val) = trimmed.strip_prefix("API_PORT=") {
+                if let Ok(p) = val.trim().trim_matches('"').parse::<u16>() {
+                    port = p;
+                }
+            }
+            if let Some(val) = trimmed.strip_prefix("API_KEY=") {
+                api_key = val.trim().trim_matches('"').to_string();
+            }
+        }
+    }
+
+    let url = format!("http://127.0.0.1:{}/api/monitor", port);
+    let client = reqwest::Client::new();
+    let mut req = client.get(&url);
+    if !api_key.is_empty() {
+        req = req.header("Authorization", format!("Bearer {}", api_key));
+    }
+
+    let resp = req
+        .timeout(std::time::Duration::from_secs(2))
+        .send()
+        .await
+        .map_err(|e| format!("Engine unreachable: {}", e))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("Engine returned {}", resp.status()));
+    }
+
+    let data: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Invalid JSON: {}", e))?;
+
+    Ok(data)
+}
+
 // --- Chain Commands ---
 
 #[tauri::command]

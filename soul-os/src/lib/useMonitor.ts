@@ -75,6 +75,29 @@ const SOUL_FILES = [
   "soul/EVOLUTION.md", "soul/GARDEN.md", "memories/INDEX.md",
 ];
 
+/* ── Engine API fetch (via Tauri backend proxy) ────────── */
+
+async function fetchEngineSubsystems(): Promise<SubsystemInfo[]> {
+  try {
+    const data = await commands.fetchEngineSubsystems();
+    if (!data || !Array.isArray(data.subsystems)) {
+      console.warn("[Monitor] fetchEngineSubsystems: unexpected response", data);
+      return [];
+    }
+    console.debug(`[Monitor] Got ${data.subsystems.length} subsystems via Tauri proxy`);
+    return data.subsystems.map((s) => ({
+      id: s.id,
+      name: s.name,
+      status: (s.status === "running" ? "running" : s.status === "error" ? "error" : "stopped") as SubsystemInfo["status"],
+      detail: s.detail || "",
+      metric: s.metric || null,
+    }));
+  } catch (e) {
+    console.debug("[Monitor] fetchEngineSubsystems via Tauri:", e);
+    return [];
+  }
+}
+
 /* ── Hook ───────────────────────────────────────────────── */
 
 export function useMonitor(): MonitorData {
@@ -175,10 +198,11 @@ export function useMonitor(): MonitorData {
       }
     }
 
-    // Engine subsystems (fallback if engine API not available)
-    const engineOnline = sidecarStatus.status === "running";
-    let engineSubs: SubsystemInfo[] = [];
-    if (!engineOnline) {
+    // Engine subsystems — always try to fetch via Tauri backend proxy
+    // (the proxy does its own port detection from .env)
+    let engineSubs = await fetchEngineSubsystems();
+    const engineOnline = engineSubs.length > 0 || sidecarStatus.status === "running";
+    if (engineSubs.length === 0 && !engineOnline) {
       engineSubs = [
         { id: "engine", name: "Soul Engine", status: "offline", detail: "Engine not running", metric: null },
       ];
@@ -211,7 +235,7 @@ export function useMonitor(): MonitorData {
       session: { active: sessionActive, number: sessionNumber, startTime: sessionStartTime, duration, phase },
       todaySessions: allSessions,
       latestSession,
-      engine: engineSubs.length > 0 ? engineSubs : prev.engine,
+      engine: engineSubs.length > 0 ? engineSubs : (engineOnline ? prev.engine : engineSubs),
       engineOnline,
       eventStream: eventsRef.current,
       files: fileChecks,
@@ -222,16 +246,19 @@ export function useMonitor(): MonitorData {
 
   // Real-time events
   useEffect(() => {
+    console.debug("[Monitor] Setting up event listeners");
     const unlisteners: Array<Promise<() => void>> = [];
 
     unlisteners.push(
       events.onPulse((pulse: SoulPulse) => {
+        console.debug("[Monitor] pulse event:", pulse.activity_type, pulse.label);
         addEvent("pulse", pulse.activity_type, pulse.label);
       })
     );
 
     unlisteners.push(
       events.onActivity((activity: SoulActivity) => {
+        console.debug("[Monitor] activity event:", activity.node, activity.file);
         addEvent("file", activity.node, `${activity.event_type}: ${activity.file}`);
       })
     );
@@ -239,12 +266,14 @@ export function useMonitor(): MonitorData {
     unlisteners.push(
       events.onBusEvent((event: unknown) => {
         const e = event as { type?: string; source?: string };
+        console.debug("[Monitor] bus event:", e.type, e.source);
         addEvent("bus", e.source || "bus", e.type || "event");
       })
     );
 
     unlisteners.push(
       events.onMood(() => {
+        console.debug("[Monitor] mood event");
         addEvent("mood", "mood", "Mood changed");
       })
     );

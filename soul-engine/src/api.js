@@ -8,7 +8,7 @@
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'node:http';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, writeFile, rename } from 'node:fs/promises';
 import { existsSync, readFileSync, watchFile, unwatchFile } from 'node:fs';
 import path from 'node:path';
 import { parseSeed, extractSoulInfo } from './seed-parser.js';
@@ -27,7 +27,8 @@ export class SoulAPI {
   }
 
   setup() {
-    this.app.use(express.json());
+    this.app.use(express.json({ limit: '50kb' }));
+    this.app.use(express.text({ type: 'text/plain', limit: '50kb' }));
 
     // Auth middleware for /api routes
     this.app.use('/api', (req, res, next) => {
@@ -42,7 +43,7 @@ export class SoulAPI {
     this.app.use((req, res, next) => {
       res.header('Access-Control-Allow-Origin', '*');
       res.header('Access-Control-Allow-Headers', 'Authorization, Content-Type');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
       if (req.method === 'OPTIONS') return res.sendStatus(204);
       next();
     });
@@ -157,6 +158,39 @@ export class SoulAPI {
       try {
         await this.engine.context.load();
         res.type('text/plain').send(this.engine.context.seed);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Push seed (from iOS or other clients)
+    app.put('/api/seed/raw', async (req, res) => {
+      try {
+        // Accept both text/plain body and JSON { seed: "..." }
+        let seedText = '';
+        if (typeof req.body === 'string') {
+          seedText = req.body;
+        } else if (req.body && req.body.seed) {
+          seedText = req.body.seed;
+        } else {
+          return res.status(400).json({ error: 'Seed text required (send as JSON { seed: "..." } or text/plain body)' });
+        }
+
+        if (!seedText.includes('@KERN') && !seedText.includes('#SEED')) {
+          return res.status(400).json({ error: 'Invalid seed format — must contain @KERN or #SEED' });
+        }
+
+        // Atomic write: tmp file → rename (prevents corruption, follows F3 pattern)
+        const seedPath = path.resolve(soulPath, 'SEED.md');
+        const tmpPath = seedPath + '.tmp.' + Date.now();
+        await writeFile(tmpPath, seedText, 'utf-8');
+        await rename(tmpPath, seedPath);
+
+        // Invalidate engine cache so next read gets the new seed
+        this.engine.context.invalidate();
+
+        console.log(`  [api] Seed pushed (${seedText.length} bytes)`);
+        res.json({ ok: true, size: seedText.length });
       } catch (err) {
         res.status(500).json({ error: err.message });
       }

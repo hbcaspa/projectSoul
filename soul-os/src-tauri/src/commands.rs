@@ -781,6 +781,16 @@ pub async fn open_browser(
         scheme => return Err(format!("Blocked URL scheme: {}. Only http/https allowed.", scheme)),
     }
 
+    // Get main window position so browser opens on the same monitor
+    let main_window = app.get_webview_window("main");
+    let (main_pos, main_size) = if let Some(ref w) = main_window {
+        let pos = w.outer_position().unwrap_or(tauri::PhysicalPosition { x: 100, y: 100 });
+        let size = w.outer_size().unwrap_or(tauri::PhysicalSize { width: 1200, height: 800 });
+        (pos, size)
+    } else {
+        (tauri::PhysicalPosition { x: 100, y: 100 }, tauri::PhysicalSize { width: 1200, height: 800 })
+    };
+
     let app_clone = app.clone();
     let mut builder = tauri::WebviewWindowBuilder::new(
         &app,
@@ -788,7 +798,6 @@ pub async fn open_browser(
         tauri::WebviewUrl::External(url_parsed),
     )
     .title("SoulOS Browser")
-    .center()
     .on_navigation(move |nav_url| {
         if nav_url.scheme() == "soul" {
             let app = app_clone.clone();
@@ -803,12 +812,20 @@ pub async fn open_browser(
     });
 
     if full_mode {
+        // Full mode: same size and position as main window (overlay)
         builder = builder
-            .inner_size(1100.0, 800.0)
+            .inner_size(main_size.width as f64, main_size.height as f64)
+            .position(main_pos.x as f64, main_pos.y as f64)
             .decorations(true);
     } else {
+        // Popup mode: centered over the main window
+        let bw: f64 = 900.0;
+        let bh: f64 = 700.0;
+        let bx = main_pos.x as f64 + (main_size.width as f64 - bw) / 2.0;
+        let by = main_pos.y as f64 + (main_size.height as f64 - bh) / 2.0;
         builder = builder
-            .inner_size(900.0, 700.0)
+            .inner_size(bw, bh)
+            .position(bx, by)
             .decorations(false)
             .always_on_top(true)
             .skip_taskbar(true)

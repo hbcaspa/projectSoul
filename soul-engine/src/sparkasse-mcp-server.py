@@ -28,13 +28,16 @@ FINTS_URL = os.environ.get('SPARKASSE_FINTS_URL', 'https://www.sparkasse-bremen.
 BLZ = os.environ.get('SPARKASSE_BLZ', '20050550')
 USER = os.environ.get('SPARKASSE_USER', '')
 PIN = os.environ.get('SPARKASSE_PIN', '')
+# Product ID required by python-fints >= 4. Register at Deutsche Kreditwirtschaft
+# for production use. For personal/private use a placeholder is accepted by most banks.
+PRODUCT_ID = os.environ.get('SPARKASSE_PRODUCT_ID', '9FA6681DEC0CF3046BFC2F8A6')
 PENDING_DIR = os.environ.get('SPARKASSE_STATE_DIR', '/opt/soul/connections')
 
 # ── FinTS helpers ──────────────────────────────────────────
 
 def create_client(stored_data=None):
     from fints.client import FinTS3PinTanClient
-    client = FinTS3PinTanClient(BLZ, USER, PIN, FINTS_URL, product_id=None)
+    client = FinTS3PinTanClient(BLZ, USER, PIN, FINTS_URL, product_id=PRODUCT_ID)
     if stored_data:
         client.set_data(base64.b64decode(stored_data))
     return client

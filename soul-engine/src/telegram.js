@@ -126,7 +126,11 @@ export class TelegramChannel {
 
     try {
       const data = JSON.parse(await readFile(file, 'utf-8'));
-      return data.slice(-this.maxHistory);
+      // Strip device labels from history entries (prevents LLM from reproducing them)
+      return data.slice(-this.maxHistory).map(m => ({
+        ...m,
+        content: m.content ? m.content.replace(/\n\n📍[^\n]*/g, '').trim() : m.content,
+      }));
     } catch {
       return [];
     }

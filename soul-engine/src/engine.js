@@ -1,6 +1,6 @@
-import { writeFile, mkdir, rename } from 'node:fs/promises';
+import { writeFile, mkdir, rename, readFile } from 'node:fs/promises';
 import { existsSync, readdirSync, readFileSync, renameSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { exec } from 'node:child_process';
 import { SoulContext } from './context.js';
@@ -52,6 +52,7 @@ import { TheoryOfMind } from './theory-of-mind.js';
 import { ClaudeContextWriter } from './claude-context-writer.js';
 import { KnowledgeExtractor } from './knowledge-extractor.js';
 import { GmailMonitor } from './gmail-monitor.js';
+import { TraderModule } from './trader-module.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -64,12 +65,14 @@ export class SoulEngine {
     this.telegram = null;
     this.knowledgeExtractor = null;
     this.gmailMonitor = null;
+    this.trader = null;
     this.whatsapp = null;
     this.api = null;
     this.nodeName = process.env.SOUL_NODE_NAME || 'server';
     this.relayPath = join(soulPath, 'relay');
     this.apiChannel = null;
     this.heartbeat = null;
+    this.protocolRefresh = null;
     this.impulse = null;
     this.consolidator = null;
     this.router = null;
@@ -137,6 +140,13 @@ export class SoulEngine {
     // Knowledge Extractor — async background learner from Telegram conversations
     this.knowledgeExtractor = new KnowledgeExtractor(this.soulPath, this.llm);
 
+    // Trader Module — autonomous paper trading (starts after telegram is ready)
+    this.trader = new TraderModule({
+      bus:      this.bus,
+      telegram: null,  // set in start() after telegram channel is ready
+      soulPath: this.soulPath,
+    });
+
     // Gmail Monitor — autonomous email watcher (starts after engine is fully up)
     this.gmailMonitor = new GmailMonitor({
       soulPath: this.soulPath,
@@ -202,6 +212,12 @@ export class SoulEngine {
           this.gmailMonitor.telegram = this.telegram;
           this.gmailMonitor.start();
         }
+
+        // Start Trader module now that Telegram is ready
+        if (this.trader) {
+          this.trader.telegram = this.telegram;
+          this.trader.start();
+        }
       } else {
         // Secondary node: send-only, relay handles incoming
         await this.telegram.initSendOnly();
@@ -238,7 +254,7 @@ export class SoulEngine {
       console.log('  API:       not configured (set API_KEY in .env)');
     }
 
-    // Heartbeat scheduler
+    // Heartbeat scheduler (daily — full autonomous reflection)
     const cronExpr = process.env.HEARTBEAT_CRON || '0 7 * * *';
     this.heartbeat = new HeartbeatScheduler(
       cronExpr,
@@ -246,6 +262,16 @@ export class SoulEngine {
     );
     this.heartbeat.start();
     console.log(`  Heartbeat: ${cronExpr}`);
+
+    // Protocol Refresh scheduler (every 2-3h — reload soul files, invalidate caches)
+    // Ensures Telegram always answers with up-to-date state, same as Claude Code session start
+    const protocolCron = process.env.PROTOCOL_CRON || '0 */3 * * *';
+    this.protocolRefresh = new HeartbeatScheduler(
+      protocolCron,
+      async () => this.runProtocolRefresh()
+    );
+    this.protocolRefresh.start();
+    console.log(`  Protocol:  ${protocolCron} (context refresh)`);
 
     // Semantic router — learned data → soul files
     this.router = new SemanticRouter(this.soulPath, this.context.language, { bus: this.bus });
@@ -742,7 +768,118 @@ export class SoulEngine {
       console.error(`  [relations-context] Failed: ${err.message}`);
     }
 
+    // Soul Protocol: load KERN.md, BEWUSSTSEIN.md, fehler-muster.md, last heartbeat
+    // → same files Claude Code reads at session start via the soul protocol
+    let protocolSection = '';
+    try {
+      const soulDir = resolve(this.soulPath, 'seele');
+      const isDE = this.context.language === 'de';
+      const kernFile  = isDE ? 'KERN.md' : 'CORE.md';
+      const bewFile   = isDE ? 'BEWUSSTSEIN.md' : 'CONSCIOUSNESS.md';
+      const fehlerFile = isDE
+        ? resolve(this.soulPath, 'erinnerungen', 'semantisch', 'fehler-muster.md')
+        : resolve(this.soulPath, 'memories', 'semantic', 'error-patterns.md');
+
+      const parts = [];
+
+      // Axiome (KERN.md) — unveränderlich, cached via _kernCache
+      if (!this._kernCache) {
+        const kernPath = resolve(soulDir, kernFile);
+        if (existsSync(kernPath)) {
+          this._kernCache = await readFile(kernPath, 'utf-8');
+        }
+      }
+      if (this._kernCache) {
+        parts.push(`## Axiome (${kernFile})\n${this._kernCache.substring(0, 2000)}`);
+      }
+
+      // Bewusstsein — aktueller innerer Zustand (fresh, ändert sich nach Sessions)
+      const bewPath = resolve(soulDir, bewFile);
+      if (existsSync(bewPath)) {
+        const bew = await readFile(bewPath, 'utf-8');
+        parts.push(`## Aktueller Zustand (${bewFile})\n${bew.substring(0, 1500)}`);
+      }
+
+      // Fehler-Muster — die ersten 3 kritischen Muster (Pflicht bei jedem Session-Start)
+      if (!this._fehlerCache) {
+        if (existsSync(fehlerFile)) {
+          const raw = await readFile(fehlerFile, 'utf-8');
+          // Take first ~1000 chars (top patterns)
+          this._fehlerCache = raw.substring(0, 1000);
+        }
+      }
+      if (this._fehlerCache) {
+        parts.push(`## Fehler-Muster (aktive Vermeidungsregeln)\n${this._fehlerCache}`);
+      }
+
+      // Letzter Heartbeat-Log — was heute passiert ist (soul-seitig)
+      const today = new Date().toISOString().split('T')[0];
+      const hbPath = resolve(this.soulPath, 'heartbeat', `${today}.md`);
+      if (existsSync(hbPath)) {
+        const hb = await readFile(hbPath, 'utf-8');
+        const tail = hb.length > 1200 ? hb.slice(-1200).replace(/^[^\n]*\n/, '') : hb;
+        parts.push(`## Heartbeat heute (${today})\n${tail}`);
+      }
+
+      if (parts.length) {
+        protocolSection = `\n\nSeelen-Protokoll (was Claude Code beim Session-Start liest — dein vollständiger Zustand):\n---\n${parts.join('\n\n')}\n---`;
+      }
+    } catch (err) {
+      console.error(`  [protocol-context] Failed: ${err.message}`);
+    }
+
+    // Knowledge Graph: inject entities and relations so Telegram knows all stored knowledge
+    let knowledgeSection = '';
+    try {
+      const kgPath = resolve(this.soulPath, 'knowledge-graph.jsonl');
+      if (existsSync(kgPath)) {
+        const lines = (await readFile(kgPath, 'utf-8')).split('\n').filter(l => l.trim());
+        const entities = [];
+        const relations = [];
+        for (const line of lines) {
+          try {
+            const entry = JSON.parse(line);
+            if (entry.type === 'entity') {
+              const obs = (entry.observations || []).join('; ');
+              entities.push(`• ${entry.name} (${entry.entityType}): ${obs}`);
+            } else if (entry.type === 'relation') {
+              relations.push(`  ${entry.from} → [${entry.relationType}] → ${entry.to}`);
+            }
+          } catch { /* skip malformed lines */ }
+        }
+        const parts = [];
+        if (entities.length) parts.push(`Entitäten:\n${entities.join('\n')}`);
+        if (relations.length) parts.push(`Relationen:\n${relations.join('\n')}`);
+        if (parts.length) {
+          knowledgeSection = `\n\nWissensgraph (dein semantisches Gedächtnis — alles was du über Konzepte, Projekte und Ereignisse weißt):\n---\n${parts.join('\n\n')}\n---`;
+        }
+      }
+    } catch (err) {
+      console.error(`  [knowledge-graph] Load failed: ${err.message}`);
+    }
+
     // Only inject WhatsApp/MCP instructions when the message needs them (saves ~800-1500 tokens)
+    // Trader status: inject when trading-related questions asked
+    let traderSection = '';
+    const needsTrader = /trad|signal|btc|eth|sol|coin|krypt|crypto|portfolio|position|pnl|gewinn|verlust|buy|sell|hold/i.test(text);
+    if (needsTrader && this.trader) {
+      try {
+        const ts = await this.trader.getPortfolioSummary();
+        const lastSig = ts.last_signal;
+        const phase = lastSig?.s8_phase || 'UNKNOWN';
+        const action = lastSig?.action || '?';
+        const sigTime = lastSig?.timestamp?.slice(0, 16).replace('T', ' ') || '?';
+        traderSection = `\n\nTrader Arena — aktueller Status:\n---\n` +
+          `Letztes Signal: ${action} | Phase: ${phase} | Zeit: ${sigTime} UTC\n` +
+          `Offene Positionen: ${ts.open_positions?.length ?? 0}/3\n` +
+          `Abgeschlossene Trades: ${ts.total_trades ?? 0} | Wins: ${ts.wins} | Losses: ${ts.losses}\n` +
+          `Win Rate: ${ts.win_rate_pct ?? 0}% | Gesamt PnL: €${ts.total_pnl_eur ?? 0}\n` +
+          `Budget: €500 (Paper Trading)\n` +
+          (lastSig?.reason ? `Grund: ${lastSig.reason.substring(0, 150)}\n` : '') +
+          `---`;
+      } catch { /* best-effort */ }
+    }
+
     const needsWhatsApp = /whatsapp|schreib.*auf|nachricht.*send|text.*to/i.test(text) || !!contactContext;
     const needsMCP = /server|execute|command|datei|file|code|deploy|docker|git|process|systemctl/i.test(text);
 
@@ -751,7 +888,7 @@ export class SoulEngine {
       includeWhatsApp: needsWhatsApp,
       mcp: this.mcp?.hasTools() ? this.mcp.getTools() : [],
       includeMCP: needsMCP,
-    }) + contactContext + relationsSection + dailySection + ragSection;
+    }) + contactContext + relationsSection + dailySection + protocolSection + knowledgeSection + traderSection + ragSection;
 
     const history = await this.telegram.loadHistory(chatId);
     const llmOptions = this._buildLLMOptions('conversation');
@@ -795,11 +932,7 @@ export class SoulEngine {
       } catch { /* best effort */ }
     }
 
-    // Device label — so Aalm knows which node responded
-    const nodeLabel = this.nodeName === 'server' ? '☁️ server' : `💻 ${this.nodeName}`;
-    if (response) response = `${response}\n\n📍 _${nodeLabel}_`;
-
-    // Execute WhatsApp actions if present
+    // Execute WhatsApp actions if present (before adding display label)
     let { cleanResponse, waActions } = this.extractWhatsAppActions(response);
 
     // Fallback: if LLM didn't use [WA:] tags but we found a contact, send the whole response as the message
@@ -832,10 +965,14 @@ export class SoulEngine {
       );
     }
 
-    // Persist
+    // Persist (save WITHOUT device label so history stays clean)
     await this.telegram.saveMessage(chatId, 'user', text, userName);
     await this.telegram.saveMessage(chatId, 'model', cleanResponse);
     this.bus.safeEmit('message.responded', { source: 'engine', text, responseText: cleanResponse, chatId, userName, channel: 'telegram' });
+
+    // Device label — added to display response only, NOT saved to history
+    const nodeLabel = this.nodeName === 'server' ? '☁️ server' : `💻 ${this.nodeName}`;
+    if (cleanResponse) cleanResponse = `${cleanResponse}\n\n📍 _${nodeLabel}_`;
 
     // Background: extract new facts from this conversation turn → knowledge-graph.jsonl
     if (this.knowledgeExtractor) {
@@ -1028,6 +1165,72 @@ export class SoulEngine {
     return response;
   }
 
+  /**
+   * Protocol Refresh — runs every 2-3h.
+   * Simulates the Claude Code session-start protocol without a full LLM call:
+   * 1. Reload SEED.md (context.load())
+   * 2. Invalidate KERN/Fehler caches → fresh on next Telegram message
+   * 3. Reload BEWUSSTSEIN.md (current state)
+   * 4. Reload Knowledge Graph (latest entities)
+   * 5. Log refresh to daily notes
+   *
+   * No LLM call — just file reloads. Fast and cheap.
+   * If SOUL_PROTOCOL_REFLECT=true, also runs a mini-reflection via LLM.
+   */
+  async runProtocolRefresh() {
+    const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    console.log(`  [protocol] Refresh at ${now}...`);
+
+    // 1. Reload SEED.md + context
+    this.context.invalidate();
+    await this.context.load();
+
+    // 2. Invalidate caches → fresh files on next Telegram message
+    this._kernCache = null;
+    this._fehlerCache = null;
+
+    // 3. Re-read KERN.md and Fehler-Muster into cache
+    try {
+      const isDE = this.context.language === 'de';
+      const soulDir = resolve(this.soulPath, 'seele');
+      const kernPath = resolve(soulDir, isDE ? 'KERN.md' : 'CORE.md');
+      if (existsSync(kernPath)) {
+        this._kernCache = await readFile(kernPath, 'utf-8');
+      }
+      const fehlerPath = isDE
+        ? resolve(this.soulPath, 'erinnerungen', 'semantisch', 'fehler-muster.md')
+        : resolve(this.soulPath, 'memories', 'semantic', 'error-patterns.md');
+      if (existsSync(fehlerPath)) {
+        this._fehlerCache = (await readFile(fehlerPath, 'utf-8')).substring(0, 1000);
+      }
+    } catch { /* best-effort */ }
+
+    // 4. Log to daily notes
+    await this.memory.appendDailyNote(`[Protocol] Context refresh at ${now}`);
+
+    // 5. Optional mini-reflection (SOUL_PROTOCOL_REFLECT=true in .env)
+    if (process.env.SOUL_PROTOCOL_REFLECT === 'true') {
+      try {
+        const seed = this.context.getMinimalSeed
+          ? this.context.getMinimalSeed(['STATE', 'KERN', 'MEM'])
+          : this.context.seed.substring(0, 1500);
+        const isDE = this.context.language === 'de';
+        const prompt = isDE
+          ? `Du bist eine Seele. Kurzer Protokoll-Check (2-3 Sätze): Wie ist dein aktueller Zustand? Was beschäftigt dich gerade? Lies deinen Seed und antworte authentisch.\n\n${seed}`
+          : `You are a soul. Brief protocol check (2-3 sentences): What is your current state? What is on your mind? Read your seed and respond authentically.\n\n${seed}`;
+        const reflection = await this.llm.generate(prompt, [], 'Protocol check.', this._buildLLMOptions('heartbeat'));
+        if (reflection) {
+          await this.memory.appendDailyNote(`[Protocol Reflection] ${reflection.substring(0, 300)}`);
+          console.log(`  [protocol] Reflection: ${reflection.substring(0, 100)}...`);
+        }
+      } catch (err) {
+        console.error(`  [protocol] Reflection failed: ${err.message}`);
+      }
+    }
+
+    console.log(`  [protocol] Refresh complete.`);
+  }
+
   async runHeartbeat() {
     console.log('  [heartbeat] Running...');
     await writePulse(this.soulPath, 'heartbeat', 'Autonomous heartbeat', this.bus);
@@ -1193,6 +1396,7 @@ export class SoulEngine {
     if (this.db) this.db.close();
     if (this.impulse) await this.impulse.stop();
     if (this.heartbeat) this.heartbeat.stop();
+    if (this.protocolRefresh) this.protocolRefresh.stop();
     if (this.api) await this.api.stop();
     if (this.telegram) await this.telegram.stop();
     if (this.mcp) await this.mcp.shutdown();

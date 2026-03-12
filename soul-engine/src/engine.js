@@ -603,7 +603,7 @@ export class SoulEngine {
 
   async handleMessage({ text, chatId, userName, _relayed = false }) {
     // ── Prefix routing ───────────────────────────────────────────────────────
-    const PREFIX = /^@(mac(?:book)?|server|local):\s*/i;
+    const PREFIX = /^@(mac(?:book)?|server|local)[:\s]\s*/i;
     let target = 'all';
     let cleanText = text;
     const match = text.match(PREFIX);

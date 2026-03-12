@@ -50,6 +50,7 @@ import { ContradictionEngine } from './contradiction-engine.js';
 import { MetaLearner } from './meta-learner.js';
 import { TheoryOfMind } from './theory-of-mind.js';
 import { ClaudeContextWriter } from './claude-context-writer.js';
+import { KnowledgeExtractor } from './knowledge-extractor.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -60,6 +61,7 @@ export class SoulEngine {
     this.llm = null;
     this.mcp = null;
     this.telegram = null;
+    this.knowledgeExtractor = null;
     this.whatsapp = null;
     this.api = null;
     this.nodeName = process.env.SOUL_NODE_NAME || 'server';
@@ -129,6 +131,9 @@ export class SoulEngine {
 
     // Cost Tracker — wraps LLM for token estimation
     this.costs = new CostTracker(this.soulPath, { bus: this.bus });
+
+    // Knowledge Extractor — async background learner from Telegram conversations
+    this.knowledgeExtractor = new KnowledgeExtractor(this.soulPath, this.llm);
 
     return { name: this.context.extractName(), lang: this.context.language, model };
   }
@@ -813,6 +818,11 @@ export class SoulEngine {
     await this.telegram.saveMessage(chatId, 'user', text, userName);
     await this.telegram.saveMessage(chatId, 'model', cleanResponse);
     this.bus.safeEmit('message.responded', { source: 'engine', text, responseText: cleanResponse, chatId, userName, channel: 'telegram' });
+
+    // Background: extract new facts from this conversation turn → knowledge-graph.jsonl
+    if (this.knowledgeExtractor) {
+      this.knowledgeExtractor.extractAndSave(text, cleanResponse, userName);
+    }
     await this.memory.appendDailyNote(
       `[Telegram/${userName}] ${text.substring(0, 120)}${text.length > 120 ? '...' : ''}`
     );

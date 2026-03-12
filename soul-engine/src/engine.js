@@ -51,6 +51,7 @@ import { MetaLearner } from './meta-learner.js';
 import { TheoryOfMind } from './theory-of-mind.js';
 import { ClaudeContextWriter } from './claude-context-writer.js';
 import { KnowledgeExtractor } from './knowledge-extractor.js';
+import { GmailMonitor } from './gmail-monitor.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -62,6 +63,7 @@ export class SoulEngine {
     this.mcp = null;
     this.telegram = null;
     this.knowledgeExtractor = null;
+    this.gmailMonitor = null;
     this.whatsapp = null;
     this.api = null;
     this.nodeName = process.env.SOUL_NODE_NAME || 'server';
@@ -135,6 +137,16 @@ export class SoulEngine {
     // Knowledge Extractor — async background learner from Telegram conversations
     this.knowledgeExtractor = new KnowledgeExtractor(this.soulPath, this.llm);
 
+    // Gmail Monitor — autonomous email watcher (starts after engine is fully up)
+    this.gmailMonitor = new GmailMonitor({
+      soulPath: this.soulPath,
+      llm: this.llm,
+      telegram: null, // set in start() after telegram channel is ready
+      clientId: process.env.GMAIL_CLIENT_ID,
+      clientSecret: process.env.GMAIL_CLIENT_SECRET,
+      refreshToken: process.env.GMAIL_REFRESH_TOKEN,
+    });
+
     return { name: this.context.extractName(), lang: this.context.language, model };
   }
 
@@ -184,6 +196,12 @@ export class SoulEngine {
         this.telegram.onMessage(async (msg) => this.handleMessage(msg));
         await this.telegram.start();
         console.log('  Telegram:  connected (primary — polling)');
+
+        // Start Gmail monitor now that Telegram is ready
+        if (this.gmailMonitor) {
+          this.gmailMonitor.telegram = this.telegram;
+          this.gmailMonitor.start();
+        }
       } else {
         // Secondary node: send-only, relay handles incoming
         await this.telegram.initSendOnly();

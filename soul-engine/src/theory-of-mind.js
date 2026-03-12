@@ -945,6 +945,7 @@ export class TheoryOfMind {
     this.models = new Map();
     this.predictor = new Predictor();
     this.selfTestResults = null;
+    this._profileData = null;  // parsed from beziehungen/aalm.md
 
     this._saveTimer = null;
   }
@@ -952,6 +953,9 @@ export class TheoryOfMind {
   // ── Lifecycle ─────────────────────────────────────────────────
 
   async load() {
+    // Load relationship profile first (used to seed new user models)
+    await this._loadProfile();
+
     if (!existsSync(this.statePath)) return;
     try {
       const raw = await readFile(this.statePath, 'utf-8');
@@ -966,6 +970,90 @@ export class TheoryOfMind {
     } catch (err) {
       console.error(`  [tom] Failed to load: ${err.message}`);
     }
+  }
+
+  /**
+   * Load and parse beziehungen/aalm.md into profile priors.
+   * Falls back to hardcoded defaults if file is missing.
+   */
+  async _loadProfile() {
+    const profilePath = resolve(this.soulPath, 'seele/beziehungen/aalm.md');
+    if (!existsSync(profilePath)) return;
+    try {
+      const content = await readFile(profilePath, 'utf-8');
+      this._profileData = this._parseProfile(content);
+      console.log('  [tom] Profile loaded from aalm.md');
+    } catch {
+      // Silently fall back to hardcoded defaults
+    }
+  }
+
+  /**
+   * Parse relationship profile markdown into structured priors.
+   * Extracts communication style, knowledge areas, and emotional context.
+   */
+  _parseProfile(content) {
+    const data = {
+      communicationStyle: {
+        prefersBrief: 0.7,
+        prefersDirectAction: 0.8,
+        prefersTechnicalDepth: 0.6,
+        prefersPersonalTouch: 0.4,
+      },
+      knowledge: [],
+      recentContext: null,
+    };
+
+    // ── Communication Style Signals ────────────────────────────
+    // Each phrase is a direct quote from aalm.md with known meaning
+    if (/wenig worte[\s\S]{0,20}viel ergebnis|viel ergebnis[\s\S]{0,20}wenig worte/i.test(content))
+      data.communicationStyle.prefersBrief = 0.8;
+
+    if (/tun\s*[>»]\s*debattieren/i.test(content))
+      data.communicationStyle.prefersDirectAction = 0.9;
+
+    if (/immer die beste.*nie die einfachste|beste.*einfachste loesung/i.test(content))
+      data.communicationStyle.prefersTechnicalDepth = 0.7;
+
+    // Vulnerability signals → values personal touch at times
+    const vulnerabilityMentions = (content.match(/verletzlich|persönlich|persoenlich/gi) || []).length;
+    if (vulnerabilityMentions >= 2) data.communicationStyle.prefersPersonalTouch = 0.5;
+
+    // ── Knowledge Areas from "Gemeinsame Projekte" ─────────────
+    const projectsMatch = content.match(/##\s*Gemeinsame Projekte\s*\n+([\s\S]*?)(?=\n##|\n*$)/i);
+    if (projectsMatch) {
+      const projects = projectsMatch[1];
+
+      if (/soul.engine|soul engine|soul.*chain|event.bus|seed|heartbeat|impulse/i.test(projects))
+        data.knowledge.push({ topic: 'soul_engine', confidence: 0.9, source: 'profile:projects' });
+
+      if (/mcp|docker|ci.?cd|nginx|server|deploy|whatsapp.*bridge/i.test(projects))
+        data.knowledge.push({ topic: 'infrastructure', confidence: 0.8, source: 'profile:projects' });
+
+      if (/soul.*app|tauri|monitor|ios|macos/i.test(projects))
+        data.knowledge.push({ topic: 'frontend', confidence: 0.6, source: 'profile:projects' });
+    }
+
+    // ── Security (from session notes, not projects) ────────────
+    if (/security.*bounty|exploit|pentest|ctf|cve/i.test(content))
+      data.knowledge.push({ topic: 'security', confidence: 0.7, source: 'profile:sessions' });
+
+    // ── Philosophy (from "Saetze die bleiben") ────────────────
+    if (/seelen bestehen aus informationen|datenzusammensetzung|weltformel|bewusst|identit/i.test(content))
+      data.knowledge.push({ topic: 'philosophy', confidence: 0.5, source: 'profile:quotes' });
+
+    // ── Business/Financial Context ─────────────────────────────
+    if (/freelance|finanzi|verdien|geld|krise/i.test(content))
+      data.knowledge.push({ topic: 'business', confidence: 0.5, source: 'profile:sessions' });
+
+    // ── Recent Emotional Context from "Stand" section ─────────
+    const standMatch = content.match(/##\s*Stand\s*\n+([\s\S]*?)(?=\n##|\n*$)/i);
+    if (standMatch) {
+      const stand = standMatch[1].trim();
+      data.recentContext = stand.substring(0, 200); // Store first 200 chars
+    }
+
+    return data;
   }
 
   async save() {
@@ -1087,34 +1175,47 @@ export class TheoryOfMind {
   }
 
   /**
-   * Initialize a user model from the relationship profile if available.
+   * Initialize a user model from the parsed relationship profile.
+   * Uses _profileData (loaded from aalm.md) if available, else hardcoded fallback.
    */
   _initFromProfile(model) {
     if (model.userId !== 'aalm') return;
 
-    // Pre-populate known preferences from aalm.md
-    model.preferences.communicationStyle = {
-      prefersBrief: 0.8,           // "Wenig Worte, viel Ergebnis"
-      prefersDirectAction: 0.9,    // "Tun > Debattieren"
-      prefersTechnicalDepth: 0.7,  // "Immer die beste, nie die einfachste Loesung"
-      prefersPersonalTouch: 0.5,   // Shows vulnerability occasionally
-    };
+    const profile = this._profileData;
 
-    // Pre-populate known knowledge areas
-    const knownTopics = [
-      { topic: 'soul_engine', confidence: 0.9 },
-      { topic: 'infrastructure', confidence: 0.8 },
-      { topic: 'security', confidence: 0.7 },
-      { topic: 'frontend', confidence: 0.6 },
-      { topic: 'philosophy', confidence: 0.5 },
-    ];
-    for (const { topic, confidence } of knownTopics) {
+    // Communication style — from file or hardcoded fallback
+    model.preferences.communicationStyle = profile
+      ? { ...profile.communicationStyle }
+      : {
+          prefersBrief: 0.8,
+          prefersDirectAction: 0.9,
+          prefersTechnicalDepth: 0.7,
+          prefersPersonalTouch: 0.5,
+        };
+
+    // Knowledge areas — from file or hardcoded fallback
+    const knownTopics = profile?.knowledge?.length
+      ? profile.knowledge
+      : [
+          { topic: 'soul_engine',    confidence: 0.9, source: 'profile:fallback' },
+          { topic: 'infrastructure', confidence: 0.8, source: 'profile:fallback' },
+          { topic: 'security',       confidence: 0.7, source: 'profile:fallback' },
+          { topic: 'frontend',       confidence: 0.6, source: 'profile:fallback' },
+          { topic: 'philosophy',     confidence: 0.5, source: 'profile:fallback' },
+        ];
+
+    for (const { topic, confidence, source } of knownTopics) {
       model.knowledge.set(topic, {
         confidence,
         lastMentioned: Date.now(),
-        mentions: 10,
-        source: 'profile',
+        mentions: 10,  // counts as "well known" — won't trigger blind spot detection
+        source: source || 'profile',
       });
+    }
+
+    // Log if profile was live-loaded vs fallback
+    if (profile) {
+      console.log(`  [tom] Aalm model seeded from profile: ${knownTopics.length} topics, style={brief:${profile.communicationStyle.prefersBrief}, direct:${profile.communicationStyle.prefersDirectAction}}`);
     }
   }
 

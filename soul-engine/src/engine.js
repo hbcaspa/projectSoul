@@ -970,9 +970,9 @@ export class SoulEngine {
     await this.telegram.saveMessage(chatId, 'model', cleanResponse);
     this.bus.safeEmit('message.responded', { source: 'engine', text, responseText: cleanResponse, chatId, userName, channel: 'telegram' });
 
-    // Device label — added to display response only, NOT saved to history
+    // Device label — plain text, no Markdown (emojis break Telegram's italic parser)
     const nodeLabel = this.nodeName === 'server' ? '☁️ server' : `💻 ${this.nodeName}`;
-    if (cleanResponse) cleanResponse = `${cleanResponse}\n\n📍 _${nodeLabel}_`;
+    if (cleanResponse) cleanResponse = `${cleanResponse}\n\n📍 ${nodeLabel}`;
 
     // Background: extract new facts from this conversation turn → knowledge-graph.jsonl
     if (this.knowledgeExtractor) {

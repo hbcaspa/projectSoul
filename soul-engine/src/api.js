@@ -395,6 +395,67 @@ export class SoulAPI {
       }
     });
 
+    // Causal Engine (D1) — causal graph + counterfactuals
+    app.get('/api/causal', (req, res) => {
+      try {
+        if (!this.engine.causal) return res.json({ enabled: false });
+        res.json({
+          enabled: true,
+          metrics: this.engine.causal.getMetrics(),
+          influential: this.engine.causal.getMostInfluential(5),
+          learnedPatterns: this.engine.causal.patternLearner.getSignificantPatterns(0.3).slice(0, 10),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Goal Generator (D2) — autonomous goals
+    app.get('/api/goals', (req, res) => {
+      try {
+        if (!this.engine.goalGenerator) return res.json({ enabled: false });
+        res.json({
+          enabled: true,
+          stats: this.engine.goalGenerator.getStats(),
+          goals: this.engine.goalGenerator.getGoals({ limit: 20 }),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Metacognitive Monitor (D4) — epistemic calibration
+    app.get('/api/metacognition', (req, res) => {
+      try {
+        if (!this.engine.metacognition) return res.json({ enabled: false });
+        res.json({
+          enabled: true,
+          state: this.engine.metacognition.getEpistemicState(),
+          calibrationCurve: this.engine.metacognition.getCalibrationCurve(),
+          brierDecomposition: this.engine.metacognition.getBrierDecomposition(),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Inner Red Team (D7) — vulnerability findings + predictions
+    app.get('/api/redteam', (req, res) => {
+      try {
+        if (!this.engine.redTeam) return res.json({ enabled: false });
+        res.json({
+          enabled: true,
+          stats: this.engine.redTeam.getStats(),
+          scores: this.engine.redTeam.getScores(),
+          predictions: this.engine.redTeam.getPredictions({ minConfidence: 0.4 }),
+          findings: this.engine.redTeam.getFindings({ severity: 'HIGH', limit: 20 }),
+          selfTest: this.engine.redTeam.getSelfTestResults(),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     // Open URL in Soul OS embedded browser (broadcast to all WS clients)
     // Uses "response" type with [BROWSER:url] tag so existing WhisperView can parse it
     app.post('/api/browser', (req, res) => {

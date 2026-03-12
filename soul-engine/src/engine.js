@@ -32,6 +32,10 @@ import { CostTracker } from './cost-tracker.js';
 import { AllostaticField } from './allostatic-field.js';
 import { ReconsolidativeMemory } from './reconsolidative-memory.js';
 import { SelfPredictor } from './self-predictor.js';
+import { CausalEngine } from './causal-engine.js';
+import { GoalGenerator } from './goal-generator.js';
+import { MetacognitiveMonitor } from './metacognitive-monitor.js';
+import { InnerRedTeam } from './inner-red-team.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -64,6 +68,10 @@ export class SoulEngine {
     this.field = null;
     this.reconsolidation = null;
     this.predictor = null;
+    this.causal = null;
+    this.goalGenerator = null;
+    this.metacognition = null;
+    this.redTeam = null;
     this.running = false;
   }
 
@@ -243,6 +251,57 @@ export class SoulEngine {
       console.log(`  Predictor: active (self-knowledge: ${stats.selfKnowledge.toFixed(2)}, predictions: ${stats.predictions}, trend: ${stats.trend || 'new'})`);
     } else {
       console.log('  Predictor: disabled');
+    }
+
+    // Inner Red Team (D7) — Adversarial self-improvement
+    if (process.env.SOUL_RED_TEAM !== 'false') {
+      this.redTeam = new InnerRedTeam(this.soulPath, { bus: this.bus });
+      await this.redTeam.load();
+      this.redTeam.registerListeners();
+      await this.redTeam.start();
+      const rtStats = this.redTeam.getStats();
+      console.log(`  RedTeam:   active (${rtStats.findings} findings, ${rtStats.predictions} predictions, self-test: ${rtStats.selfTestPassed ? 'PASS' : 'FAIL'})`);
+    } else {
+      console.log('  RedTeam:   disabled');
+    }
+
+    // Goal Generator (D2) — Autonomous goal setting from internal signals
+    if (this.field && process.env.SOUL_GOALS !== 'false') {
+      this.goalGenerator = new GoalGenerator(this.soulPath, {
+        bus: this.bus,
+        field: this.field,
+      });
+      await this.goalGenerator.load();
+      this.goalGenerator.registerListeners();
+      this.goalGenerator.start();
+      const goalStats = this.goalGenerator.getStats();
+      console.log(`  Goals:     active (${goalStats.activeGoals} goals, precision: ${(goalStats.precision || 0).toFixed(2)})`);
+    } else {
+      console.log('  Goals:     disabled');
+    }
+
+    // Causal Engine (D1) — Real-time causal graph + counterfactual reasoning
+    if (process.env.SOUL_CAUSAL !== 'false') {
+      this.causal = new CausalEngine(this.soulPath, { bus: this.bus });
+      await this.causal.load();
+      this.causal.registerListeners();
+      const causalMetrics = this.causal.getMetrics();
+      console.log(`  Causal:    active (${causalMetrics.knownRules} rules, ${causalMetrics.learnedPatterns} learned patterns)`);
+    } else {
+      console.log('  Causal:    disabled');
+    }
+
+    // Metacognitive Monitor (D4) — Epistemic confidence calibration
+    if (this.field && this.predictor && process.env.SOUL_METACOGNITION !== 'false') {
+      this.metacognition = new MetacognitiveMonitor(this.soulPath, {
+        bus: this.bus,
+        field: this.field,
+        predictor: this.predictor,
+      });
+      const metaState = await this.metacognition.start();
+      console.log(`  Metacog:   active (Brier: ${metaState.brierScore ?? 'n/a'}, ECE: ${metaState.ece ?? 'n/a'})`);
+    } else {
+      console.log('  Metacog:   disabled');
     }
 
     // Seed Consolidator — continuous incremental seed updates
@@ -887,6 +946,10 @@ export class SoulEngine {
     if (this.field) await this.field.save();
     if (this.reconsolidation) await this.reconsolidation.stop();
     if (this.predictor) await this.predictor.stop();
+    if (this.metacognition) await this.metacognition.stop();
+    if (this.goalGenerator) await this.goalGenerator.stop();
+    if (this.causal) await this.causal.stop();
+    if (this.redTeam) await this.redTeam.stop();
     if (this.costs) this.costs.flush();
     if (this.reflection) this.reflection.stop();
     if (this.db) this.db.close();

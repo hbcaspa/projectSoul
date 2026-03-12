@@ -44,6 +44,7 @@ import { Planner } from './planner.js';
 import { ContradictionEngine } from './contradiction-engine.js';
 import { MetaLearner } from './meta-learner.js';
 import { TheoryOfMind } from './theory-of-mind.js';
+import { ClaudeContextWriter } from './claude-context-writer.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -88,6 +89,7 @@ export class SoulEngine {
     this.contradictions = null;
     this.metaLearner = null;
     this.tom = null;
+    this.claudeContextWriter = null;
     this.running = false;
   }
 
@@ -328,8 +330,8 @@ export class SoulEngine {
       });
       await this.transfer.load();
       this.transfer.registerListeners();
-      const transferStats = this.transfer.getStats();
-      console.log(`  Transfer:  active (${transferStats.entities} entities, ${transferStats.analogies} analogies)`);
+      const transferStats = this.transfer.getMetrics();
+      console.log(`  Transfer:  active (${transferStats.entitiesLoaded} entities, ${transferStats.domainsDetected} domains)`);
     } else {
       console.log('  Transfer:  disabled');
     }
@@ -414,6 +416,11 @@ export class SoulEngine {
     } else {
       console.log('  Theory of Mind: disabled');
     }
+
+    // Claude Context Writer — bridges engine state to Claude Code sessions
+    this.claudeContextWriter = new ClaudeContextWriter(this.soulPath, { bus: this.bus, engine: this });
+    this.claudeContextWriter.registerListeners();
+    this.claudeContextWriter.start();
 
     // Seed Consolidator — continuous incremental seed updates
     if (process.env.SOUL_CONSOLIDATOR !== 'false') {
@@ -1069,6 +1076,7 @@ export class SoulEngine {
     if (this.contradictions) await this.contradictions.stop();
     if (this.metaLearner) await this.metaLearner.stop();
     if (this.tom) await this.tom.stop();
+    if (this.claudeContextWriter) this.claudeContextWriter.stop();
     if (this.costs) this.costs.flush();
     if (this.reflection) this.reflection.stop();
     if (this.db) this.db.close();

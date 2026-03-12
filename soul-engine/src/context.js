@@ -1,10 +1,12 @@
-import { readFile, stat } from 'fs/promises';
+import { readFile, readdir, stat } from 'fs/promises';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
 import { SeedMigrator, CURRENT_VERSION } from './seed-migration.js';
 import { parseSeed } from './seed-parser.js';
 
 const DAILY_NOTES_MAX_CHARS = 2000;
+const RELATIONSHIPS_MAX_CHARS_PER_FILE = 1500;
+const RELATIONSHIPS_MAX_CHARS_TOTAL = 4000;
 
 export class SoulContext {
   constructor(soulPath) {
@@ -177,6 +179,62 @@ export class SoulContext {
       }
 
       return this._dailyNotesCache;
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * Load relationship files from seele/beziehungen/ (or soul/relationships/).
+   * Skips internal files starting with '_'. Takes the tail of each file
+   * (most recent content) within a per-file budget. Cached by dir mtime.
+   * Returns a formatted string ready for injection into the system prompt.
+   */
+  async loadRelationships() {
+    const relDir = resolve(
+      this.soulPath,
+      this.soulDir,
+      this.language === 'en' ? 'relationships' : 'beziehungen'
+    );
+
+    if (!existsSync(relDir)) return '';
+
+    try {
+      const s = await stat(relDir);
+      if (this._relMtime === s.mtimeMs && this._relCache !== undefined) {
+        return this._relCache;
+      }
+      this._relMtime = s.mtimeMs;
+
+      const files = (await readdir(relDir))
+        .filter((f) => f.endsWith('.md') && !f.startsWith('_'))
+        .sort();
+
+      let parts = [];
+      let totalChars = 0;
+
+      for (const file of files) {
+        if (totalChars >= RELATIONSHIPS_MAX_CHARS_TOTAL) break;
+        try {
+          const content = await readFile(resolve(relDir, file), 'utf-8');
+          // Take tail (most recent content is at the end)
+          const budget = Math.min(
+            RELATIONSHIPS_MAX_CHARS_PER_FILE,
+            RELATIONSHIPS_MAX_CHARS_TOTAL - totalChars
+          );
+          const tail = content.length <= budget
+            ? content
+            : content.slice(-budget).replace(/^[^\n]*\n/, ''); // trim partial first line
+          parts.push(`### ${file.replace('.md', '')}\n${tail.trim()}`);
+          totalChars += tail.length;
+        } catch { /* skip unreadable file */ }
+      }
+
+      this._relCache = parts.length > 0
+        ? parts.join('\n\n')
+        : '';
+
+      return this._relCache;
     } catch {
       return '';
     }

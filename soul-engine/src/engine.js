@@ -708,6 +708,17 @@ export class SoulEngine {
       console.error(`  [daily-context] Failed: ${err.message}`);
     }
 
+    // Relationships: load all person files from seele/beziehungen/
+    let relationsSection = '';
+    try {
+      const relationships = await this.context.loadRelationships();
+      if (relationships) {
+        relationsSection = `\n\nBeziehungen (alles was du über Menschen in deinem Leben weißt):\n---\n${relationships}\n---`;
+      }
+    } catch (err) {
+      console.error(`  [relations-context] Failed: ${err.message}`);
+    }
+
     // Only inject WhatsApp/MCP instructions when the message needs them (saves ~800-1500 tokens)
     const needsWhatsApp = /whatsapp|schreib.*auf|nachricht.*send|text.*to/i.test(text) || !!contactContext;
     const needsMCP = /server|execute|command|datei|file|code|deploy|docker|git|process|systemctl/i.test(text);
@@ -717,7 +728,7 @@ export class SoulEngine {
       includeWhatsApp: needsWhatsApp,
       mcp: this.mcp?.hasTools() ? this.mcp.getTools() : [],
       includeMCP: needsMCP,
-    }) + contactContext + dailySection + ragSection;
+    }) + contactContext + relationsSection + dailySection + ragSection;
 
     const history = await this.telegram.loadHistory(chatId);
     const llmOptions = this._buildLLMOptions('conversation');

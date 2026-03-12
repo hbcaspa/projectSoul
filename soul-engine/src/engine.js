@@ -2,6 +2,7 @@ import { writeFile, mkdir, rename } from 'node:fs/promises';
 import { existsSync, readdirSync, readFileSync, renameSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { exec } from 'node:child_process';
 import { SoulContext } from './context.js';
 import { GeminiAdapter } from './gemini.js';
 import { OpenAIAdapter } from './openai.js';
@@ -616,13 +617,11 @@ export class SoulEngine {
     // If targeted at another node: relay and acknowledge, then return
     if (!_relayed && target !== 'all' && target !== this.nodeName && target !== 'server') {
       await this._writeRelay('telegram', { target, text: cleanText, chatId, userName });
-      if (this.telegram) await this.telegram.sendToOwner(`🔀 Weitergeleitet an ${target}…`);
-      return '🔀 Weitergeleitet.';
+      return `🔀 Weitergeleitet an ${target}…`;
     }
     if (!_relayed && target !== 'all' && target === 'server' && this.nodeName !== 'server') {
       await this._writeRelay('telegram', { target: 'server', text: cleanText, chatId, userName });
-      if (this.telegram) await this.telegram.sendToOwner(`🔀 Weitergeleitet an server…`);
-      return '🔀 Weitergeleitet.';
+      return `🔀 Weitergeleitet an server…`;
     }
 
     // Relay copy to other node so both TOM models stay in sync (no response generated there)
@@ -631,6 +630,21 @@ export class SoulEngine {
     }
 
     text = cleanText;
+
+    // Shell execution: messages starting with ! or $ run as shell commands
+    if (/^[!$] /.test(text)) {
+      const cmd = text.slice(2).trim();
+      const nodeLabel = this.nodeName === 'server' ? '☁️ server' : `💻 ${this.nodeName}`;
+      const result = await new Promise(resolve => {
+        exec(cmd, { timeout: 15000, maxBuffer: 1024 * 32 }, (err, stdout, stderr) => {
+          const out = (stdout || '').trim();
+          const err2 = (stderr || '').trim();
+          resolve(err ? `❌ ${err.message}\n${err2}` : (out || err2 || '(no output)'));
+        });
+      });
+      return `\`\`\`\n${result}\n\`\`\`\n\n📍 _${nodeLabel}_`;
+    }
+
     await writePulse(this.soulPath, 'relate', `Telegram: ${userName}`, this.bus);
     this.bus.safeEmit('message.received', { source: 'engine', text, chatId, userName, channel: 'telegram' });
 
@@ -749,7 +763,7 @@ export class SoulEngine {
 
     // Device label — so Aalm knows which node responded
     const nodeLabel = this.nodeName === 'server' ? '☁️ server' : `💻 ${this.nodeName}`;
-    if (response && !_relayed) response = `${response}\n\n📍 _${nodeLabel}_`;
+    if (response) response = `${response}\n\n📍 _${nodeLabel}_`;
 
     // Execute WhatsApp actions if present
     let { cleanResponse, waActions } = this.extractWhatsAppActions(response);

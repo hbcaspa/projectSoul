@@ -36,6 +36,10 @@ import { CausalEngine } from './causal-engine.js';
 import { GoalGenerator } from './goal-generator.js';
 import { MetacognitiveMonitor } from './metacognitive-monitor.js';
 import { InnerRedTeam } from './inner-red-team.js';
+import { TransferEngine } from './transfer-engine.js';
+import { SoulComposer } from './primitives-composer.js';
+import { TemporalIntelligence } from './temporal-intelligence.js';
+import { SoulExchange } from './soul-exchange.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -72,6 +76,10 @@ export class SoulEngine {
     this.goalGenerator = null;
     this.metacognition = null;
     this.redTeam = null;
+    this.transfer = null;
+    this.composer = null;
+    this.temporal = null;
+    this.exchange = null;
     this.running = false;
   }
 
@@ -302,6 +310,58 @@ export class SoulEngine {
       console.log(`  Metacog:   active (Brier: ${metaState.brierScore ?? 'n/a'}, ECE: ${metaState.ece ?? 'n/a'})`);
     } else {
       console.log('  Metacog:   disabled');
+    }
+
+    // Transfer Engine (D3) — Cross-domain structural analogy detection
+    if (process.env.SOUL_TRANSFER !== 'false') {
+      this.transfer = new TransferEngine(this.soulPath, {
+        bus: this.bus,
+        memoryDb: this.db,
+      });
+      await this.transfer.load();
+      this.transfer.registerListeners();
+      const transferStats = this.transfer.getStats();
+      console.log(`  Transfer:  active (${transferStats.entities} entities, ${transferStats.analogies} analogies)`);
+    } else {
+      console.log('  Transfer:  disabled');
+    }
+
+    // Temporal Intelligence (D6) — Empirical time modeling + pressure detection
+    if (process.env.SOUL_TEMPORAL !== 'false') {
+      this.temporal = new TemporalIntelligence(this.soulPath, {
+        bus: this.bus,
+        field: this.field,
+      });
+      await this.temporal.start();
+      console.log('  Temporal:  active (11 event models, MAE tracking, burst detection)');
+    } else {
+      console.log('  Temporal:  disabled');
+    }
+
+    // Soul Exchange (D8) — Semantic compression for Soul Chain
+    if (process.env.SOUL_EXCHANGE !== 'false') {
+      this.exchange = new SoulExchange(this.soulPath, { bus: this.bus });
+      await this.exchange.load();
+      this.exchange.registerListeners();
+      this.exchange.start();
+      console.log('  Exchange:  active (semantic compression, emergent codebook)');
+    } else {
+      console.log('  Exchange:  disabled');
+    }
+
+    // Soul Composer (D5) — Primitives pipeline engine
+    if (process.env.SOUL_COMPOSER !== 'false') {
+      this.composer = new SoulComposer(this.soulPath, {
+        bus: this.bus,
+        field: this.field,
+      });
+      await this.composer.load();
+      this.composer.registerListeners();
+      this.composer.start();
+      const composerStats = this.composer.getStats();
+      console.log(`  Composer:  active (${composerStats.primitives} primitives, ${composerStats.pipelines} pipelines)`);
+    } else {
+      console.log('  Composer:  disabled');
     }
 
     // Seed Consolidator — continuous incremental seed updates
@@ -950,6 +1010,10 @@ export class SoulEngine {
     if (this.goalGenerator) await this.goalGenerator.stop();
     if (this.causal) await this.causal.stop();
     if (this.redTeam) await this.redTeam.stop();
+    if (this.composer) await this.composer.stop();
+    if (this.temporal) await this.temporal.stop();
+    if (this.exchange) await this.exchange.stop();
+    if (this.transfer) this.transfer.stop?.();
     if (this.costs) this.costs.flush();
     if (this.reflection) this.reflection.stop();
     if (this.db) this.db.close();

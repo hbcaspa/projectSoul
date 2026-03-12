@@ -456,6 +456,63 @@ export class SoulAPI {
       }
     });
 
+    // Transfer Engine (D3) — cross-domain analogies
+    app.get('/api/transfer', (req, res) => {
+      try {
+        if (!this.engine.transfer) return res.json({ enabled: false });
+        const analogies = this.engine.transfer.discoverAnalogies?.() || [];
+        res.json({
+          enabled: true,
+          stats: this.engine.transfer.getStats(),
+          topAnalogies: analogies.slice(0, 10),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Temporal Intelligence (D6) — time models + pressure
+    app.get('/api/temporal', (req, res) => {
+      try {
+        if (!this.engine.temporal) return res.json({ enabled: false });
+        res.json({
+          enabled: true,
+          state: this.engine.temporal.getTemporalState(),
+          pressure: this.engine.temporal.getTimePressure(),
+          constraints: this.engine.temporal.getSequencingConstraints(),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Soul Exchange (D8) — compression metrics
+    app.get('/api/exchange', (req, res) => {
+      try {
+        if (!this.engine.exchange) return res.json({ enabled: false });
+        res.json({
+          enabled: true,
+          metrics: this.engine.exchange.getMetrics(),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Soul Composer (D5) — pipeline catalog + metrics
+    app.get('/api/composer', (req, res) => {
+      try {
+        if (!this.engine.composer) return res.json({ enabled: false });
+        res.json({
+          enabled: true,
+          stats: this.engine.composer.getStats(),
+          pipelines: this.engine.composer.listPipelines(),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     // Open URL in Soul OS embedded browser (broadcast to all WS clients)
     // Uses "response" type with [BROWSER:url] tag so existing WhisperView can parse it
     app.post('/api/browser', (req, res) => {

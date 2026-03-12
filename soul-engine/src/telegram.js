@@ -164,6 +164,12 @@ export class TelegramChannel {
       console.error(`  [telegram] Notify failed: ${err.message}`);
     }
   }
+
+  // Send-only mode for secondary nodes — no polling, just send capability
+  async initSendOnly() {
+    await mkdir(this.historyDir, { recursive: true });
+    // No polling started — bot.api.sendMessage still works
+  }
 }
 
 // ── Helpers ──────────────────────────────────────────────

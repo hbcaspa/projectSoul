@@ -20,6 +20,7 @@ const SYNC_DIRS = [
   'heartbeat', 'memory',
   'zustandslog', 'statelog',
   'conversations',
+  'relay',  // Cross-device event relay (Telegram routing, WhatsApp proxy)
 ];
 
 const SYNC_FILES = [
@@ -41,6 +42,7 @@ const IMMUTABLE_FILES = new Set([
 
 const IGNORE = new Set([
   '.env', '.mcp.json', '.soul-pulse', '.session-writes', '.soul-route-log',
+  '.done',  // Processed relay files — ignore subdirectory
   '.git', '.claude', '.soul-chain', '.soul-chain-status',
   'node_modules', 'soul-engine', 'soul-monitor', 'soul-card',
   'soul-chain', 'skills', 'docs', 'hooks',

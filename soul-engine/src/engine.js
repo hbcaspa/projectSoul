@@ -1,3 +1,7 @@
+import { writeFile, mkdir, rename } from 'node:fs/promises';
+import { existsSync, readdirSync, readFileSync, renameSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { SoulContext } from './context.js';
 import { GeminiAdapter } from './gemini.js';
 import { OpenAIAdapter } from './openai.js';
@@ -57,6 +61,8 @@ export class SoulEngine {
     this.telegram = null;
     this.whatsapp = null;
     this.api = null;
+    this.nodeName = process.env.SOUL_NODE_NAME || 'server';
+    this.relayPath = join(soulPath, 'relay');
     this.apiChannel = null;
     this.heartbeat = null;
     this.impulse = null;
@@ -167,12 +173,22 @@ export class SoulEngine {
       this.telegram = new TelegramChannel(
         this.soulPath, telegramToken, telegramOwner
       );
-      this.telegram.onMessage(async (msg) => this.handleMessage(msg));
-      await this.telegram.start();
-      console.log('  Telegram:  connected');
+      if (this.nodeName === 'server') {
+        // Primary node: full polling
+        this.telegram.onMessage(async (msg) => this.handleMessage(msg));
+        await this.telegram.start();
+        console.log('  Telegram:  connected (primary — polling)');
+      } else {
+        // Secondary node: send-only, relay handles incoming
+        await this.telegram.initSendOnly();
+        console.log(`  Telegram:  connected (secondary — send-only, node: ${this.nodeName})`);
+      }
     } else {
       console.log('  Telegram:  not configured');
     }
+
+    // Soul Relay — cross-device event bus via Soul Chain
+    await this._startRelayWatcher();
 
     // WhatsApp Bridge (optional — lazy reconnect if initially unreachable)
     const whatsappUrl = process.env.WHATSAPP_BRIDGE_URL;
@@ -585,7 +601,36 @@ export class SoulEngine {
     };
   }
 
-  async handleMessage({ text, chatId, userName }) {
+  async handleMessage({ text, chatId, userName, _relayed = false }) {
+    // ── Prefix routing ───────────────────────────────────────────────────────
+    const PREFIX = /^@(mac(?:book)?|server|local):\s*/i;
+    let target = 'all';
+    let cleanText = text;
+    const match = text.match(PREFIX);
+    if (match) {
+      const raw = match[1].toLowerCase();
+      target = (raw === 'server') ? 'server' : 'mac';
+      cleanText = text.replace(PREFIX, '').trim();
+    }
+
+    // If targeted at another node: relay and acknowledge, then return
+    if (!_relayed && target !== 'all' && target !== this.nodeName && target !== 'server') {
+      await this._writeRelay('telegram', { target, text: cleanText, chatId, userName });
+      if (this.telegram) await this.telegram.sendToOwner(`🔀 Weitergeleitet an ${target}…`);
+      return '🔀 Weitergeleitet.';
+    }
+    if (!_relayed && target !== 'all' && target === 'server' && this.nodeName !== 'server') {
+      await this._writeRelay('telegram', { target: 'server', text: cleanText, chatId, userName });
+      if (this.telegram) await this.telegram.sendToOwner(`🔀 Weitergeleitet an server…`);
+      return '🔀 Weitergeleitet.';
+    }
+
+    // Relay copy to other node so both TOM models stay in sync (no response generated there)
+    if (!_relayed && target === 'all') {
+      await this._writeRelay('telegram', { target: 'all', text: cleanText, chatId, userName, notifyOnly: true });
+    }
+
+    text = cleanText;
     await writePulse(this.soulPath, 'relate', `Telegram: ${userName}`, this.bus);
     this.bus.safeEmit('message.received', { source: 'engine', text, chatId, userName, channel: 'telegram' });
 
@@ -702,6 +747,10 @@ export class SoulEngine {
       } catch { /* best effort */ }
     }
 
+    // Device label — so Aalm knows which node responded
+    const nodeLabel = this.nodeName === 'server' ? '☁️ server' : `💻 ${this.nodeName}`;
+    if (response && !_relayed) response = `${response}\n\n📍 _${nodeLabel}_`;
+
     // Execute WhatsApp actions if present
     let { cleanResponse, waActions } = this.extractWhatsAppActions(response);
 
@@ -720,6 +769,15 @@ export class SoulEngine {
         } catch (err) {
           console.error(`  [whatsapp] Failed: ${err.message}`);
         }
+      }
+      await this.memory.appendDailyNote(
+        `[WhatsApp] Sent ${waActions.length} message(s) via Telegram request`
+      );
+    } else if (waActions.length > 0 && !this.whatsapp) {
+      // No local bridge — relay send request to server via chain
+      for (const action of waActions) {
+        await this._writeRelay('whatsapp-send', { target: 'server', jid: action.recipient, message: action.message });
+        console.log(`  [relay] WhatsApp relay queued for ${action.recipient}`);
       }
       await this.memory.appendDailyNote(
         `[WhatsApp] Sent ${waActions.length} message(s) via Telegram request`
@@ -1088,6 +1146,94 @@ export class SoulEngine {
 
     console.log('  Soul Engine stopped.');
   }
+
+  // ── Soul Relay — cross-device event bus via Soul Chain ───────────────────
+
+  async _startRelayWatcher() {
+    try {
+      mkdirSync(join(this.relayPath, '.done'), { recursive: true });
+    } catch { /* already exists */ }
+
+    // Process any relay files that arrived while we were offline
+    await this._processRelayFiles();
+
+    // Watch relay/ for new files synced via Soul Chain
+    try {
+      const { watch } = await import('node:fs');
+      watch(this.relayPath, async (eventType, filename) => {
+        if (!filename || filename.startsWith('.') || !filename.endsWith('.json')) return;
+        await this._processRelayFiles();
+      });
+      console.log(`  Relay:     watching relay/ (node: ${this.nodeName})`);
+    } catch (err) {
+      console.error(`  [relay] Watcher failed: ${err.message}`);
+    }
+  }
+
+  async _processRelayFiles() {
+    let files;
+    try {
+      files = readdirSync(this.relayPath).filter(f => f.endsWith('.json'));
+    } catch { return; }
+
+    for (const file of files) {
+      const filePath = join(this.relayPath, file);
+      const donePath = join(this.relayPath, '.done', file);
+      let data;
+      try {
+        data = JSON.parse(readFileSync(filePath, 'utf8'));
+      } catch { continue; }
+
+      // Skip files we created
+      if (data.source === this.nodeName) continue;
+      // Skip if targeted at a different node
+      if (data.target && data.target !== 'all' && data.target !== this.nodeName) continue;
+      // Skip notify-only relay events (just TOM sync, no response)
+      if (data.notifyOnly) {
+        try { renameSync(filePath, donePath); } catch { /* ignore */ }
+        // Still feed TOM
+        this.bus.safeEmit('message.received', {
+          source: 'relay', text: data.text, chatId: data.chatId, userName: data.userName, channel: 'relay',
+        });
+        continue;
+      }
+
+      // Move to .done before processing (prevents double-processing)
+      try { renameSync(filePath, donePath); } catch { continue; }
+
+      if (data.type === 'telegram' && this.telegram) {
+        try {
+          const response = await this.handleMessage({
+            text: data.text, chatId: data.chatId, userName: data.userName, _relayed: true,
+          });
+          if (response) await this.telegram.sendToOwner(response);
+        } catch (err) {
+          console.error(`  [relay] Telegram handle failed: ${err.message}`);
+        }
+      } else if (data.type === 'whatsapp-send' && this.whatsapp) {
+        try {
+          await this.whatsapp.send(data.jid, data.message);
+          console.log(`  [relay] WhatsApp sent to ${data.jid} (relayed from ${data.source})`);
+        } catch (err) {
+          console.error(`  [relay] WhatsApp send failed: ${err.message}`);
+        }
+      }
+    }
+  }
+
+  async _writeRelay(type, payload) {
+    try {
+      mkdirSync(this.relayPath, { recursive: true });
+      const filename = `${type}-${Date.now()}-${randomUUID().slice(0, 8)}.json`;
+      await writeFile(
+        join(this.relayPath, filename),
+        JSON.stringify({ source: this.nodeName, type, ...payload }),
+      );
+    } catch (err) {
+      console.error(`  [relay] Write failed: ${err.message}`);
+    }
+  }
+
 }
 
 // ── ASCII Art Banner ─────────────────────────────────────

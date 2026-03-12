@@ -126,6 +126,13 @@ export class SoulChain {
   // ── Sync ────────────────────────────────────────────
 
   async start() {
+    // Ensure relay/ directory exists before chokidar starts watching
+    // (relay/ is created lazily by the engine — pre-create so chain picks it up)
+    try {
+      const relayPath = path.resolve(this.soulPath, 'relay', '.done');
+      await fs.mkdir(relayPath, { recursive: true });
+    } catch { /* ignore */ }
+
     // Load config if not already loaded
     if (!this.mnemonic) {
       if (!existsSync(this.configPath)) {

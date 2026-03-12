@@ -26,6 +26,7 @@ const SYNC_FILES = [
   'SEED.md', 'SOUL.md', '.language',
   '.soul-impulse-state', '.soul-impulse-log', '.soul-state-tick',
   'knowledge-graph.jsonl',
+  '.soul-claude-context.md',  // Engine → Claude Code bridge (synced to all peers)
 ];
 
 // Files that use line-based merge instead of overwrite
@@ -60,6 +61,7 @@ const HOT_FILES = new Set([
   'seele/KERN.md', 'soul/CORE.md',
   'seele/EVOLUTION.md', 'soul/EVOLUTION.md',
   'erinnerungen/INDEX.md', 'memories/INDEX.md',
+  '.soul-claude-context.md',  // TOM-Updates sofort zu allen Peers
 ]);
 
 export class SoulChain {

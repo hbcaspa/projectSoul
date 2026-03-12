@@ -40,6 +40,10 @@ import { TransferEngine } from './transfer-engine.js';
 import { SoulComposer } from './primitives-composer.js';
 import { TemporalIntelligence } from './temporal-intelligence.js';
 import { SoulExchange } from './soul-exchange.js';
+import { Planner } from './planner.js';
+import { ContradictionEngine } from './contradiction-engine.js';
+import { MetaLearner } from './meta-learner.js';
+import { TheoryOfMind } from './theory-of-mind.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -80,6 +84,10 @@ export class SoulEngine {
     this.composer = null;
     this.temporal = null;
     this.exchange = null;
+    this.planner = null;
+    this.contradictions = null;
+    this.metaLearner = null;
+    this.tom = null;
     this.running = false;
   }
 
@@ -362,6 +370,49 @@ export class SoulEngine {
       console.log(`  Composer:  active (${composerStats.primitives} primitives, ${composerStats.pipelines} pipelines)`);
     } else {
       console.log('  Composer:  disabled');
+    }
+
+    // Planner (D9) — Goal → Action Sequences with rollback + re-planning
+    if (process.env.SOUL_PLANNER !== 'false') {
+      this.planner = new Planner(this.soulPath, { bus: this.bus, field: this.field });
+      await this.planner.load();
+      this.planner.registerListeners();
+      console.log('  Planner:   active (goal→plan decomposition, Monte Carlo simulation)');
+    } else {
+      console.log('  Planner:   disabled');
+    }
+
+    // ContradictionEngine (D10) — Detect + resolve belief contradictions
+    if (process.env.SOUL_CONTRADICTIONS !== 'false') {
+      this.contradictions = new ContradictionEngine(this.soulPath, { bus: this.bus, field: this.field });
+      await this.contradictions.load();
+      this.contradictions.registerListeners();
+      this.contradictions.start();
+      const cStats = this.contradictions.getStats();
+      console.log(`  Contradictions: active (${cStats.open} open, ${cStats.irreducible} irreducible)`);
+    } else {
+      console.log('  Contradictions: disabled');
+    }
+
+    // MetaLearner (D11) — Observe learning curves of all learning modules
+    if (process.env.SOUL_META_LEARNER !== 'false') {
+      this.metaLearner = new MetaLearner(this.soulPath, { bus: this.bus, engine: this });
+      await this.metaLearner.start();
+      console.log('  MetaLearner: active (6 modules, 22 metrics, stagnation detection)');
+    } else {
+      console.log('  MetaLearner: disabled');
+    }
+
+    // TheoryOfMind (D12) — Model of Aalm's knowledge, goals, emotional state
+    if (process.env.SOUL_TOM !== 'false') {
+      this.tom = new TheoryOfMind(this.soulPath, { bus: this.bus, field: this.field });
+      await this.tom.load();
+      this.tom.registerListeners();
+      this.tom.start();
+      const tomStats = this.tom.getStats();
+      console.log(`  Theory of Mind: active (self-test: ${tomStats.selfTestScore})`);
+    } else {
+      console.log('  Theory of Mind: disabled');
     }
 
     // Seed Consolidator — continuous incremental seed updates
@@ -1014,6 +1065,10 @@ export class SoulEngine {
     if (this.temporal) await this.temporal.stop();
     if (this.exchange) await this.exchange.stop();
     if (this.transfer) this.transfer.stop?.();
+    if (this.planner) await this.planner.stop?.();
+    if (this.contradictions) await this.contradictions.stop();
+    if (this.metaLearner) await this.metaLearner.stop();
+    if (this.tom) await this.tom.stop();
     if (this.costs) this.costs.flush();
     if (this.reflection) this.reflection.stop();
     if (this.db) this.db.close();

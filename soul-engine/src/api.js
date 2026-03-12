@@ -513,6 +513,60 @@ export class SoulAPI {
       }
     });
 
+    // Planner (D9) — plan catalog + metrics
+    app.get('/api/planner', (req, res) => {
+      try {
+        if (!this.engine.planner) return res.json({ enabled: false });
+        res.json({ enabled: true, metrics: this.engine.planner.getMetrics() });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // ContradictionEngine (D10) — active contradictions + metrics
+    app.get('/api/contradictions', (req, res) => {
+      try {
+        if (!this.engine.contradictions) return res.json({ enabled: false });
+        res.json({
+          enabled: true,
+          stats: this.engine.contradictions.getStats(),
+          active: this.engine.contradictions.getActiveContradictions().slice(0, 20),
+          irreducible: this.engine.contradictions.getIrreducible(),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // MetaLearner (D11) — learning curves + stagnation report
+    app.get('/api/meta-learner', (req, res) => {
+      try {
+        if (!this.engine.metaLearner) return res.json({ enabled: false });
+        res.json({
+          enabled: true,
+          state: this.engine.metaLearner.getMetaState(),
+          stagnation: this.engine.metaLearner.getStagnationReport(),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // TheoryOfMind (D12) — user model + calibration
+    app.get('/api/tom', (req, res) => {
+      try {
+        if (!this.engine.tom) return res.json({ enabled: false });
+        res.json({
+          enabled: true,
+          stats: this.engine.tom.getStats(),
+          calibration: this.engine.tom.getCalibration(),
+          selfTest: this.engine.tom.getSelfTestResults(),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     // Open URL in Soul OS embedded browser (broadcast to all WS clients)
     // Uses "response" type with [BROWSER:url] tag so existing WhisperView can parse it
     app.post('/api/browser', (req, res) => {

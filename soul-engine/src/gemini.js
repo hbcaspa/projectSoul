@@ -18,11 +18,18 @@ export class GeminiAdapter {
   async generate(systemPrompt, history = [], userMessage, options = {}) {
     const { tools = [], onToolCall = null, max_tokens } = options;
 
+    // Enable deep thinking for Gemini 2.5 Pro (dynamic budget — model decides)
+    const isThinkingModel = this.modelName.includes('2.5-pro');
+    const generationConfig = {
+      ...(max_tokens ? { maxOutputTokens: max_tokens } : {}),
+      ...(isThinkingModel ? { thinkingConfig: { thinkingBudget: -1 } } : {}),
+    };
+
     // Build model config
     const modelConfig = {
       model: this.modelName,
       systemInstruction: systemPrompt,
-      ...(max_tokens ? { generationConfig: { maxOutputTokens: max_tokens } } : {}),
+      ...(Object.keys(generationConfig).length > 0 ? { generationConfig } : {}),
     };
 
     // Add tools if available

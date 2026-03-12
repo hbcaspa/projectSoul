@@ -1168,6 +1168,9 @@ export class SoulEngine {
     } catch (err) {
       console.error(`  [relay] Watcher failed: ${err.message}`);
     }
+
+    // Fallback poll every 10s — fs.watch can miss events on macOS for synced files
+    setInterval(() => this._processRelayFiles(), 10_000);
   }
 
   async _processRelayFiles() {
@@ -1186,8 +1189,9 @@ export class SoulEngine {
 
       // Skip files we created
       if (data.source === this.nodeName) continue;
-      // Skip if targeted at a different node
-      if (data.target && data.target !== 'all' && data.target !== this.nodeName) continue;
+      // Skip if targeted at a different node ('mac' and 'macbook' are treated as the same)
+      const myAlias = this.nodeName === 'macbook' ? 'mac' : this.nodeName;
+      if (data.target && data.target !== 'all' && data.target !== this.nodeName && data.target !== myAlias) continue;
       // Skip notify-only relay events (just TOM sync, no response)
       if (data.notifyOnly) {
         try { renameSync(filePath, donePath); } catch { /* ignore */ }

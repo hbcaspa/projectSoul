@@ -361,6 +361,40 @@ export class SoulAPI {
       }
     });
 
+    // Reconsolidative Memory (Layer 2) — memory confidence tracking
+    app.get('/api/reconsolidation', (req, res) => {
+      try {
+        if (!this.engine.reconsolidation) {
+          return res.json({ enabled: false });
+        }
+        res.json({
+          enabled: true,
+          stats: this.engine.reconsolidation.getStats(),
+          ranked: this.engine.reconsolidation.getRanked(10),
+          fading: this.engine.reconsolidation.getFading(),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Predictive Self-Model (Layer 3) — self-knowledge tracking
+    app.get('/api/predictor', (req, res) => {
+      try {
+        if (!this.engine.predictor) {
+          return res.json({ enabled: false });
+        }
+        res.json({
+          enabled: true,
+          stats: this.engine.predictor.getStats(),
+          pending: this.engine.predictor.getPending(),
+          history: this.engine.predictor.getAccuracyHistory(10),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     // Open URL in Soul OS embedded browser (broadcast to all WS clients)
     // Uses "response" type with [BROWSER:url] tag so existing WhisperView can parse it
     app.post('/api/browser', (req, res) => {

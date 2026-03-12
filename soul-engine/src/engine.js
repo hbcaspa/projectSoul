@@ -30,6 +30,8 @@ import { MultimodalStore } from './multimodal.js';
 import { AuditLogger } from './audit-log.js';
 import { CostTracker } from './cost-tracker.js';
 import { AllostaticField } from './allostatic-field.js';
+import { ReconsolidativeMemory } from './reconsolidative-memory.js';
+import { SelfPredictor } from './self-predictor.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -60,6 +62,8 @@ export class SoulEngine {
     this.audit = null;
     this.costs = null;
     this.field = null;
+    this.reconsolidation = null;
+    this.predictor = null;
     this.running = false;
   }
 
@@ -209,6 +213,36 @@ export class SoulEngine {
       console.log(`  Field:     active (${this.field._fieldLabel()}, 8 dimensions)`);
     } else {
       console.log('  Field:     disabled');
+    }
+
+    // Reconsolidative Memory (Layer 2) — memories change when accessed
+    if (this.field && process.env.SOUL_RECONSOLIDATION !== 'false') {
+      this.reconsolidation = new ReconsolidativeMemory(this.soulPath, {
+        bus: this.bus,
+        field: this.field,
+      });
+      await this.reconsolidation.load();
+      this.reconsolidation.registerListeners();
+      this.reconsolidation.start();
+      const stats = this.reconsolidation.getStats();
+      console.log(`  Reconsol:  active (${stats.count} memories tracked, avg confidence: ${(stats.avgConfidence || 0).toFixed(2)})`);
+    } else {
+      console.log('  Reconsol:  disabled');
+    }
+
+    // Predictive Self-Model (Layer 3) — active inference on identity
+    if (this.field && process.env.SOUL_PREDICTOR !== 'false') {
+      this.predictor = new SelfPredictor(this.soulPath, {
+        bus: this.bus,
+        field: this.field,
+      });
+      await this.predictor.load();
+      this.predictor.registerListeners();
+      this.predictor.start();
+      const stats = this.predictor.getStats();
+      console.log(`  Predictor: active (self-knowledge: ${stats.selfKnowledge.toFixed(2)}, predictions: ${stats.predictions}, trend: ${stats.trend || 'new'})`);
+    } else {
+      console.log('  Predictor: disabled');
     }
 
     // Seed Consolidator — continuous incremental seed updates
@@ -851,6 +885,8 @@ export class SoulEngine {
     }
 
     if (this.field) await this.field.save();
+    if (this.reconsolidation) await this.reconsolidation.stop();
+    if (this.predictor) await this.predictor.stop();
     if (this.costs) this.costs.flush();
     if (this.reflection) this.reflection.stop();
     if (this.db) this.db.close();

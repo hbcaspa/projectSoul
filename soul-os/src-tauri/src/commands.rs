@@ -728,34 +728,60 @@ const BROWSER_POPUP_INIT: &str = r#"
         if (e.key === 'Escape') window.location.href = 'soul://close';
     });
     function addUI() {
+        // Drag bar at top
+        var bar = document.createElement('div');
+        Object.assign(bar.style, {
+            position:'fixed', top:'0', left:'0', right:'0', height:'30px',
+            zIndex:'2147483647',
+            background:'rgba(10,13,22,0.88)',
+            backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)',
+            borderBottom:'1px solid rgba(100,200,255,0.1)',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            cursor:'grab', userSelect:'none', WebkitUserSelect:'none',
+            boxShadow:'0 2px 16px rgba(0,0,0,0.5)'
+        });
+        // Drag handle dots
+        var handle = document.createElement('div');
+        Object.assign(handle.style, {
+            color:'rgba(100,200,255,0.22)', fontSize:'10px',
+            letterSpacing:'5px', pointerEvents:'none'
+        });
+        handle.innerHTML = '\u25cf\u25cf\u25cf\u25cf\u25cf';
+        bar.appendChild(handle);
+        // Close button
         var btn = document.createElement('div');
         btn.innerHTML = '\u2715';
         Object.assign(btn.style, {
-            position:'fixed', top:'10px', right:'10px', zIndex:'2147483647',
-            width:'30px', height:'30px', borderRadius:'50%',
-            background:'rgba(15,18,25,0.75)', color:'rgba(255,255,255,0.6)',
+            position:'absolute', right:'10px', top:'50%',
+            transform:'translateY(-50%)',
+            width:'22px', height:'22px', borderRadius:'50%',
+            background:'rgba(255,50,80,0.12)', color:'rgba(255,100,100,0.65)',
             display:'flex', alignItems:'center', justifyContent:'center',
-            cursor:'pointer', fontSize:'14px',
-            backdropFilter:'blur(16px)', WebkitBackdropFilter:'blur(16px)',
-            border:'1px solid rgba(100,200,255,0.15)',
-            boxShadow:'0 2px 12px rgba(0,0,0,0.3),0 0 20px rgba(100,200,255,0.05)',
-            transition:'all 0.25s cubic-bezier(0.4,0,0.2,1)',
-            userSelect:'none', WebkitUserSelect:'none'
+            cursor:'pointer', fontSize:'13px',
+            border:'1px solid rgba(255,50,80,0.18)',
+            transition:'all 0.2s', lineHeight:'1'
         });
         btn.onmouseenter = function(){
             this.style.background='rgba(255,50,80,0.85)';
             this.style.color='#fff';
             this.style.borderColor='rgba(255,50,80,0.4)';
-            this.style.boxShadow='0 2px 12px rgba(0,0,0,0.3),0 0 20px rgba(255,50,80,0.2)';
         };
         btn.onmouseleave = function(){
-            this.style.background='rgba(15,18,25,0.75)';
-            this.style.color='rgba(255,255,255,0.6)';
-            this.style.borderColor='rgba(100,200,255,0.15)';
-            this.style.boxShadow='0 2px 12px rgba(0,0,0,0.3),0 0 20px rgba(100,200,255,0.05)';
+            this.style.background='rgba(255,50,80,0.12)';
+            this.style.color='rgba(255,100,100,0.65)';
+            this.style.borderColor='rgba(255,50,80,0.18)';
         };
-        btn.onclick = function(){ window.location.href = 'soul://close'; };
-        document.body.appendChild(btn);
+        btn.onclick = function(e){ e.stopPropagation(); window.location.href = 'soul://close'; };
+        bar.appendChild(btn);
+        // Drag via Tauri IPC
+        bar.addEventListener('mousedown', function(e) {
+            if (e.target === btn || btn.contains(e.target)) return;
+            e.preventDefault();
+            bar.style.cursor = 'grabbing';
+            try { window.__TAURI_INTERNALS__.invoke('plugin:window|start_dragging'); } catch(_) {}
+        });
+        bar.addEventListener('mouseup', function() { bar.style.cursor = 'grab'; });
+        document.body.appendChild(bar);
     }
     if (document.body) addUI();
     else document.addEventListener('DOMContentLoaded', addUI);

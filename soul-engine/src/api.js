@@ -567,6 +567,45 @@ export class SoulAPI {
       }
     });
 
+    // Claude Code Session Bridge — pushes conversation events into the engine
+    // Called by Claude Code during active sessions to feed D12 TOM, RLUF, etc.
+    // type "message" → emits message.received → TOM processes → ContextWriter refreshes
+    // type "feedback" → emits rluf.feedback directly
+    app.post('/api/session/event', (req, res) => {
+      try {
+        const { type = 'message', text, userId = 'aalm', reward, sentiment } = req.body;
+
+        if (type === 'message') {
+          if (!text) return res.status(400).json({ error: 'text required for type message' });
+          this.engine.bus.safeEmit('message.received', {
+            source: 'claude-code',
+            text,
+            userName: userId,
+            channel: 'claude-code',
+          });
+          // Return TOM model snapshot if available
+          const model = this.engine.tom?.getModel(userId) || null;
+          return res.json({ ok: true, type, tom: model ? { emotional: model.emotional, activeGoals: model.activeGoals } : null });
+        }
+
+        if (type === 'feedback') {
+          if (reward == null) return res.status(400).json({ error: 'reward required for type feedback' });
+          this.engine.bus.safeEmit('rluf.feedback', {
+            source: 'claude-code',
+            reward: Number(reward),
+            sentiment: sentiment != null ? Number(sentiment) : 0,
+            impulseType: 'claude-session',
+            components: { sentiment: sentiment != null ? Number(sentiment) : 0 },
+          });
+          return res.json({ ok: true, type });
+        }
+
+        return res.status(400).json({ error: `unknown event type: ${type}. Use message or feedback.` });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     // Open URL in Soul OS embedded browser (broadcast to all WS clients)
     // Uses "response" type with [BROWSER:url] tag so existing WhisperView can parse it
     app.post('/api/browser', (req, res) => {

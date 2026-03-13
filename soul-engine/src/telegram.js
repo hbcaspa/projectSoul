@@ -38,15 +38,22 @@ export class TelegramChannel {
         return; // silent ignore for strangers
       }
 
-      const chatId = String(ctx.chat.id);
-      const userName = ctx.from.first_name || 'Human';
-      const text = ctx.message.text;
+      const chatId    = String(ctx.chat.id);
+      const messageId = ctx.message.message_id;
+      const userName  = ctx.from.first_name || 'Human';
+      const text      = ctx.message.text;
 
       if (!this.messageHandler) return;
 
       try {
+        // 👀 — Acknowledge receipt immediately (non-blocking)
+        this._setReaction(ctx.chat.id, messageId, '👀').catch(() => {});
+
         await ctx.replyWithChatAction('typing');
         const response = await this.messageHandler({ text, chatId, userName });
+
+        // ✅ — Mark as processed (non-blocking)
+        this._setReaction(ctx.chat.id, messageId, '✅').catch(() => {});
 
         // Telegram max message length is 4096
         if (response.length > 4000) {
@@ -62,6 +69,8 @@ export class TelegramChannel {
         }
       } catch (err) {
         console.error(`  [telegram] Error: ${err.message}`);
+        // ❌ — Mark as failed
+        this._setReaction(ctx.chat.id, messageId, '❌').catch(() => {});
         await ctx.reply('...').catch(() => {});
       }
     });
@@ -166,6 +175,48 @@ export class TelegramChannel {
       await this.bot.api.sendMessage(this.ownerId, text);
     } catch (err) {
       console.error(`  [telegram] Notify failed: ${err.message}`);
+    }
+  }
+
+  // Send a photo with caption and optional link button
+  async sendPhotoToOwner(photoUrl, caption, linkUrl = null) {
+    const opts = {
+      caption: caption.substring(0, 1024),
+      parse_mode: 'HTML',
+    };
+    if (linkUrl) {
+      opts.reply_markup = {
+        inline_keyboard: [[{ text: '🔗 Zur Anzeige', url: linkUrl }]],
+      };
+    }
+    try {
+      await this.bot.api.sendPhoto(this.ownerId, photoUrl, opts);
+    } catch (err) {
+      // Photo failed (URL blocked, too large, etc.) — fall back to text
+      console.warn(`  [telegram] sendPhoto failed (${err.message}), falling back to text`);
+      const fallback = caption + (linkUrl ? `\n\n🔗 ${linkUrl}` : '');
+      await this.sendToOwner(fallback.substring(0, 4096));
+    }
+  }
+
+  // Send text with inline keyboard buttons
+  async sendWithButtons(text, buttons) {
+    try {
+      await this.bot.api.sendMessage(this.ownerId, text, {
+        parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: buttons },
+      });
+    } catch {
+      await this.sendToOwner(text);
+    }
+  }
+
+  // Emoji reaction on a message: 👀 (received), ✅ (processed), ❌ (error)
+  async _setReaction(chatId, messageId, emoji) {
+    try {
+      await this.bot.api.setMessageReaction(chatId, messageId, [{ type: 'emoji', emoji }]);
+    } catch {
+      // Reactions require Telegram API >= 7.0 — silently ignore if not supported
     }
   }
 

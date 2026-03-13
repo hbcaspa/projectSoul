@@ -53,6 +53,18 @@ import { ClaudeContextWriter } from './claude-context-writer.js';
 import { KnowledgeExtractor } from './knowledge-extractor.js';
 import { GmailMonitor } from './gmail-monitor.js';
 import { TraderModule } from './trader-module.js';
+import { SecurityAgent } from './security-agent.js';
+import { BriefingAgent } from './briefing-agent.js';
+import { UptimeMonitor } from './uptime-monitor.js';
+import { SearchMonitor } from './search-monitor.js';
+import { AwarenessCore } from './awareness-core.js';
+import { DynamicScheduler } from './dynamic-scheduler.js';
+import { ModelFailover } from './model-failover.js';
+import { WebhookServer } from './webhook-server.js';
+import { AdaptiveThinking } from './adaptive-thinking.js';
+import { AgentLock } from './agent-lock.js';
+import { HybridMemorySearch } from './hybrid-memory-search.js';
+import { Foundry } from './foundry.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -64,8 +76,20 @@ export class SoulEngine {
     this.mcp = null;
     this.telegram = null;
     this.knowledgeExtractor = null;
-    this.gmailMonitor = null;
-    this.trader = null;
+    this.gmailMonitor  = null;
+    this.trader        = null;
+    this.securityAgent = null;
+    this.briefingAgent = null;
+    this.uptimeMonitor = null;
+    this.searchMonitor    = null;
+    this.awarenessCore    = null;
+    this.dynamicScheduler = null;
+    this.failover        = null;
+    this.webhook         = null;
+    this.thinking        = null;
+    this.agentLock       = null;
+    this.hybridSearch    = null;
+    this.foundry         = null;
     this.whatsapp = null;
     this.api = null;
     this.nodeName = process.env.SOUL_NODE_NAME || 'server';
@@ -116,8 +140,16 @@ export class SoulEngine {
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
     const ollamaUrl = process.env.OLLAMA_URL;
 
+    // Model Failover — resiliente LLM-Kette (Gemini → Anthropic → OpenAI → Ollama)
+    this.failover = new ModelFailover({ bus: this.bus });
+    const primaryAdapter = this.failover.init();
+
     let model;
-    if (openaiKey) {
+    if (primaryAdapter) {
+      // Failover-Kette aktiv — nutze sie als LLM
+      this.llm = this.failover;
+      model    = `${this.failover.primaryId} (failover chain: ${this.failover.getHealth().map(h => h.id).join('→')})`;
+    } else if (openaiKey) {
       model = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
       this.llm = new OpenAIAdapter(openaiKey, model);
     } else if (geminiKey) {
@@ -134,6 +166,13 @@ export class SoulEngine {
       process.exit(1);
     }
 
+    // Adaptive Thinking — dynamische Denk-Tiefe pro Nachricht
+    this.thinking = new AdaptiveThinking({ bus: this.bus });
+
+    // Agent Lock — Multi-Agent Koordination
+    this.agentLock = new AgentLock({ bus: this.bus });
+    await this.agentLock.init();
+
     // Cost Tracker — wraps LLM for token estimation
     this.costs = new CostTracker(this.soulPath, { bus: this.bus });
 
@@ -147,15 +186,85 @@ export class SoulEngine {
       soulPath: this.soulPath,
     });
 
+    // Security Agent — IT security monitor (server only, controlled via SECURITY_AGENT_ENABLED)
+    this.securityAgent = new SecurityAgent({
+      bus:      this.bus,
+      telegram: null,  // set in start() after telegram channel is ready
+      llm:      this.llm,
+      mcp:      this.mcp,
+    });
+
     // Gmail Monitor — autonomous email watcher (starts after engine is fully up)
     this.gmailMonitor = new GmailMonitor({
       soulPath: this.soulPath,
       llm: this.llm,
       telegram: null, // set in start() after telegram channel is ready
+      bus: this.bus,
       clientId: process.env.GMAIL_CLIENT_ID,
       clientSecret: process.env.GMAIL_CLIENT_SECRET,
       refreshToken: process.env.GMAIL_REFRESH_TOKEN,
     });
+
+    // Server-only agents — only instantiated when running as primary node
+    if (this.nodeName === 'server') {
+      // Briefing Agent — daily morning briefing (news, trader, football, etc.)
+      this.briefingAgent = new BriefingAgent({
+        bus:           this.bus,
+        telegram:      null,
+        llm:           this.llm,
+        soulPath:      this.soulPath,
+        trader:        this.trader,
+        securityAgent: this.securityAgent,
+      });
+
+      // Uptime Monitor — service availability + SSL expiry
+      this.uptimeMonitor = new UptimeMonitor({
+        bus:      this.bus,
+        telegram: null,
+      });
+
+      // Search Monitor — Kleinanzeigen leads + Immobilien
+      this.searchMonitor = new SearchMonitor({
+        bus:      this.bus,
+        telegram: null,
+        llm:      this.llm,
+        soulPath: this.soulPath,
+      });
+
+      // DynamicScheduler — agent-gesteuerte Tasks
+      this.dynamicScheduler = new DynamicScheduler({
+        bus:      this.bus,
+        telegram: null,
+        llm:      this.llm,
+        soulPath: this.soulPath,
+      });
+
+      // AwarenessCore — das kognitive Nervensystem (JARVIS-Brain)
+      this.awarenessCore = new AwarenessCore({
+        bus:       this.bus,
+        telegram:  null,
+        scheduler: this.dynamicScheduler,
+        llm:      this.llm,
+        mcp:      this.mcp,
+        soulPath: this.soulPath,
+      });
+
+      // Foundry — autonomer Skill-Builder
+      this.foundry = new Foundry({
+        bus:      this.bus,
+        telegram: null,
+        llm:      this.llm,
+        soulPath: this.soulPath,
+      });
+
+      // Webhook Server — externe Trigger (GitHub, GitLab, generisch)
+      this.webhook = new WebhookServer({
+        bus:      this.bus,
+        telegram: null,
+        llm:      this.llm,
+        soulPath: this.soulPath,
+      });
+    }
 
     return { name: this.context.extractName(), lang: this.context.language, model };
   }
@@ -203,7 +312,11 @@ export class SoulEngine {
       );
       if (this.nodeName === 'server') {
         // Primary node: full polling
-        this.telegram.onMessage(async (msg) => this.handleMessage(msg));
+        this.telegram.onMessage(async (msg) => {
+          // Let AwarenessCore observe every incoming message
+          this.bus?.safeEmit?.('telegram.message.received', { text: msg.text, from: msg.userName });
+          this.handleMessage(msg);
+        });
         await this.telegram.start();
         console.log('  Telegram:  connected (primary — polling)');
 
@@ -217,6 +330,54 @@ export class SoulEngine {
         if (this.trader) {
           this.trader.telegram = this.telegram;
           this.trader.start();
+        }
+
+        // Start Security Agent now that Telegram is ready
+        if (this.securityAgent) {
+          this.securityAgent.telegram = this.telegram;
+          this.securityAgent.start();
+        }
+
+        // Start Briefing Agent
+        if (this.briefingAgent) {
+          this.briefingAgent.telegram = this.telegram;
+          this.briefingAgent.start();
+        }
+
+        // Start Uptime Monitor
+        if (this.uptimeMonitor) {
+          this.uptimeMonitor.telegram = this.telegram;
+          this.uptimeMonitor.start();
+        }
+
+        // Start Search Monitor
+        if (this.searchMonitor) {
+          this.searchMonitor.telegram = this.telegram;
+          await this.searchMonitor.start();
+        }
+
+        // Start Dynamic Scheduler — agent-gesteuerte Tasks
+        if (this.dynamicScheduler) {
+          this.dynamicScheduler.telegram = this.telegram;
+          await this.dynamicScheduler.start();
+        }
+
+        // Start AwarenessCore — das Gehirn, zuletzt (braucht alle anderen)
+        if (this.awarenessCore) {
+          this.awarenessCore.telegram = this.telegram;
+          this.awarenessCore.start();
+        }
+
+        // Start Foundry — autonomer Skill-Builder
+        if (this.foundry) {
+          this.foundry.telegram = this.telegram;
+          await this.foundry.start();
+        }
+
+        // Start Webhook Server — externe Event-Trigger
+        if (this.webhook) {
+          this.webhook.telegram = this.telegram;
+          this.webhook.start();
         }
       } else {
         // Secondary node: send-only, relay handles incoming
@@ -571,6 +732,12 @@ export class SoulEngine {
       console.error(`  MemoryDB:  failed (${err.message})`);
     }
 
+    // Hybrid Memory Search — BM25 + Vector (besser als RAG allein)
+    if (this.db) {
+      this.hybridSearch = new HybridMemorySearch({ db: this.db, embeddings: this.embeddings, bus: this.bus });
+      console.log('  HybridSearch: active (BM25 + vector, RRF fusion)');
+    }
+
     // RAG / Attention Model
     if (this.db) {
       this.attention = new AttentionModel({ db: this.db, embeddings: this.embeddings, context: this.context, bus: this.bus });
@@ -891,7 +1058,19 @@ export class SoulEngine {
     }) + contactContext + relationsSection + dailySection + protocolSection + knowledgeSection + traderSection + ragSection;
 
     const history = await this.telegram.loadHistory(chatId);
-    const llmOptions = this._buildLLMOptions('conversation');
+
+    // Adaptive Thinking — Denk-Tiefe basierend auf Komplexität der Frage
+    let llmOptions = this._buildLLMOptions('conversation');
+    if (this.thinking) {
+      const thinkResult = this.thinking.analyzeMessage(text, history);
+      if (thinkResult.budget > 0) {
+        llmOptions = { ...llmOptions, thinkingBudget: thinkResult.budget };
+        if (thinkResult.score >= 0.5) {
+          console.log(`  [thinking] Level: ${thinkResult.label} (score: ${thinkResult.score.toFixed(2)}, reasons: ${thinkResult.reasons.join(', ')})`);
+        }
+      }
+    }
+
     let response = await this.llm.generate(systemPrompt, history, text, llmOptions) || '';
     this._trackCost('conversation', systemPrompt, history, text, response);
 
@@ -1257,10 +1436,10 @@ export class SoulEngine {
       this.telegram &&
       process.env.TELEGRAM_NOTIFY_HEARTBEAT === 'true'
     ) {
-      const summary = result.length > 800
+      const summary = result && result.length > 800
         ? result.substring(0, 797) + '...'
         : result;
-      await this.telegram.sendToOwner(summary);
+      if (summary) await this.telegram.sendToOwner(summary);
     }
 
     await writePulse(this.soulPath, 'heartbeat', 'Heartbeat complete', this.bus);

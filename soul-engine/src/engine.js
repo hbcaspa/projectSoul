@@ -65,6 +65,7 @@ import { AdaptiveThinking } from './adaptive-thinking.js';
 import { AgentLock } from './agent-lock.js';
 import { HybridMemorySearch } from './hybrid-memory-search.js';
 import { Foundry } from './foundry.js';
+import { BountyHunter } from './bounty-hunter.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -90,6 +91,7 @@ export class SoulEngine {
     this.agentLock       = null;
     this.hybridSearch    = null;
     this.foundry         = null;
+    this.bountyHunter    = null;
     this.whatsapp = null;
     this.api = null;
     this.nodeName = process.env.SOUL_NODE_NAME || 'server';
@@ -264,6 +266,13 @@ export class SoulEngine {
         llm:      this.llm,
         soulPath: this.soulPath,
       });
+
+      // BountyHunter — autonomer Bug Bounty Recon-Agent
+      this.bountyHunter = new BountyHunter({
+        bus:      this.bus,
+        telegram: null,
+        soulPath: this.soulPath,
+      });
     }
 
     return { name: this.context.extractName(), lang: this.context.language, model };
@@ -378,6 +387,12 @@ export class SoulEngine {
         if (this.webhook) {
           this.webhook.telegram = this.telegram;
           this.webhook.start();
+        }
+
+        // Start BountyHunter — jagt Bug Bounty Findings
+        if (this.bountyHunter) {
+          this.bountyHunter.telegram = this.telegram;
+          await this.bountyHunter.start();
         }
       } else {
         // Secondary node: send-only, relay handles incoming

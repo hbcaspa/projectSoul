@@ -66,6 +66,14 @@ import { AgentLock } from './agent-lock.js';
 import { HybridMemorySearch } from './hybrid-memory-search.js';
 import { Foundry } from './foundry.js';
 import { BountyHunter } from './bounty-hunter.js';
+import { SoulDoctor } from './soul-doctor.js';
+import { KnowledgeGraphDB } from './knowledge-graph-db.js';
+import { SemanticClosure } from './semantic-closure.js';
+import { DriftDetector } from './drift-detector.js';
+import { DMSecurity } from './dm-security.js';
+import { CDPBrowser } from './cdp-browser.js';
+import { StreamingConsolidator } from './streaming-consolidator.js';
+import { SoulToken } from './soul-token.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -92,6 +100,14 @@ export class SoulEngine {
     this.hybridSearch    = null;
     this.foundry         = null;
     this.bountyHunter    = null;
+    this.doctor          = null;
+    this.kgDB            = null;
+    this.semanticClosure = null;
+    this.driftDetector   = null;
+    this.dmSecurity      = null;
+    this.cdpBrowser      = null;
+    this.streamConsolidator = null;
+    this.soulToken       = null;
     this.whatsapp = null;
     this.api = null;
     this.nodeName = process.env.SOUL_NODE_NAME || 'server';
@@ -790,6 +806,45 @@ export class SoulEngine {
     } else {
       console.log('  Reflection: disabled');
     }
+
+    // ── New OpenClaw-inspired Modules ────────────────────────
+
+    // Soul Doctor — Self-diagnosis system (like `openclaw doctor`)
+    this.doctor = new SoulDoctor({ soulPath: this.soulPath, bus: this.bus, llm: this.llm, db: this.db });
+    console.log('  Doctor:    ready (run via API or CLI)');
+
+    // Knowledge Graph DB — SQLite + FTS5 (replaces JSONL scanning)
+    try {
+      this.kgDB = new KnowledgeGraphDB({ soulPath: this.soulPath, bus: this.bus });
+      await this.kgDB.init();
+    } catch (err) {
+      console.error(`  KG-DB:     failed (${err.message})`);
+    }
+
+    // Semantic Closure Detection — prevents circular thinking
+    this.semanticClosure = new SemanticClosure({ bus: this.bus, db: this.db, soulPath: this.soulPath });
+    console.log('  Closure:   active (5 detection patterns)');
+
+    // Drift Detector — monitors personality drift over time
+    this.driftDetector = new DriftDetector({ soulPath: this.soulPath, bus: this.bus, llm: this.llm });
+    console.log('  Drift:     active (5 dimensions, weekly audit)');
+
+    // DM Security — Pairing & access control for Telegram
+    this.dmSecurity = new DMSecurity({ soulPath: this.soulPath, bus: this.bus, telegram: this.telegram });
+    await this.dmSecurity.init();
+
+    // CDP Browser — Chrome DevTools Protocol control
+    this.cdpBrowser = new CDPBrowser({ soulPath: this.soulPath, bus: this.bus });
+    await this.cdpBrowser.init();
+
+    // Streaming Consolidator — real-time SEED micro-updates
+    this.streamConsolidator = new StreamingConsolidator({ soulPath: this.soulPath, bus: this.bus });
+    this.streamConsolidator.start();
+    console.log('  StreamCon: active (event-driven SEED sync)');
+
+    // Soul Token — BIP-39 key derivation + per-device tokens
+    this.soulToken = new SoulToken({ soulPath: this.soulPath, bus: this.bus });
+    await this.soulToken.init();
 
     this.running = true;
     console.log('');

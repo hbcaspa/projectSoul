@@ -51,6 +51,7 @@ export class TelegramChannel {
 
         await ctx.replyWithChatAction('typing');
         const response = await this.messageHandler({ text, chatId, userName });
+        if (!response) return;
 
         // ✅ — Mark as processed (non-blocking)
         this._setReaction(ctx.chat.id, messageId, '✅').catch(() => {});

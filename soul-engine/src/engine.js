@@ -1159,7 +1159,12 @@ export class SoulEngine {
       includeMCP: needsMCP,
     }) + contactContext + relationsSection + dailySection + protocolSection + knowledgeSection + traderSection + ragSection;
 
-    const history = await this.telegram.loadHistory(chatId);
+    let history = await this.telegram.loadHistory(chatId);
+
+    // Gemini requires history to start with 'user' role — strip leading assistant/model messages
+    while (history.length > 0 && history[0].role !== 'user') {
+      history.shift();
+    }
 
     // Adaptive Thinking — Denk-Tiefe basierend auf Komplexität der Frage
     let llmOptions = this._buildLLMOptions('conversation');

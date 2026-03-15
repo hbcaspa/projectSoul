@@ -74,6 +74,9 @@ import { DMSecurity } from './dm-security.js';
 import { CDPBrowser } from './cdp-browser.js';
 import { StreamingConsolidator } from './streaming-consolidator.js';
 import { SoulToken } from './soul-token.js';
+import { AutoUpdater } from './auto-updater.js';
+import { LocalEmbeddings } from './local-embeddings.js';
+import { HNSWIndex } from './hnsw-index.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -108,6 +111,9 @@ export class SoulEngine {
     this.cdpBrowser      = null;
     this.streamConsolidator = null;
     this.soulToken       = null;
+    this.autoUpdater     = null;
+    this.localEmbeddings = null;
+    this.hnswIndex       = null;
     this.whatsapp = null;
     this.api = null;
     this.nodeName = process.env.SOUL_NODE_NAME || 'server';
@@ -845,6 +851,32 @@ export class SoulEngine {
     // Soul Token — BIP-39 key derivation + per-device tokens
     this.soulToken = new SoulToken({ soulPath: this.soulPath, bus: this.bus });
     await this.soulToken.init();
+
+    // Auto-Updater — release channels + auto-install
+    this.autoUpdater = new AutoUpdater({
+      soulPath: this.soulPath, bus: this.bus,
+      telegram: this.telegram, doctor: this.doctor,
+    });
+    if (this.nodeName === 'server') {
+      await this.autoUpdater.start();
+      console.log(`  Updater:   active (channel: ${this.autoUpdater.channel})`);
+    }
+
+    // Local Embeddings — Ollama nomic-embed-text (no vendor lock-in)
+    const embeddingProvider = process.env.EMBEDDING_PROVIDER || 'auto';
+    if (embeddingProvider === 'ollama' || embeddingProvider === 'auto') {
+      this.localEmbeddings = new LocalEmbeddings({ bus: this.bus });
+      const ollamaAvail = await this.localEmbeddings.isAvailable();
+      if (ollamaAvail) {
+        console.log(`  LocalEmbed: active (${this.localEmbeddings.model}, ${this.localEmbeddings.getDimensions()}d)`);
+      } else {
+        console.log('  LocalEmbed: Ollama not available (using Gemini fallback)');
+      }
+    }
+
+    // HNSW Index — O(log n) vector search (replaces linear scan)
+    this.hnswIndex = new HNSWIndex({ dimensions: this.localEmbeddings?.getDimensions() || 768 });
+    console.log(`  HNSW:      ready (${this.hnswIndex.dimensions}d, M=${this.hnswIndex.M})`);
 
     this.running = true;
     console.log('');

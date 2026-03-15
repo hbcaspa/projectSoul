@@ -61,7 +61,7 @@ export class StreamingConsolidator {
       this.bus.on(event, (data) => this._handleEvent(event, data));
     }
 
-    console.log('  [stream-consolidator] Active — listening for ${events.length} event types');
+    console.log(`  [stream-consolidator] Active — listening for ${events.length} event types`);
   }
 
   stop() {

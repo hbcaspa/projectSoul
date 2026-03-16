@@ -23,11 +23,13 @@ import GardenView from "./views/GardenView";
 import InnerWorldView from "./views/InnerWorldView";
 import WorldWindowView from "./views/WorldWindowView";
 import BondsView from "./views/BondsView";
+import TraderView from "./views/TraderView";
 import SetupWizard from "./views/SetupWizard";
 import FoundingChat from "./views/FoundingChat";
 import { useActiveNodes, useCurrentPulse, useMood, useActivityFeed } from "./lib/store";
 import { commands } from "./lib/tauri";
 import { openUrl, toggleBrowser, toggleBrowserMode, onBrowserOpenUrl } from "./lib/browser";
+import BrowserView from "./views/BrowserView";
 import { useEngineSocket } from "./lib/useEngineSocket";
 
 /* ── Types ─────────────────────────────────────────────────── */
@@ -51,8 +53,10 @@ export type ViewId =
   | "innerworld"
   | "worldwindow"
   | "bonds"
+  | "trader"
   | "terminal"
-  | "settings";
+  | "settings"
+  | "browser";
 
 type PanelId = Exclude<ViewId, "brain" | "terminal">;
 
@@ -240,6 +244,17 @@ const PANELS: PanelDef[] = [
     ),
   },
   {
+    id: "trader",
+    label: "Trader",
+    color: "#00ff88",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+        <polyline points="16 7 22 7 22 13" />
+      </svg>
+    ),
+  },
+  {
     id: "mcp",
     label: "MCP",
     color: "#00C8FF",
@@ -273,6 +288,32 @@ const PANELS: PanelDef[] = [
       </svg>
     ),
   },
+  {
+    id: "browser",
+    label: "Browser",
+    color: "#64C8FF",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
+      </svg>
+    ),
+  },
+];
+
+/* ── Dock Categories ─────────────────────────────────── */
+
+interface DockCategory {
+  label: string;
+  color: string;
+  panels: PanelId[];
+}
+
+const DOCK_CATEGORIES: DockCategory[] = [
+  { label: "Mind",    color: "#B464FF", panels: ["whisper", "innerworld", "card", "bonds", "founding"] },
+  { label: "Memory",  color: "#FFC800", panels: ["graph", "memorymap", "timeline", "history", "replay"] },
+  { label: "World",   color: "#64C8FF", panels: ["worldwindow", "browser", "chain", "garden", "trader"] },
+  { label: "System",  color: "#00FFC8", panels: ["monitor", "health", "impulse", "mcp", "settings"] },
 ];
 
 const PANEL_COMPONENTS: Record<PanelId, React.FC> = {
@@ -292,32 +333,13 @@ const PANEL_COMPONENTS: Record<PanelId, React.FC> = {
   innerworld: InnerWorldView,
   worldwindow: WorldWindowView,
   bonds: BondsView,
+  trader: TraderView,
   founding: FoundingView,
   settings: SettingsView,
+  browser: BrowserView,
 };
 
-/* ── Widget positions (ring around brain) ─────────────────── */
-
-const WIDGET_POSITIONS: Record<PanelId, React.CSSProperties> = {
-  whisper:  { top: "22%", left: "3%" },
-  card:     { top: "4%", left: "50%", transform: "translateX(-50%)" },
-  chain:    { top: "4%", right: "3%" },
-  impulse:  { top: "50%", left: "2%", transform: "translateY(-50%)" },
-  graph:    { top: "50%", right: "2%", transform: "translateY(-50%)" },
-  replay:   { bottom: "18%", left: "5%" },
-  history:  { bottom: "18%", right: "5%" },
-  timeline: { bottom: "18%", left: "50%", transform: "translateX(-50%)" },
-  memorymap: { bottom: "2%", left: "20%" },
-  health:    { bottom: "2%", left: "8%" },
-  monitor:   { bottom: "10%", left: "3%" },
-  mcp:         { bottom: "2%", right: "20%" },
-  garden:      { top: "36%", right: "3%" },
-  innerworld:  { top: "12%", left: "18%" },
-  worldwindow: { top: "12%", right: "18%" },
-  bonds:       { bottom: "2%", left: "38%" },
-  founding:    { bottom: "2%", right: "38%" },
-  settings:    { bottom: "2%", right: "3%" },
-};
+/* ── Widget positions removed — using dock bar navigation now ── */
 
 /* ── Boot Splash ───────────────────────────────────────────── */
 
@@ -552,8 +574,56 @@ function App() {
             </div>
           </div>
 
-          {/* Main split: Brain (top) + Terminal (bottom) */}
+          {/* Main split: Dock + Brain (top) + Terminal (bottom) */}
           <div className="flex-1 flex flex-col min-h-0">
+
+            {/* ── Module Dock Bar ─────────────────────────────── */}
+            <div className="dock-bar flex-shrink-0" style={{ opacity: openPanel ? 0.3 : 1, transition: "opacity 300ms ease" }}>
+              {DOCK_CATEGORIES.map((cat, ci) => (
+                <div key={cat.label} className="flex items-center">
+                  {ci > 0 && <div className="dock-separator" />}
+                  <div className="dock-group">
+                    <span className="dock-group-label" style={{ color: cat.color, textShadow: `0 0 8px ${cat.color}40` }}>
+                      {cat.label}
+                    </span>
+                    {cat.panels.map((pid) => {
+                      const panel = PANELS.find((p) => p.id === pid);
+                      if (!panel) return null;
+                      return (
+                        <button
+                          key={pid}
+                          className={`dock-btn ${openPanel === pid ? "dock-btn-active" : ""}`}
+                          onClick={() => togglePanel(pid)}
+                        >
+                          <span className="dock-btn-icon" style={{ color: panel.color, filter: `drop-shadow(0 0 3px ${panel.color}66)` }}>
+                            {panel.icon}
+                          </span>
+                          <span className="dock-btn-label" style={{ color: panel.color }}>
+                            {panel.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              {/* Spacer + Quick Status */}
+              <div className="flex-1" />
+              <div className="status-pill">
+                <span className={`status-dot ${isWorking ? "status-dot-active" : "status-dot-idle"}`} />
+                <span style={{ color: isWorking ? "var(--bewusstsein)" : "var(--text-muted)" }}>
+                  {isWorking ? "Active" : "Idle"}
+                </span>
+                {mood && (
+                  <>
+                    <span style={{ color: "var(--text-muted)" }}>·</span>
+                    <span style={{ color: "var(--accent)" }}>{mood.label || "..."}</span>
+                  </>
+                )}
+              </div>
+            </div>
+
             {/* ── Brain area ─────────────────────────────────── */}
             <div className="relative overflow-hidden" style={{ flex: "3 1 0%", minHeight: 0 }}>
               {/* Canvas as non-interactive background layer */}
@@ -564,111 +634,67 @@ function App() {
               {/* Activity feed — top-left overlay */}
               {!openPanel && (
                 <div
-                  className="absolute top-1 left-0 pointer-events-none"
+                  className="absolute top-2 left-2 pointer-events-none"
                   style={{
                     maxWidth: "45%",
-                    opacity: isWorking ? 1 : 0.4,
+                    opacity: isWorking ? 1 : 0.3,
                     transition: "opacity 1.2s ease",
                   }}
                 >
-                  <div className="pointer-events-auto" style={{ maxHeight: "120px", overflow: "hidden" }}>
+                  <div className="pointer-events-auto" style={{ maxHeight: "140px", overflow: "hidden" }}>
                     <ActivityFeed feed={feed} activeNodes={nodes} />
                   </div>
                 </div>
               )}
-
-              {/* Chain status is now integrated into the Chain widget card */}
-
-              {/* ── Floating Widget Cards (ring around brain) ── */}
-              {PANELS.map((panel, i) => {
-                // Silence mode: when nothing is active, widgets are softer
-                const silenceOpacity = !isWorking && !openPanel ? 0.55 : 1;
-                return (
-                <div
-                  key={panel.id}
-                  className="absolute z-10"
-                  style={{
-                    ...WIDGET_POSITIONS[panel.id],
-                    opacity: openPanel ? (openPanel === panel.id ? 0 : 0.12) : silenceOpacity,
-                    transition: "opacity 800ms ease",
-                    pointerEvents: openPanel ? "none" : "auto",
-                  }}
-                >
-                  <button
-                    onClick={() => togglePanel(panel.id)}
-                    className="group flex items-center gap-2 px-3 py-2 rounded-xl cursor-default transition-all hover:scale-105"
-                    style={{
-                      background: "linear-gradient(160deg, rgba(var(--neon-rgb),0.04), rgba(var(--bg-base-rgb),0.7))",
-                      border: `1px solid ${panel.color}33`,
-                      backdropFilter: "blur(12px)",
-                      WebkitBackdropFilter: "blur(12px)",
-                      boxShadow: `0 0 10px ${panel.color}14, 0 4px 12px rgba(var(--black-rgb),0.3)`,
-                    }}
-                  >
-                    <span style={{ color: panel.color, filter: `drop-shadow(0 0 4px ${panel.color}66)` }}>
-                      {panel.icon}
-                    </span>
-                    <span
-                      className="text-[10px] uppercase tracking-[0.12em] font-medium"
-                      style={{ color: panel.color, textShadow: `0 0 8px ${panel.color}40` }}
-                    >
-                      {panel.label}
-                    </span>
-                    <span className="text-[8px] font-mono ml-0.5" style={{ color: "var(--text-muted)" }}>
-                      {i + 1}
-                    </span>
-                  </button>
-                </div>
-                );
-              })}
 
               {/* ── Expanded Panel (Glass Overlay) ─────────────── */}
               {PanelComponent && panelDef && (
                 <>
                   <div
                     className="absolute inset-0 z-20"
-                    style={{ backgroundColor: "rgba(5, 8, 15, 0.45)" }}
+                    style={{ backgroundColor: "rgba(5, 8, 15, 0.5)", backdropFilter: "blur(4px)" }}
                     onClick={() => setOpenPanel(null)}
                   />
                   <div
-                    className="rounded-2xl overflow-hidden frosted neon-scanlines z-30 panel-expand"
+                    className="rounded-2xl overflow-hidden vibrancy neon-scanlines z-30 panel-slide-up"
                     style={{
                       position: "absolute",
-                      top: 20,
-                      left: 20,
-                      right: 20,
-                      bottom: 20,
-                      background: "linear-gradient(160deg, rgba(var(--neon-rgb),0.03) 0%, rgba(var(--bg-base-rgb), 0.88) 30%, rgba(var(--bg-base-rgb), 0.85) 100%)",
-                      border: "1px solid rgba(var(--neon-rgb),0.22)",
-                      boxShadow: "0 0 40px rgba(var(--neon-rgb),0.1), 0 0 80px rgba(var(--neon-rgb),0.04), 0 24px 64px rgba(var(--black-rgb),0.5), inset 0 1px 0 rgba(var(--neon-rgb),0.08)",
+                      top: 12,
+                      left: 16,
+                      right: 16,
+                      bottom: 12,
+                      background: "linear-gradient(160deg, rgba(var(--neon-rgb),0.04) 0%, rgba(var(--bg-base-rgb), 0.92) 25%, rgba(var(--bg-base-rgb), 0.88) 100%)",
+                      border: "1px solid rgba(var(--neon-rgb),0.18)",
+                      boxShadow: "0 0 40px rgba(var(--neon-rgb),0.08), 0 20px 60px rgba(var(--black-rgb),0.5), inset 0 1px 0 rgba(var(--white-rgb),0.06)",
                     }}
                   >
+                    {/* Panel Header */}
                     <div
-                      className="flex items-center justify-between px-5 h-10 flex-shrink-0"
-                      style={{ borderBottom: "1px solid rgba(var(--neon-rgb),0.1)" }}
+                      className="flex items-center justify-between px-5 h-11 flex-shrink-0"
+                      style={{ borderBottom: "1px solid rgba(var(--white-rgb),0.06)" }}
                     >
-                      <div className="flex items-center gap-2">
-                        <span style={{ color: panelDef.color, filter: `drop-shadow(0 0 4px ${panelDef.color})` }}>{panelDef.icon}</span>
+                      <div className="flex items-center gap-3">
+                        <span style={{ color: panelDef.color, filter: `drop-shadow(0 0 6px ${panelDef.color})` }}>{panelDef.icon}</span>
                         <span
-                          className="text-xs font-semibold uppercase tracking-[0.15em]"
-                          style={{ color: panelDef.color, textShadow: `0 0 10px ${panelDef.color}66` }}
+                          className="text-[13px] font-semibold uppercase tracking-[0.12em]"
+                          style={{ color: panelDef.color, textShadow: `0 0 12px ${panelDef.color}44` }}
                         >
                           {panelDef.label}
                         </span>
                       </div>
                       <button
                         onClick={() => setOpenPanel(null)}
-                        className="text-[9px] px-2.5 py-0.5 rounded-lg cursor-default transition-all"
+                        className="text-[10px] px-3 py-1 rounded-lg cursor-default transition-all"
                         style={{
-                          color: "var(--bewusstsein)",
-                          backgroundColor: "rgba(var(--neon-rgb),0.06)",
-                          border: "1px solid rgba(var(--neon-rgb),0.15)",
+                          color: "var(--text-dim)",
+                          backgroundColor: "rgba(var(--white-rgb),0.04)",
+                          border: "1px solid rgba(var(--white-rgb),0.08)",
                         }}
                       >
                         ESC
                       </button>
                     </div>
-                    <div className="overflow-auto" style={{ height: "calc(100% - 40px)" }}>
+                    <div className="overflow-auto" style={{ height: "calc(100% - 44px)" }}>
                       <PanelComponent />
                     </div>
                   </div>

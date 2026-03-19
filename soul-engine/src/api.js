@@ -567,6 +567,18 @@ export class SoulAPI {
       }
     });
 
+    // Cortex Mind Panel — real-time inner state (emotion, surprise, needs, drang)
+    app.get('/api/mind', (req, res) => {
+      try {
+        if (!this.engine.cortex) {
+          return res.json({ enabled: false });
+        }
+        res.json({ enabled: true, ...this.engine.cortex.getState() });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     // Claude Code Session Bridge — pushes conversation events into the engine
     // Called by Claude Code during active sessions to feed D12 TOM, RLUF, etc.
     // type "message" → emits message.received → TOM processes → ContextWriter refreshes
@@ -648,6 +660,39 @@ export class SoulAPI {
       } catch (err) {
         res.status(500).json({ error: err.message });
       }
+    });
+
+    // Module settings — enable/disable/trigger autonomous modules
+    app.get('/api/modules', (req, res) => {
+      const trader   = this.engine.trader;
+      const security = this.engine.securityAgent;
+      res.json({
+        trader: {
+          enabled:  process.env.TRADER_ENABLED === 'true',
+          cron:     process.env.TRADER_CRON || '0 8 * * *',
+          running:  !!trader?.task,
+        },
+        security: {
+          enabled:  process.env.SECURITY_AGENT_ENABLED === 'true',
+          cron:     process.env.SECURITY_CRON || '0 9 * * 1',
+          running:  !!security?.task,
+        },
+      });
+    });
+
+    app.post('/api/modules/security/trigger', async (req, res) => {
+      const agent = this.engine.securityAgent;
+      if (!agent) return res.status(404).json({ error: 'Security agent not initialized' });
+      res.json({ ok: true, message: 'Security check triggered — report will arrive via Telegram' });
+      // Run async (don't await — takes 30-60s)
+      agent.runCheck().catch(err => console.error(`  [security] Manual trigger error: ${err.message}`));
+    });
+
+    app.post('/api/modules/trader/trigger', async (req, res) => {
+      const trader = this.engine.trader;
+      if (!trader) return res.status(404).json({ error: 'Trader not initialized' });
+      res.json({ ok: true, message: 'Trader run triggered — result will arrive via Telegram' });
+      trader.runDailyTrader().catch(err => console.error(`  [trader] Manual trigger error: ${err.message}`));
     });
   }
 

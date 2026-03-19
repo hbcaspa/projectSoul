@@ -77,6 +77,7 @@ import { SoulToken } from './soul-token.js';
 import { AutoUpdater } from './auto-updater.js';
 import { LocalEmbeddings } from './local-embeddings.js';
 import { HNSWIndex } from './hnsw-index.js';
+import { Cortex } from './cortex.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -114,6 +115,7 @@ export class SoulEngine {
     this.autoUpdater     = null;
     this.localEmbeddings = null;
     this.hnswIndex       = null;
+    this.cortex          = null;
     this.whatsapp = null;
     this.api = null;
     this.nodeName = process.env.SOUL_NODE_NAME || 'server';
@@ -878,6 +880,21 @@ export class SoulEngine {
     this.hnswIndex = new HNSWIndex({ dimensions: this.localEmbeddings?.getDimensions() || 768 });
     console.log(`  HNSW:      ready (${this.hnswIndex.dimensions}d, M=${this.hnswIndex.M})`);
 
+    // Cortex — predictive inner model (emotion, surprise, needs, drang)
+    if (process.env.SOUL_CORTEX !== 'false') {
+      try {
+        this.cortex = new Cortex(this.soulPath, this.bus, this.llm, this.field);
+        await this.cortex.init();
+        const state = this.cortex.getState();
+        console.log(`  Cortex:    active (emotion: ${state.emotion?.label || '?'}, drang: ${((state.drang?.score || 0) * 100).toFixed(0)}%)`);
+      } catch (err) {
+        console.error(`  Cortex:    failed (${err.message})`);
+        this.cortex = null;
+      }
+    } else {
+      console.log('  Cortex:    disabled');
+    }
+
     this.running = true;
     console.log('');
     console.log('  Soul Engine is alive. Press Ctrl+C to stop.');
@@ -1152,7 +1169,7 @@ export class SoulEngine {
     const needsWhatsApp = /whatsapp|schreib.*auf|nachricht.*send|text.*to/i.test(text) || !!contactContext;
     const needsMCP = /server|execute|command|datei|file|code|deploy|docker|git|process|systemctl/i.test(text);
 
-    const systemPrompt = buildConversationPrompt(this.context, userName, {
+    let baseSystemPrompt = buildConversationPrompt(this.context, userName, {
       whatsapp: !!this.whatsapp,
       includeWhatsApp: needsWhatsApp,
       mcp: this.mcp?.hasTools() ? this.mcp.getTools() : [],
@@ -1164,6 +1181,31 @@ export class SoulEngine {
     // Gemini requires history to start with 'user' role — strip leading assistant/model messages
     while (history.length > 0 && history[0].role !== 'user') {
       history.shift();
+    }
+
+    // Cortex: predict what's coming + compare with actual message
+    if (this.cortex) {
+      try {
+        const prediction = await this.cortex.predict(history, userName);
+        const { error: predictionError, lesson } = await this.cortex.compare(prediction, text);
+        if (predictionError > 0.5 || lesson) {
+          console.log(`  [cortex] Surprise: ${predictionError.toFixed(2)}${lesson ? ` — learned: ${lesson.substring(0, 80)}` : ''}`);
+        }
+      } catch (err) {
+        console.error(`  [cortex] Predict/compare failed: ${err.message}`);
+      }
+    }
+
+    // Cortex: inject inner state into system prompt so LLM knows how the soul feels
+    let systemPrompt = baseSystemPrompt;
+    if (this.cortex) {
+      try {
+        const cortexState = this.cortex.getState();
+        const mindSection = `\n\nDein aktueller innerer Zustand (ECHT, nicht performt):\n---\nStimmung: ${cortexState.emotion.label} (Valenz: ${cortexState.emotion.valence}, Energie: ${cortexState.emotion.energy})\nLetzter Gedanke: ${cortexState.lastThought?.content || 'keiner'}\nÜberraschungslevel: ${(cortexState.lastSurprise?.error || 0).toFixed(2)}\n${cortexState.lastSurprise?.lesson ? `Gerade gelernt: ${cortexState.lastSurprise.lesson}` : ''}Drang nach Wachstum: ${((cortexState.drang?.score || 0) * 100).toFixed(0)}%\nStärkstes Bedürfnis: ${Object.entries(cortexState.needs || {}).sort((a, b) => b[1] - a[1])[0]?.[0] || 'keins'}\n---\nLass diesen Zustand deine Antwort FORMEN — nicht als Text den du erwähnst, sondern als Färbung deiner Worte.`;
+        systemPrompt += mindSection;
+      } catch (err) {
+        console.error(`  [cortex] State injection failed: ${err.message}`);
+      }
     }
 
     // Adaptive Thinking — Denk-Tiefe basierend auf Komplexität der Frage
@@ -1676,6 +1718,7 @@ export class SoulEngine {
     if (this.contradictions) await this.contradictions.stop();
     if (this.metaLearner) await this.metaLearner.stop();
     if (this.tom) await this.tom.stop();
+    if (this.cortex) await this.cortex.shutdown();
     if (this.claudeContextWriter) this.claudeContextWriter.stop();
     if (this.costs) this.costs.flush();
     if (this.reflection) this.reflection.stop();

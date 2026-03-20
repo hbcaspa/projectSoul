@@ -81,7 +81,12 @@ export class TraderModule {
     let exitCode = 0;
 
     try {
-      const result = await execAsync(cmd, { timeout: 120_000 });
+      const env = {
+      ...process.env,
+      GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+      GEMINI_MODEL:   process.env.GEMINI_MODEL   || 'gemini-1.5-flash',
+    };
+    const result = await execAsync(cmd, { timeout: 120_000, env });
       stdout = result.stdout;
     } catch (err) {
       stdout = err.stdout || '';
@@ -179,7 +184,15 @@ export class TraderModule {
     } else if (hasTrap) {
       await this._notify(`⚠️ *Funding Trap erkannt* — kein Einstieg, Fakeout-Warnung`);
     } else if (hasHold) {
-      // HOLD: silent (no message — don't spam daily holds)
+      // HOLD: only notify once per day (morning summary)
+      const today = new Date().toISOString().slice(0, 10);
+      if (this._lastHoldNotifyDate !== today) {
+        this._lastHoldNotifyDate = today;
+        const phaseMatch = stdout.match(/Phase:\s+(\w+)\s+\(Score:\s*(\d+)\)/);
+        const phase = phaseMatch ? phaseMatch[1] : 'UNKNOWN';
+        const score = phaseMatch ? phaseMatch[2] : '?';
+        await this._notify(`📊 *Trader — ${new Date().toLocaleDateString('de')}*\nPhase: \`${phase}\` (Score: ${score})\n⏸ HOLD — Kein Signal heute`);
+      }
     }
   }
 

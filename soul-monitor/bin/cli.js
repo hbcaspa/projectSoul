@@ -20,14 +20,19 @@ if (args.includes('--help') || args.includes('-h')) {
   ${'\x1b[36m'}soul-monitor${'\x1b[0m'} — Watch your AI soul think in real-time
 
   ${'\x1b[2m'}Usage:${'\x1b[0m'}
-    soul-monitor              ${'\x1b[2m'}# Run in current directory${'\x1b[0m'}
-    soul-monitor --path ~/my-soul  ${'\x1b[2m'}# Specify soul directory${'\x1b[0m'}
+    soul-monitor                    ${'\x1b[2m'}# Run in current directory${'\x1b[0m'}
+    soul-monitor --path ~/my-soul   ${'\x1b[2m'}# Specify soul directory${'\x1b[0m'}
 
   ${'\x1b[2m'}Views:${'\x1b[0m'}
-    1 / b    ${'\x1b[36m'}Brain${'\x1b[0m'}     Neural brain visualization (default)
-    2 / w    ${'\x1b[35m'}Whisper${'\x1b[0m'}   Inner monologue thought stream
-    3 / r    ${'\x1b[33m'}Replay${'\x1b[0m'}    Memory time travel (\u2190 \u2192 to navigate dates)
-    4 / c    ${'\x1b[32m'}Card${'\x1b[0m'}      Soul identity card
+    1 / b    ${'\x1b[36m'}Brain${'\x1b[0m'}      Neural brain visualization (default)
+    2 / w    ${'\x1b[35m'}Whisper${'\x1b[0m'}    Inner monologue thought stream
+    3 / r    ${'\x1b[33m'}Replay${'\x1b[0m'}     Memory time travel (\u2190 \u2192 to navigate dates)
+    4 / c    ${'\x1b[32m'}Card${'\x1b[0m'}       Soul identity card
+    5 / n    ${'\x1b[34m'}Chain${'\x1b[0m'}      P2P network status
+    6 / i    ${'\x1b[35m'}Impulse${'\x1b[0m'}    Proactive soul activity
+    7 / g    ${'\x1b[32m'}Graph${'\x1b[0m'}      Knowledge graph entities
+    8 / p    ${'\x1b[36m'}Protocol${'\x1b[0m'}   Session protocol steps & file integrity
+    9 / e    ${'\x1b[33m'}Engine${'\x1b[0m'}     Server agents, events & cost tracking
 
   ${'\x1b[2m'}Controls:${'\x1b[0m'}
     q / Ctrl+C / Esc    Quit

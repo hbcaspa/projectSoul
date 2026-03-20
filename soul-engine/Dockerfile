@@ -1,5 +1,8 @@
 FROM node:20-alpine
 
+# Python3 for trader-arena integration (paper_trader.py needs requests)
+RUN apk add --no-cache python3 py3-pip py3-requests
+
 WORKDIR /app
 
 COPY package.json package-lock.json ./

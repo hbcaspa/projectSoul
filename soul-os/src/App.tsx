@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import BrainCanvas from "./components/brain/BrainCanvas";
 import ActivityFeed from "./components/brain/ActivityFeed";
@@ -24,6 +24,7 @@ import InnerWorldView from "./views/InnerWorldView";
 import WorldWindowView from "./views/WorldWindowView";
 import BondsView from "./views/BondsView";
 import TraderView from "./views/TraderView";
+import MindView from "./views/MindView";
 import SetupWizard from "./views/SetupWizard";
 import FoundingChat from "./views/FoundingChat";
 import { useActiveNodes, useCurrentPulse, useMood, useActivityFeed } from "./lib/store";
@@ -54,6 +55,7 @@ export type ViewId =
   | "worldwindow"
   | "bonds"
   | "trader"
+  | "mind"
   | "terminal"
   | "settings"
   | "browser";
@@ -76,6 +78,18 @@ const icon = (d: string) => (
 );
 
 const PANELS: PanelDef[] = [
+  {
+    id: "mind",
+    label: "Mind",
+    color: "#f472b6",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+        <path d="M12 2C8 2 4 5 4 9c0 2.5 1 4 2.5 5.5C8 16 8 18 8 20h8c0-2 0-4 1.5-5.5C19 13 20 11.5 20 9c0-4-4-7-8-7z" />
+        <path d="M9 20h6M10 22h4" />
+        <circle cx="12" cy="10" r="2" fill="currentColor" opacity="0.3" />
+      </svg>
+    ),
+  },
   {
     id: "whisper",
     label: "Whisper",
@@ -310,13 +324,14 @@ interface DockCategory {
 }
 
 const DOCK_CATEGORIES: DockCategory[] = [
-  { label: "Mind",    color: "#B464FF", panels: ["whisper", "innerworld", "card", "bonds", "founding"] },
+  { label: "Mind",    color: "#B464FF", panels: ["mind", "whisper", "innerworld", "card", "bonds", "founding"] },
   { label: "Memory",  color: "#FFC800", panels: ["graph", "memorymap", "timeline", "history", "replay"] },
   { label: "World",   color: "#64C8FF", panels: ["worldwindow", "browser", "chain", "garden", "trader"] },
   { label: "System",  color: "#00FFC8", panels: ["monitor", "health", "impulse", "mcp", "settings"] },
 ];
 
 const PANEL_COMPONENTS: Record<PanelId, React.FC> = {
+  mind: MindView,
   whisper: WhisperView,
   card: CardView,
   chain: ChainView,
@@ -445,6 +460,25 @@ function App() {
   const togglePanel = useCallback((id: PanelId) => {
     setOpenPanel((prev) => (prev === id ? null : id));
   }, []);
+
+  // Compact dock: hide labels when dock overflows
+  const dockRef = useRef<HTMLDivElement>(null);
+  const [dockCompact, setDockCompact] = useState(false);
+  useEffect(() => {
+    const el = dockRef.current;
+    if (!el) return;
+    const check = () => {
+      // Remove compact to measure natural (full) width
+      el.classList.remove("dock-compact");
+      const overflows = el.scrollWidth > el.clientWidth;
+      if (overflows) el.classList.add("dock-compact");
+      setDockCompact(overflows);
+    };
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    check();
+    return () => ro.disconnect();
+  }, [appPhase]);
 
   /* Keyboard: 1-9 toggle panels, ESC close, Cmd+B browser, Cmd+Shift+B mode toggle */
   useEffect(() => {
@@ -578,7 +612,7 @@ function App() {
           <div className="flex-1 flex flex-col min-h-0">
 
             {/* ── Module Dock Bar ─────────────────────────────── */}
-            <div className="dock-bar flex-shrink-0" style={{ opacity: openPanel ? 0.3 : 1, transition: "opacity 300ms ease" }}>
+            <div ref={dockRef} className={`dock-bar flex-shrink-0${dockCompact ? " dock-compact" : ""}`} style={{ opacity: openPanel ? 0.3 : 1, transition: "opacity 300ms ease" }}>
               {DOCK_CATEGORIES.map((cat, ci) => (
                 <div key={cat.label} className="flex items-center">
                   {ci > 0 && <div className="dock-separator" />}

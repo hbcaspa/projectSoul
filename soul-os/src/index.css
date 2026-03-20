@@ -333,6 +333,14 @@ button:active:not(:disabled) {
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   border-bottom: 1px solid rgba(var(--white-rgb), 0.06);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.dock-bar::-webkit-scrollbar {
+  display: none;
 }
 
 .dock-group {
@@ -342,6 +350,7 @@ button:active:not(:disabled) {
   padding: 3px 4px;
   border-radius: 10px;
   transition: all 200ms ease;
+  flex-shrink: 0;
 }
 
 .dock-group:hover {
@@ -402,6 +411,23 @@ button:active:not(:disabled) {
   height: 20px;
   margin: 0 4px;
   background: linear-gradient(180deg, transparent, rgba(var(--white-rgb), 0.08), transparent);
+}
+
+/* ── Compact Dock (icon-only when overflowing) ── */
+.dock-compact .dock-btn-label {
+  display: none;
+}
+.dock-compact .dock-btn {
+  padding: 5px 6px;
+  gap: 0;
+}
+.dock-compact .dock-group {
+  gap: 1px;
+  padding: 3px 2px;
+}
+.dock-compact .dock-group-label {
+  padding: 0 4px;
+  font-size: 8px;
 }
 
 /* ═══ QUICK STATUS PILL ════════════════════════════════ */

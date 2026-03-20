@@ -169,9 +169,10 @@ function TerminalPane({ paneId, isActive }: { paneId: number; isActive: boolean 
     const term = new Terminal({
       cursorBlink: true,
       cursorStyle: "bar",
-      fontSize: 13,
-      fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace",
-      lineHeight: 1.2,
+      fontSize: 14,
+      fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', Menlo, monospace",
+      fontWeight: 500,
+      lineHeight: 1.3,
       scrollback: 10000,
       theme: {
         background: "#0D0F1A",

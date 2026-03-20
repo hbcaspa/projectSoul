@@ -14,11 +14,15 @@ const STATE_FILE = process.env.GMAIL_STATE_FILE || '/opt/soul/connections/gmail-
  *   3. Send a compact Telegram digest (only if new non-spam emails exist)
  *   4. Persist historyId so nothing is processed twice
  */
+// Categories that get immediate individual alerts (not bundled into digest)
+const URGENT_CATEGORIES = ['mahnung', 'rechnung_offen', 'kuendigung', 'behoerde', 'rechtlich'];
+
 export class GmailMonitor {
-  constructor({ soulPath, llm, telegram, clientId, clientSecret, refreshToken }) {
+  constructor({ soulPath, llm, telegram, bus, clientId, clientSecret, refreshToken }) {
     this.soulPath = soulPath;
     this.llm = llm;
     this.telegram = telegram;
+    this.bus = bus;
     this.clientId = clientId;
     this.clientSecret = clientSecret;
     this.refreshToken = refreshToken;
@@ -75,11 +79,13 @@ export class GmailMonitor {
     for (const msg of newMessages.slice(0, 20)) { // max 20 per cycle
       try {
         const detail = await this._fetchEmailDetail(msg.id);
-        const [category, summary] = await Promise.all([
-          this._classify(detail),
+        const category = await this._classify(detail);
+        const isUrgent = URGENT_CATEGORIES.includes(category);
+        const [summary, urgency] = await Promise.all([
           this._summarize(detail),
+          isUrgent ? this._extractUrgency(detail) : Promise.resolve({}),
         ]);
-        classified.push({ ...detail, category, summary });
+        classified.push({ ...detail, category, summary, urgency });
       } catch (err) {
         console.error(`  [gmail-monitor] classify error: ${err.message}`);
       }
@@ -93,7 +99,7 @@ export class GmailMonitor {
     };
     await this._saveState(newState);
 
-    // Filter: skip spam, send digest of the rest
+    // Filter: skip spam
     const relevant = classified.filter(m => m.category !== 'spam');
     if (!relevant.length) {
       const spamCount = classified.filter(m => m.category === 'spam').length;
@@ -101,9 +107,33 @@ export class GmailMonitor {
       return;
     }
 
-    const digest = this._buildDigest(relevant, classified.length);
-    await this.telegram.sendToOwner(digest);
-    console.log(`  [gmail-monitor] Digest sent (${relevant.length} relevant, ${classified.length - relevant.length} spam)`);
+    // Urgent mails: send immediately, individually, with action proposals
+    const urgent = relevant.filter(m => URGENT_CATEGORIES.includes(m.category));
+    const normal = relevant.filter(m => !URGENT_CATEGORIES.includes(m.category));
+
+    for (const mail of urgent) {
+      const alert = this._buildUrgentAlert(mail);
+      await this.telegram.sendToOwner(alert);
+      console.log(`  [gmail-monitor] Urgent alert sent: ${mail.category} — "${mail.subject}"`);
+
+      // Soul Protocol: emit event on bus
+      this.bus?.safeEmit?.('mail.urgent', {
+        category:  mail.category,
+        from:      mail.from,
+        subject:   mail.subject,
+        summary:   mail.summary,
+        urgency:   mail.urgency,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // Normal mails: digest as before
+    if (normal.length) {
+      const digest = this._buildDigest(normal, classified.length - urgent.length);
+      await this.telegram.sendToOwner(digest);
+    }
+
+    console.log(`  [gmail-monitor] Done: ${urgent.length} urgent alerts, ${normal.length} in digest, ${classified.length - relevant.length} spam`);
   }
 
   // ── Gmail API ──────────────────────────────────────────
@@ -200,24 +230,58 @@ export class GmailMonitor {
 
   async _classify(email) {
     const prompt = `Klassifiziere diese E-Mail in EINE der folgenden Kategorien:
-- spam: Werbung, Newsletter, automatische Benachrichtigungen ohne Handlungsbedarf
-- info: Informationen die gut zu wissen sind, aber keine Aktion erfordern
-- wichtig: Persönliche Nachrichten, relevante geschäftliche Mails
-- aktion_erforderlich: Mails die eine Reaktion oder Entscheidung verlangen
+
+DRINGEND (sofortige Einzelbenachrichtigung):
+- mahnung: Zahlungserinnerung, Mahnung, offene Rechnung mit Frist, Inkasso-Androhung
+- rechnung_offen: Unbezahlte Rechnung, Zahlungsaufforderung (keine Mahnung, erste Rechnung)
+- kuendigung: Kündigung eines Vertrags (durch Anbieter ODER Bestätigung eigener Kündigung)
+- behoerde: Finanzamt, Behörden, Ämter, amtliche Schreiben, Gerichtsdokumente
+- rechtlich: Anwaltschreiben, Abmahnung, rechtliche Drohungen, DSGVO-Anfragen
+
+NORMAL:
+- wichtig: Persönliche Nachrichten, relevante geschäftliche Mails ohne Frist
+- aktion_erforderlich: Mails die eine Antwort erfordern aber nicht dringend sind
+- info: Informationen ohne Handlungsbedarf, Bestellbestätigungen, Versandinfos
+- spam: Werbung, Newsletter, automatische Benachrichtigungen
 
 Von: ${email.from}
 Betreff: ${email.subject}
-Inhalt (Anfang): ${email.body.slice(0, 500)}
+Inhalt: ${email.body.slice(0, 600)}
 
-Antworte NUR mit einem der vier Wörter: spam, info, wichtig, aktion_erforderlich`;
+Antworte NUR mit einem Wort: mahnung, rechnung_offen, kuendigung, behoerde, rechtlich, wichtig, aktion_erforderlich, info, spam`;
 
     try {
-      const result = await this.llm.generate(prompt, [], '', { maxTokens: 10, temperature: 0 }) || '';
+      const result = await this.llm.generate(prompt, [], '', { maxTokens: 15, temperature: 0 }) || '';
       const category = result.trim().toLowerCase().replace(/[^a-z_]/g, '');
-      return ['spam', 'info', 'wichtig', 'aktion_erforderlich'].includes(category) ? category : 'info';
+      const valid = ['mahnung','rechnung_offen','kuendigung','behoerde','rechtlich','wichtig','aktion_erforderlich','info','spam'];
+      return valid.includes(category) ? category : 'info';
     } catch {
       return 'info';
     }
+  }
+
+  async _extractUrgency(email) {
+    const prompt = `Analysiere diese E-Mail und extrahiere folgende Informationen als JSON:
+{
+  "betrag": "€XX,XX oder null",
+  "frist": "TT.MM.JJJJ oder null",
+  "frist_tage": Zahl oder null,
+  "naechster_schritt": "Was passiert wenn nichts unternommen wird (1 Satz)",
+  "empfehlung": "Konkrete Empfehlung was zu tun ist (1 Satz)"
+}
+
+Von: ${email.from}
+Betreff: ${email.subject}
+Inhalt: ${email.body.slice(0, 800)}
+
+Antworte NUR mit dem JSON-Objekt, kein anderer Text.`;
+
+    try {
+      const result = await this.llm.generate(prompt, [], '', { maxTokens: 150, temperature: 0 }) || '';
+      const jsonMatch = result.match(/\{[\s\S]*\}/);
+      if (jsonMatch) return JSON.parse(jsonMatch[0]);
+    } catch { /* skip */ }
+    return {};
   }
 
   // ── Summarize ─────────────────────────────────────────
@@ -235,6 +299,31 @@ Inhalt: ${email.body.slice(0, 1000)}`;
     } catch {
       return email.body.slice(0, 120).replace(/\s+/g, ' ').trim();
     }
+  }
+
+  // ── Urgent Alert ───────────────────────────────────────
+
+  _buildUrgentAlert(mail) {
+    const categoryLabel = {
+      mahnung:        '⚠️ Mahnung',
+      rechnung_offen: '📄 Offene Rechnung',
+      kuendigung:     '🔴 Kündigung',
+      behoerde:       '🏛 Behördenpost',
+      rechtlich:      '⚖️ Rechtliches Schreiben',
+    }[mail.category] || '❗ Wichtige Mail';
+
+    const from = mail.from.replace(/<[^>]+>/, '').trim().replace(/"/g, '');
+    const u = mail.urgency || {};
+
+    const lines = [`${categoryLabel}\nVon: ${from}\nBetreff: ${mail.subject}\n`];
+    lines.push(mail.summary);
+
+    if (u.betrag) lines.push(`\nBetrag: ${u.betrag}`);
+    if (u.frist)  lines.push(`Frist: ${u.frist}${u.frist_tage != null ? ` (in ${u.frist_tage} Tagen)` : ''}`);
+    if (u.naechster_schritt) lines.push(`\nOhne Aktion: ${u.naechster_schritt}`);
+    if (u.empfehlung) lines.push(`Empfehlung: ${u.empfehlung}`);
+
+    return lines.join('\n');
   }
 
   // ── Digest builder ────────────────────────────────────

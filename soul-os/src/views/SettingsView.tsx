@@ -22,6 +22,17 @@ interface EnvState {
   [key: string]: string;
 }
 
+interface ModuleInfo {
+  enabled: boolean;
+  cron: string;
+  running: boolean;
+}
+
+interface ModulesState {
+  trader: ModuleInfo;
+  security: ModuleInfo;
+}
+
 const DEFAULT_ENV: EnvState = {
   OPENAI_API_KEY: "", OPENAI_MODEL: "gpt-4.1-mini",
   GEMINI_API_KEY: "", GEMINI_MODEL: "gemini-2.5-flash",
@@ -49,6 +60,9 @@ export default function SettingsView() {
   const [updateInfo, setUpdateInfo] = useState<Update | null>(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [modules, setModules] = useState<ModulesState | null>(null);
+  const [triggering, setTriggering] = useState<Record<string, boolean>>({});
+  const [triggerMsg, setTriggerMsg] = useState<Record<string, string>>({});
 
   const engineRunning = sidecar?.status === "running";
   const hasChanges = JSON.stringify(env) !== JSON.stringify(original);
@@ -58,7 +72,40 @@ export default function SettingsView() {
     commands.checkNode().then((info) => setNodeInfo(info as { found: boolean; version: string })).catch(() => {});
     getVersion().then(setAppVersion).catch(() => {});
     loadEnv();
+    loadModules();
   }, []);
+
+  const loadModules = async () => {
+    try {
+      const envData = await commands.readEnv();
+      const port = envData.API_PORT || "3001";
+      const apiKey = envData.API_KEY || "";
+      const res = await fetch(`http://127.0.0.1:${port}/api/modules`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      if (res.ok) setModules(await res.json());
+    } catch { /* engine not running */ }
+  };
+
+  const triggerModule = async (name: "security" | "trader") => {
+    setTriggering((prev) => ({ ...prev, [name]: true }));
+    setTriggerMsg((prev) => ({ ...prev, [name]: "" }));
+    try {
+      const envData = await commands.readEnv();
+      const port = envData.API_PORT || "3001";
+      const apiKey = envData.API_KEY || "";
+      const res = await fetch(`http://127.0.0.1:${port}/api/modules/${name}/trigger`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      const data = await res.json();
+      setTriggerMsg((prev) => ({ ...prev, [name]: res.ok ? "Gestartet — Report kommt via Telegram" : (data.error || "Fehler") }));
+    } catch (e) {
+      setTriggerMsg((prev) => ({ ...prev, [name]: "Engine nicht erreichbar" }));
+    }
+    setTriggering((prev) => ({ ...prev, [name]: false }));
+    setTimeout(() => setTriggerMsg((prev) => ({ ...prev, [name]: "" })), 5000);
+  };
 
   const loadEnv = async () => {
     try {
@@ -207,6 +254,33 @@ export default function SettingsView() {
             <Provider name="Anthropic" color="#d4a27f" apiKey={env.ANTHROPIC_API_KEY} model={env.ANTHROPIC_MODEL} models={PROVIDER_MODELS.anthropic} onKey={(v) => updateEnv("ANTHROPIC_API_KEY", v)} onModel={(v) => updateEnv("ANTHROPIC_MODEL", v)} />
             <Provider name="Gemini" color="#4285f4" apiKey={env.GEMINI_API_KEY} model={env.GEMINI_MODEL} models={PROVIDER_MODELS.gemini} onKey={(v) => updateEnv("GEMINI_API_KEY", v)} onModel={(v) => updateEnv("GEMINI_MODEL", v)} />
             <Provider name="Ollama" color="#00FFC8" local apiKey={env.OLLAMA_URL} model={env.OLLAMA_MODEL} models={PROVIDER_MODELS.ollama} onKey={(v) => updateEnv("OLLAMA_URL", v)} onModel={(v) => updateEnv("OLLAMA_MODEL", v)} />
+          </div>
+        </div>
+
+        {/* ── Modules (Server Agents) ──────────────────────── */}
+        <div>
+          <Label text="Server Agents" />
+          <div className="grid grid-cols-2 gap-3">
+            <ModuleCard
+              name="Security Agent"
+              icon="🔒"
+              color="#FF6B35"
+              info={modules?.security ?? null}
+              triggering={triggering["security"] ?? false}
+              msg={triggerMsg["security"] ?? ""}
+              onTrigger={() => triggerModule("security")}
+              onRefresh={loadModules}
+            />
+            <ModuleCard
+              name="Trader"
+              icon="📊"
+              color="#00FFC8"
+              info={modules?.trader ?? null}
+              triggering={triggering["trader"] ?? false}
+              msg={triggerMsg["trader"] ?? ""}
+              onTrigger={() => triggerModule("trader")}
+              onRefresh={loadModules}
+            />
           </div>
         </div>
 
@@ -428,4 +502,92 @@ function Sys({ label, value, mono, color }: { label: string; value: string; mono
 
 function NeonSep() {
   return <div className="neon-divider" />;
+}
+
+function ModuleCard({
+  name, icon, color, info, triggering, msg, onTrigger, onRefresh,
+}: {
+  name: string; icon: string; color: string;
+  info: ModuleInfo | null;
+  triggering: boolean; msg: string;
+  onTrigger: () => void; onRefresh: () => void;
+}) {
+  const enabled = info?.enabled ?? false;
+  const running = info?.running ?? false;
+  const dotColor = !info ? "var(--text-muted)" : enabled && running ? color : enabled ? "var(--mem)" : "var(--text-muted)";
+  const statusText = !info ? "offline" : enabled && running ? "active" : enabled ? "scheduled" : "disabled";
+
+  return (
+    <div
+      className="rounded-2xl p-5 flex flex-col gap-3"
+      style={{
+        border: `1px solid ${enabled ? `${color}33` : "rgba(var(--neon-rgb),0.08)"}`,
+        background: enabled
+          ? `linear-gradient(160deg, ${color}0F, rgba(var(--dark-rgb),0.6))`
+          : "linear-gradient(160deg, rgba(var(--neon-rgb),0.03), rgba(var(--dark-rgb),0.6))",
+      }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <span className="text-base">{icon}</span>
+        <span className="text-sm font-semibold flex-1" style={{ color: enabled ? color : "var(--text-dim)" }}>{name}</span>
+        <div
+          className={`w-2 h-2 rounded-full shrink-0 ${enabled && running ? "animate-breathe" : ""}`}
+          style={{ backgroundColor: dotColor, boxShadow: enabled && running ? `0 0 8px ${color}` : "none" }}
+        />
+      </div>
+
+      {/* Status + Cron */}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between">
+          <span className="text-xs" style={{ color: "var(--text-dim)" }}>Status</span>
+          <span className="text-xs font-mono" style={{ color: dotColor }}>{statusText}</span>
+        </div>
+        {info?.cron && (
+          <div className="flex items-center justify-between">
+            <span className="text-xs" style={{ color: "var(--text-dim)" }}>Cron</span>
+            <span className="text-[10px] font-mono" style={{ color: "var(--text-muted)" }}>{info.cron}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Feedback msg */}
+      {msg && (
+        <div className="text-[10px] px-2 py-1 rounded-lg" style={{ color: color, background: `${color}14` }}>
+          {msg}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex gap-2 mt-auto">
+        {enabled ? (
+          <button
+            onClick={onTrigger}
+            disabled={triggering}
+            className="flex-1 py-2 rounded-xl text-xs font-semibold cursor-default transition-all"
+            style={{
+              background: `linear-gradient(135deg, ${color}2E, ${color}0F)`,
+              color,
+              border: `1px solid ${color}40`,
+              opacity: triggering ? 0.5 : 1,
+            }}
+          >
+            {triggering ? "..." : "Run Now"}
+          </button>
+        ) : (
+          <div className="flex-1 py-2 rounded-xl text-xs text-center" style={{ color: "var(--text-dim)" }}>
+            Enable via server .env
+          </div>
+        )}
+        <button
+          onClick={onRefresh}
+          className="px-3 py-2 rounded-xl text-xs cursor-default"
+          style={{ color: "var(--text-dim)", border: "1px solid rgba(var(--neon-rgb),0.08)" }}
+          title="Refresh status"
+        >
+          ↻
+        </button>
+      </div>
+    </div>
+  );
 }

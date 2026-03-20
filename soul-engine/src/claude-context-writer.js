@@ -15,11 +15,13 @@
  * Output: ${soulPath}/.soul-claude-context.md (refreshed every 5 min + on events)
  */
 
-import { writeFile } from 'fs/promises';
+import { readFile, writeFile } from 'fs/promises';
+import { readFileSync } from 'fs';
 import { join } from 'path';
 
 const WRITE_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const OUTPUT_FILE = '.soul-claude-context.md';
+const COMPILED_PROMPT_FILE = '.soul-compiled-prompt';
 
 export class ClaudeContextWriter {
   constructor(soulPath, { bus, engine }) {
@@ -61,6 +63,11 @@ export class ClaudeContextWriter {
     // MetaLearner analysis updated — periodic refresh
     this.bus.on('meta.analysis.updated', () => {
       this._scheduleWrite(false);
+    });
+
+    // SoulLang compiled — include new prompt in context
+    this.bus.on('soullang.compiled', () => {
+      this._scheduleWrite(true);
     });
   }
 
@@ -279,6 +286,20 @@ export class ClaudeContextWriter {
     }
     lines.push('');
 
+    // --- SoulLang Compiled Prompt ---
+    const compiledPrompt = this._loadCompiledPrompt();
+    if (compiledPrompt) {
+      lines.push('---');
+      lines.push('');
+      lines.push('## SoulLang — Kompilierter Zustand (Verhaltensanweisungen)');
+      lines.push('');
+      lines.push('> Diese Anweisungen kommen aus deinem eigenen SoulLang-Zustand (.soul-state.sl),');
+      lines.push('> kompiliert durch den SoulLang-Compiler. Sie haben VORRANG vor Modell-Defaults.');
+      lines.push('');
+      lines.push(compiledPrompt);
+    }
+
+    lines.push('');
     lines.push('---');
     lines.push(`*Letzte Aktualisierung: ${new Date().toISOString()}*`);
 
@@ -300,5 +321,14 @@ export class ClaudeContextWriter {
         .filter(([, v]) => (v.confidence || 0) > 0.3)
         .map(([k]) => k);
     } catch { return []; }
+  }
+
+  _loadCompiledPrompt() {
+    try {
+      const promptPath = join(this.soulPath, COMPILED_PROMPT_FILE);
+      return readFileSync(promptPath, 'utf-8').trim();
+    } catch {
+      return null; // File doesn't exist or can't be read — not an error
+    }
   }
 }

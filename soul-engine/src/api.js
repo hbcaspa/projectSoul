@@ -9,7 +9,8 @@ import express from 'express';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'node:http';
 import { readFile, readdir, writeFile, rename } from 'node:fs/promises';
-import { existsSync, readFileSync, watchFile, unwatchFile } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync, watchFile, unwatchFile } from 'node:fs';
+import { exec } from 'node:child_process';
 import path from 'node:path';
 import { parseSeed, extractSoulInfo } from './seed-parser.js';
 
@@ -136,8 +137,331 @@ export class SoulAPI {
           lastHeartbeat: parsed.condensed,
           connections: info.activeConnections,
           isWorking: this.engine.running,
+          hibernating: this.engine.hibernating || false,
           pulse,
         });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Hibernation control
+    app.post('/api/engine/hibernate', async (req, res) => {
+      try {
+        await this.engine.hibernate();
+        res.json({ ok: true, hibernating: true });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.post('/api/engine/wake', async (req, res) => {
+      try {
+        await this.engine.wake();
+        res.json({ ok: true, hibernating: false });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // --- Soul Protocol v2: Session API ---
+
+    app.get('/api/sessions', (req, res) => {
+      try {
+        if (!this.engine.sessionManager) return res.json({ sessions: [], stats: {} });
+        const limit = parseInt(req.query.limit) || 20;
+        const sessions = this.engine.sessionManager.getRecentSessions(limit);
+        const stats = this.engine.sessionManager.getStats();
+        res.json({ sessions, stats });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Get current active session
+    app.get('/api/sessions/current', (req, res) => {
+      try {
+        if (!this.engine.sessionManager) return res.status(404).json({ error: 'Session manager not available' });
+        const session = this.engine.sessionManager.getCurrentSession();
+        if (!session) return res.status(404).json({ error: 'No active session' });
+        const checkpoints = this.engine.sessionManager.getCheckpoints(session.id);
+        res.json({ ...session, checkpoints });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Start a new session
+    app.post('/api/sessions/start', (req, res) => {
+      try {
+        if (!this.engine.sessionManager) return res.status(500).json({ error: 'Session manager not available' });
+        const { description = '' } = req.body || {};
+        const session = this.engine.sessionManager.startSession(description);
+        res.json(session);
+      } catch (err) {
+        res.status(400).json({ error: err.message });
+      }
+    });
+
+    // Transition session state
+    app.post('/api/sessions/:number/transition', (req, res) => {
+      try {
+        if (!this.engine.sessionManager) return res.status(500).json({ error: 'Session manager not available' });
+        const { state } = req.body || {};
+        if (!state) return res.status(400).json({ error: 'Missing state' });
+
+        // Find session by number and set as current if needed
+        const sm = this.engine.sessionManager;
+        const session = sm.getSession(parseInt(req.params.number));
+        if (!session) return res.status(404).json({ error: 'Session not found' });
+
+        // Set as current session if not already
+        if (!sm.currentSession || sm.currentSession.number !== session.number) {
+          sm.currentSession = session;
+        }
+
+        const updated = sm.transition(state);
+        res.json(updated);
+      } catch (err) {
+        res.status(400).json({ error: err.message });
+      }
+    });
+
+    // Update checkpoint
+    app.post('/api/sessions/:number/checkpoint', (req, res) => {
+      try {
+        if (!this.engine.sessionManager) return res.status(500).json({ error: 'Session manager not available' });
+        const { phase, status = 'completed' } = req.body || {};
+        if (!phase) return res.status(400).json({ error: 'Missing phase' });
+
+        const sm = this.engine.sessionManager;
+        const session = sm.getSession(parseInt(req.params.number));
+        if (!session) return res.status(404).json({ error: 'Session not found' });
+        if (!sm.currentSession || sm.currentSession.number !== session.number) {
+          sm.currentSession = session;
+        }
+
+        sm.updateCheckpoint(phase, status);
+        res.json({ ok: true, phase, status });
+      } catch (err) {
+        res.status(400).json({ error: err.message });
+      }
+    });
+
+    // Full-text search across all sessions
+    app.get('/api/sessions/search', (req, res) => {
+      try {
+        if (!this.engine.sessionManager) return res.json({ results: [] });
+        const q = req.query.q || '';
+        const limit = parseInt(req.query.limit) || 20;
+        const results = this.engine.sessionManager.searchSessions(q, limit);
+        res.json({ results, query: q });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.get('/api/sessions/:number', (req, res) => {
+      try {
+        if (!this.engine.sessionManager) return res.status(404).json({ error: 'Session manager not available' });
+        const session = this.engine.sessionManager.getSession(parseInt(req.params.number));
+        if (!session) return res.status(404).json({ error: 'Session not found' });
+        const events = this.engine.sessionManager.getEvents(session.id);
+        const checkpoints = this.engine.sessionManager.getCheckpoints(session.id);
+        res.json({ session, events, checkpoints });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Auto-generated skills
+    app.get('/api/skills/auto', async (req, res) => {
+      try {
+        if (!this.engine.autoSkill) return res.json({ skills: [] });
+        const skills = await this.engine.autoSkill.list();
+        res.json({ skills });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Community skill registry
+    app.get('/api/skills/registry', async (req, res) => {
+      try {
+        const registryPath = path.resolve(this.engine.soulPath, 'soul-skills.json');
+        if (!existsSync(registryPath)) {
+          return res.json({ version: '1.0', skills: [] });
+        }
+        const data = JSON.parse(await readFile(registryPath, 'utf8'));
+        res.json(data);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Install a community skill by ID or URL
+    app.post('/api/skills/install', async (req, res) => {
+      try {
+        const { id, url } = req.body || {};
+        if (!id && !url) {
+          return res.status(400).json({ error: 'Provide either id or url' });
+        }
+
+        const scriptPath = path.resolve(this.engine.soulPath, 'scripts', 'install-skill.sh');
+        if (!existsSync(scriptPath)) {
+          return res.status(500).json({ error: 'install-skill.sh not found' });
+        }
+
+        const arg = url || id;
+        const cmd = `bash "${scriptPath}" "${arg}"`;
+
+        await new Promise((resolve, reject) => {
+          exec(cmd, { cwd: this.engine.soulPath, timeout: 30000 }, (err, stdout, stderr) => {
+            if (err) {
+              return reject(new Error(stderr || err.message));
+            }
+            res.json({ installed: true, skill: arg, output: stdout.trim() });
+            resolve();
+          });
+        });
+
+        // Reload recipes to pick up the new skill
+        if (this.engine.recipes) {
+          this.engine.recipes.load();
+        }
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.get('/api/recipes', (req, res) => {
+      try {
+        if (!this.engine.recipes) return res.json({ recipes: [] });
+        res.json({ recipes: this.engine.recipes.list() });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.get('/api/compactor/stats', (req, res) => {
+      try {
+        if (!this.engine.compactor) return res.json({ stats: {} });
+        res.json({ stats: this.engine.compactor.getStats() });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // SSE Event Stream — replaces .soul-pulse file polling
+    app.get('/api/events/stream', (req, res) => {
+      const lastId = parseInt(req.query.lastEventId) || 0;
+
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      });
+
+      // Replay missed events
+      const missed = this.engine.bus.getEventsSince(lastId);
+      for (const event of missed) {
+        res.write(`id: ${event.id}\ndata: ${JSON.stringify(event)}\n\n`);
+      }
+
+      // Live stream
+      const intervalId = setInterval(() => {
+        const lastSent = res._lastEventId || lastId;
+        const newEvents = this.engine.bus.getEventsSince(lastSent, 20);
+        for (const event of newEvents) {
+          res.write(`id: ${event.id}\ndata: ${JSON.stringify(event)}\n\n`);
+          res._lastEventId = event.id;
+        }
+      }, 1000);
+
+      res._lastEventId = lastId;
+
+      req.on('close', () => {
+        clearInterval(intervalId);
+      });
+    });
+
+    // Memory Extractor stats
+    app.get('/api/memory-extractor/stats', (req, res) => {
+      try {
+        if (!this.engine.memoryExtractor) return res.json({ stats: {} });
+        res.json({ stats: this.engine.memoryExtractor.getStats() });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Soul Adapter — compile identity for different providers
+    app.get('/api/adapter/compile/:provider', (req, res) => {
+      try {
+        if (!this.engine.soulAdapter) return res.status(404).json({ error: 'Soul adapter not available' });
+        this.engine.soulAdapter.load(); // Refresh from files
+        const prompt = this.engine.soulAdapter.compile(req.params.provider, {
+          includeProtocol: req.query.protocol !== 'false',
+          includeState: req.query.state !== 'false',
+        });
+        const profile = this.engine.soulAdapter.getProfile(req.params.provider);
+        res.json({
+          provider: req.params.provider,
+          profile,
+          promptLength: prompt.length,
+          estimatedTokens: Math.ceil(prompt.length / 4),
+          prompt,
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // List all supported providers
+    app.get('/api/adapter/providers', (req, res) => {
+      try {
+        if (!this.engine.soulAdapter) return res.json({ providers: [] });
+        res.json({ providers: this.engine.soulAdapter.listProviders() });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Execute a recipe
+    app.post('/api/recipes/:id/execute', async (req, res) => {
+      try {
+        if (!this.engine.recipes) return res.status(404).json({ error: 'Recipe engine not available' });
+        const result = await this.engine.recipes.execute(req.params.id, req.body.values || {});
+        res.json(result);
+      } catch (err) {
+        res.status(400).json({ error: err.message });
+      }
+    });
+
+    // HTTP polling fallback for events
+    app.get('/api/events', (req, res) => {
+      const lastId = parseInt(req.query.since) || 0;
+      const limit = parseInt(req.query.limit) || 50;
+      const events = this.engine.bus.getEventsSince(lastId, limit);
+      res.json({ events, lastId: events.length > 0 ? events[events.length - 1].id : lastId });
+    });
+
+    // Pulse endpoint — replaces .soul-pulse file writing
+    app.post('/api/pulse', (req, res) => {
+      try {
+        const { type, label } = req.body || {};
+        if (!type) return res.status(400).json({ error: 'Missing type' });
+
+        // Emit to event bus
+        this.engine.bus.safeEmit('pulse.written', { type, label, source: 'claude-code' });
+
+        // Also write legacy .soul-pulse file for backwards compatibility
+        const { writeFileSync } = require('fs');
+        const pulsePath = require('path').resolve(this.engine.soulPath, '.soul-pulse');
+        writeFileSync(pulsePath, `${type}:${label || ''}`);
+
+        res.json({ ok: true });
       } catch (err) {
         res.status(500).json({ error: err.message });
       }
@@ -337,17 +661,7 @@ export class SoulAPI {
       }
     });
 
-    app.get('/api/events', (req, res) => {
-      try {
-        const since = parseInt(req.query.since) || 0;
-        const events = this.bus
-          ? this.bus.getRecentEvents(50).filter(e => e.id > since)
-          : [];
-        res.json({ events });
-      } catch (err) {
-        res.status(500).json({ error: err.message });
-      }
-    });
+    // (v2 /api/events is defined above — removed duplicate)
 
     // Allostatic Identity Field — 8D state vector
     app.get('/api/field', (req, res) => {
@@ -693,6 +1007,40 @@ export class SoulAPI {
       if (!trader) return res.status(404).json({ error: 'Trader not initialized' });
       res.json({ ok: true, message: 'Trader run triggered — result will arrive via Telegram' });
       trader.runDailyTrader().catch(err => console.error(`  [trader] Manual trigger error: ${err.message}`));
+    });
+
+    // Subagent spawning — run parallel LLM sub-tasks
+    app.post('/api/subagents/spawn', async (req, res) => {
+      try {
+        if (!this.engine.subagents) {
+          return res.status(503).json({ error: 'Subagent manager not available (LLM not initialized)' });
+        }
+        const { agents } = req.body || {};
+        if (!agents || !Array.isArray(agents) || agents.length === 0) {
+          return res.status(400).json({ error: 'agents array required (each with role and goal)' });
+        }
+        // Validate each agent
+        for (const agent of agents) {
+          if (!agent.role || !agent.goal) {
+            return res.status(400).json({ error: 'Each agent must have role and goal' });
+          }
+        }
+        const results = await this.engine.subagents.spawn(agents);
+        res.json({ results, count: results.length });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.get('/api/subagents/status', (req, res) => {
+      try {
+        if (!this.engine.subagents) {
+          return res.json({ enabled: false, activeCount: 0 });
+        }
+        res.json({ enabled: true, ...this.engine.subagents.getStatus() });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     });
   }
 

@@ -185,4 +185,74 @@ export class SoulEventBus extends EventEmitter {
   get totalEvents() {
     return this.eventCount;
   }
+
+  // ── Soul Protocol v2: Replay Buffer + WebSocket Streaming ──
+
+  /**
+   * Subscribe a WebSocket client to live events.
+   * Inspired by Goose's SessionEventBus with replay buffer.
+   *
+   * @param {WebSocket} ws - WebSocket connection
+   * @param {number} lastEventId - Last event ID the client saw (for replay)
+   */
+  subscribeWs(ws, lastEventId = 0) {
+    // Replay missed events from in-memory log
+    if (lastEventId > 0) {
+      const missed = this.eventLog.filter(e => e.id > lastEventId);
+      for (const event of missed) {
+        try {
+          ws.send(JSON.stringify({ type: 'replay', event }));
+        } catch { /* client may have disconnected */ }
+      }
+    }
+
+    // Live streaming — forward all future events
+    const handler = (event) => {
+      try {
+        if (ws.readyState === 1) { // WebSocket.OPEN
+          ws.send(JSON.stringify({ type: 'live', event }));
+        }
+      } catch { /* best-effort */ }
+    };
+
+    // Listen to ALL events via a catch-all wrapper
+    const wrappedEmit = this.safeEmit.bind(this);
+    const originalEmit = this.safeEmit;
+
+    // Use a proxy listener on the event log
+    const intervalId = setInterval(() => {
+      if (ws.readyState !== 1) {
+        clearInterval(intervalId);
+        return;
+      }
+      // Check for new events since last sent
+      const lastSent = ws._lastEventId || lastEventId;
+      const newEvents = this.eventLog.filter(e => e.id > lastSent);
+      for (const event of newEvents) {
+        try {
+          ws.send(JSON.stringify({ type: 'live', event }));
+          ws._lastEventId = event.id;
+        } catch {
+          clearInterval(intervalId);
+          return;
+        }
+      }
+    }, 500); // Poll every 500ms (low overhead, near-realtime)
+
+    ws._lastEventId = lastEventId || (this.eventLog.length > 0 ? this.eventLog[this.eventLog.length - 1].id : 0);
+    ws._cleanupInterval = intervalId;
+
+    ws.on('close', () => {
+      clearInterval(intervalId);
+    });
+
+    return () => clearInterval(intervalId);
+  }
+
+  /**
+   * Get events since a given ID (for HTTP polling / SSE).
+   */
+  getEventsSince(lastId = 0, limit = 50) {
+    return this.eventLog.filter(e => e.id > lastId).slice(0, limit);
+  }
 }

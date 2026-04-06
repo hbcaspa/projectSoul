@@ -21,6 +21,7 @@ import { WhatsAppBridge } from './whatsapp.js';
 import { SemanticRouter } from './semantic-router.js';
 import { SoulEventBus } from './event-bus.js';
 import { SeedConsolidator } from './seed-consolidator.js';
+import { AutoSkill } from './auto-skill.js';
 import { initGithub } from './github-integration.js';
 import { StateVersioner } from './state-versioning.js';
 import { PerformanceDetector } from './anti-performance.js';
@@ -78,6 +79,14 @@ import { AutoUpdater } from './auto-updater.js';
 import { LocalEmbeddings } from './local-embeddings.js';
 import { HNSWIndex } from './hnsw-index.js';
 import { Cortex } from './cortex.js';
+import { SessionManager, SessionState } from './session-manager.js';
+import { RecipeEngine } from './recipe-engine.js';
+import { AutoCompactor } from './auto-compactor.js';
+import { MemoryExtractor } from './memory-extractor.js';
+import { SoulAdapter } from './soul-adapter.js';
+import { SandboxManager } from './sandbox.js';
+import { SubagentManager } from './subagent.js';
+import { ResearchPipeline } from './research-pipeline.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -85,6 +94,12 @@ export class SoulEngine {
     this.bus = new SoulEventBus({ debug: process.env.SOUL_BUS_DEBUG === 'true', soulPath });
     this.context = new SoulContext(soulPath);
     this.memory = new MemoryWriter(soulPath, { bus: this.bus });
+    this.sessionManager = null;
+    this.recipes = null;
+    this.compactor = null;
+    this.memoryExtractor = null;
+    this.soulAdapter = null;
+    this.sandbox = null;
     this.llm = null;
     this.mcp = null;
     this.telegram = null;
@@ -116,6 +131,7 @@ export class SoulEngine {
     this.localEmbeddings = null;
     this.hnswIndex       = null;
     this.cortex          = null;
+    this.research        = null;
     this.whatsapp = null;
     this.api = null;
     this.nodeName = process.env.SOUL_NODE_NAME || 'server';
@@ -155,6 +171,8 @@ export class SoulEngine {
     this.tom = null;
     this.claudeContextWriter = null;
     this.running = false;
+    this.hibernating = false;
+    this._hibernateTimer = null;
   }
 
   /** Initialize LLM and context without starting channels */
@@ -298,6 +316,71 @@ export class SoulEngine {
         soulPath: this.soulPath,
       });
     }
+
+    // --- Soul Protocol v2 Modules ---
+
+    // Session Manager — SQLite-backed session persistence + state machine
+    try {
+      this.sessionManager = new SessionManager(this.soulPath, { bus: this.bus });
+      this.sessionManager.init();
+      const crashed = this.sessionManager.findCrashedSession();
+      if (crashed) {
+        console.log(`  Sessions:  ⚠ Session ${crashed.number} was not properly closed (state: ${crashed.state})`);
+        this.sessionManager.recoverSession(crashed.id);
+      }
+      const stats = this.sessionManager.getStats();
+      console.log(`  Sessions:  ${stats.total} total, ${stats.completionRate} completion rate`);
+    } catch (err) {
+      console.warn(`  Sessions:  failed to init (${err.message})`);
+    }
+
+    // Recipe Engine — YAML-based versionable skills
+    try {
+      this.recipes = new RecipeEngine(this.soulPath, { bus: this.bus, llm: this.llm });
+      this.recipes.load();
+    } catch (err) {
+      console.warn(`  Recipes:   failed to load (${err.message})`);
+    }
+
+    // Auto-Compactor — multi-strategy context compression
+    try {
+      this.compactor = new AutoCompactor({
+        llm: this.llm,
+        bus: this.bus,
+        contextLimit: parseInt(process.env.CONTEXT_LIMIT) || 200000,
+      });
+      console.log(`  Compactor: ready (limit: ${this.compactor.contextLimit} tokens)`);
+    } catch (err) {
+      console.warn(`  Compactor: failed to init (${err.message})`);
+    }
+
+    // Memory Extractor — automatic background memory extraction (forked agent pattern)
+    try {
+      this.memoryExtractor = new MemoryExtractor({
+        llm: this.llm,
+        db: this.db,
+        bus: this.bus,
+        soulPath: this.soulPath,
+      });
+      this.memoryExtractor.registerListeners();
+    } catch (err) {
+      console.warn(`  MemExtract: failed to init (${err.message})`);
+    }
+
+    // Soul Adapter — provider-agnostic identity compilation
+    try {
+      this.soulAdapter = new SoulAdapter(this.soulPath, { bus: this.bus });
+      this.soulAdapter.load();
+      const providers = this.soulAdapter.listProviders();
+      console.log(`  Adapter:   ${providers.length} providers (${providers.map(p => p.id).join(', ')})`);
+    } catch (err) {
+      console.warn(`  Adapter:   failed to init (${err.message})`);
+    }
+
+    // Sandbox — isolated code execution (process + optional Docker)
+    this.sandbox = new SandboxManager({ bus: this.bus, soulPath: this.soulPath });
+    const dockerAvail = this.sandbox.isDockerAvailable();
+    console.log(`  Sandbox:   active (docker: ${dockerAvail ? 'available' : 'not found'})`);
 
     return { name: this.context.extractName(), lang: this.context.language, model };
   }
@@ -707,6 +790,33 @@ export class SoulEngine {
       }
 
       console.log('  Consolidator: active (fast: 30min/20 events, deep: 4h)');
+    }
+
+    // Auto-Skill — learns from completed sessions, generates recipes
+    if (this.llm && this.sessionManager) {
+      this.autoSkill = new AutoSkill({
+        soulPath: this.soulPath,
+        sessionManager: this.sessionManager,
+        llm: this.llm,
+        bus: this.bus,
+      });
+      await this.autoSkill.init();
+    }
+
+    // Research Pipeline — multi-source structured research
+    if (this.llm) {
+      this.research = new ResearchPipeline({ llm: this.llm, bus: this.bus, soulPath: this.soulPath });
+      console.log('  Research:  active (multi-source pipeline)');
+    }
+
+    // Subagent Manager — spawn parallel sub-agents for concurrent tasks
+    if (this.llm) {
+      this.subagents = new SubagentManager({
+        llm: this.llm,
+        bus: this.bus,
+        soulPath: this.soulPath,
+      });
+      console.log('  Subagents: active (parallel LLM sub-tasks)');
     }
 
     // Event Bus — reactive handlers
@@ -1614,8 +1724,12 @@ export class SoulEngine {
    */
   _registerHandlers() {
     // Handler 1: Mood shift → adjust impulse timing
+    // Cooldown prevents feedback loop: mood.changed → reschedule → field tick → mood.changed → ...
+    let lastMoodReschedule = 0;
+    const MOOD_RESCHEDULE_COOLDOWN = 300000; // 5 minutes
     this.bus.on('mood.changed', (event) => {
       if (!this.impulse || !this.impulse.running) return;
+      if (Date.now() - lastMoodReschedule < MOOD_RESCHEDULE_COOLDOWN) return;
 
       // High energy + no recent impulse → shorten next delay
       if (event.mood.energy > 0.7 && this.impulse.state.timeSinceLastImpulse() > 1800000) {
@@ -1623,12 +1737,26 @@ export class SoulEngine {
           clearTimeout(this.impulse.timer);
           const shortened = this.impulse._calculateDelay() * 0.7;
           this.impulse.timer = setTimeout(() => this.impulse._loop(), shortened);
+          lastMoodReschedule = Date.now();
           console.log(`  [bus:handler] Mood energy high → impulse delay shortened to ${Math.round(shortened / 60000)}min`);
         }
       }
     });
 
-    // Handler 2: New interest detected → create Knowledge Graph entity
+    // Handler 2: Auto-hibernation — sleep 5min after session ends, wake on session start
+    this.bus.on('session.transition', (event) => {
+      if (event.to === 'completed') {
+        if (this._hibernateTimer) clearTimeout(this._hibernateTimer);
+        this._hibernateTimer = setTimeout(() => this.hibernate(), 300000); // 5 min
+        console.log('  [bus:handler] Session completed → hibernation in 5 min');
+      }
+    });
+    this.bus.on('session.started', () => {
+      if (this._hibernateTimer) { clearTimeout(this._hibernateTimer); this._hibernateTimer = null; }
+      this.wake();
+    });
+
+    // Handler 3: New interest detected → create Knowledge Graph entity
     this.bus.on('interest.detected', async (event) => {
       if (!event.newInterests || event.newInterests.length === 0) return;
       if (!this.mcp || !this.mcp.hasTools()) return;
@@ -1679,8 +1807,46 @@ export class SoulEngine {
     });
   }
 
+  // ── Hibernation — sleep when idle, wake on session start ────────────────
+
+  async hibernate() {
+    if (this.hibernating) return;
+    this.hibernating = true;
+    console.log('  [engine] Entering hibernation mode — non-essential systems pausing');
+
+    // Stop non-essential systems
+    if (this.impulse) await this.impulse.stop();
+    if (this.redTeam) await this.redTeam.stop();
+    if (this.reflection) this.reflection.stop();
+    if (this.cortex) await this.cortex.shutdown?.();
+    if (this.streamingConsolidator) this.streamingConsolidator.stop?.();
+    if (this.telegram) await this.telegram.stop?.();
+
+    this.bus.safeEmit('engine.hibernate', { source: 'engine' });
+    await writePulse(this.soulPath, 'sleep', 'Hibernation — waiting for session', this.bus);
+  }
+
+  async wake() {
+    if (!this.hibernating) return;
+    this.hibernating = false;
+    console.log('  [engine] Waking from hibernation — restarting systems');
+
+    // Restart non-essential systems
+    if (this.impulse) await this.impulse.start();
+    if (this.redTeam) await this.redTeam.start();
+    if (this.reflection) this.reflection.start?.();
+    if (this.cortex) this.cortex.start?.();
+    if (this.streamingConsolidator) this.streamingConsolidator.start?.();
+    if (this.telegram) await this.telegram.start?.();
+
+    this.bus.safeEmit('engine.wake', { source: 'engine' });
+    await writePulse(this.soulPath, 'wake', 'Waking from hibernation', this.bus);
+  }
+
   async stop() {
     this.running = false;
+    this.hibernating = false;
+    if (this._hibernateTimer) clearTimeout(this._hibernateTimer);
     await writePulse(this.soulPath, 'sleep', 'Engine shutting down', this.bus);
 
     // Final deep consolidation before shutdown

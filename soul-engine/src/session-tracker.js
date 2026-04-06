@@ -32,14 +32,16 @@ export class SessionTracker {
     let number = null;
     let startTime = null;
 
-    try {
-      const content = await readFile(resolve(this.soulPath, '.session-active'), 'utf8');
-      active = true;
-      const sessionMatch = content.match(/session:(\d+)/);
-      const startMatch = content.match(/start:(.+)/);
-      if (sessionMatch) number = parseInt(sessionMatch[1]);
-      if (startMatch) startTime = startMatch[1].trim();
-    } catch { /* not active */ }
+    // Pure v2: read from SessionManager (engine DB), not .session-active file
+    const sm = this.engine.sessionManager;
+    if (sm) {
+      const session = sm.getCurrentSession();
+      if (session) {
+        active = true;
+        number = session.number;
+        startTime = session.started_at;
+      }
+    }
 
     let duration = null;
     if (startTime) {

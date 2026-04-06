@@ -24,7 +24,7 @@ import { resolve, basename } from 'path';
 
 // ── Configuration ────────────────────────────────────────────────
 
-const SCAN_INTERVAL = 3600000;  // Full scan every 1 hour
+const SCAN_INTERVAL = 21600000;  // Full scan every 6 hours (was 1h — too noisy)
 const SAVE_INTERVAL = 600000;   // Persist state every 10 min
 const STATE_FILE = '.soul-redteam.json';
 const MAX_FINDINGS = 200;

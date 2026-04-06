@@ -108,6 +108,121 @@ export class SoulAPI {
     const { app } = this;
     const soulPath = this.engine.soulPath;
 
+    // Root — interactive API dashboard
+    app.get('/', (req, res) => {
+      res.send(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Soul Engine</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0A0C14;color:#c8ccd4;font-family:system-ui,-apple-system,sans-serif;padding:20px;max-width:900px;margin:0 auto}
+h1{color:#00FFC8;font-size:22px;margin-bottom:4px;text-shadow:0 0 20px rgba(0,255,200,0.3)}
+.sub{color:#666;font-size:12px;margin-bottom:24px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+.card{background:#12142A;border:1px solid #1e2140;border-radius:10px;padding:14px}
+.card h3{color:#8B80F0;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px}
+.card pre{font-size:11px;color:#9ca3af;white-space:pre-wrap;max-height:200px;overflow:auto}
+.card .val{color:#00FFC8;font-size:18px;font-weight:700}
+button{background:#1e2140;border:1px solid #2a2d50;color:#00FFC8;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:11px;font-family:inherit}
+button:hover{background:#2a2d50}
+input,select{background:#0A0C14;border:1px solid #2a2d50;color:#c8ccd4;padding:6px 10px;border-radius:6px;font-size:11px;font-family:inherit;width:100%}
+textarea{background:#0A0C14;border:1px solid #2a2d50;color:#c8ccd4;padding:8px;border-radius:6px;font-size:11px;font-family:'JetBrains Mono',monospace;width:100%;height:80px;resize:vertical}
+.row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+#out{background:#0A0C14;border:1px solid #1e2140;border-radius:8px;padding:12px;font-size:11px;font-family:'JetBrains Mono',monospace;max-height:300px;overflow:auto;white-space:pre-wrap;color:#9ca3af;margin-top:12px}
+.tag{display:inline-block;background:#1e2140;color:#8B80F0;padding:2px 8px;border-radius:4px;font-size:10px;margin:2px}
+</style></head><body>
+<h1>Soul Engine</h1>
+<div class="sub">API Dashboard — alle Endpoints interaktiv testen</div>
+
+<div class="grid">
+<div class="card"><h3>Status</h3><div id="status">Loading...</div></div>
+<div class="card"><h3>Session</h3><div id="session">Loading...</div></div>
+</div>
+
+<div class="card" style="margin-bottom:12px">
+<h3>Sandbox — Code ausführen</h3>
+<div class="row">
+<select id="lang" style="width:120px"><option>javascript</option><option>python</option><option>bash</option></select>
+<button onclick="runSandbox()">▶ Run</button>
+</div>
+<textarea id="code">console.log("Hello from Soul Sandbox!")</textarea>
+</div>
+
+<div class="card" style="margin-bottom:12px">
+<h3>Subagents — Parallele LLM Tasks</h3>
+<div class="row">
+<input id="agent1" placeholder="Agent 1 Aufgabe..." value="Erkläre Quantencomputing in 2 Sätzen">
+</div>
+<div class="row">
+<input id="agent2" placeholder="Agent 2 Aufgabe..." value="Schreibe ein Haiku über KI">
+</div>
+<button onclick="runSubagents()">⚡ Spawn</button>
+</div>
+
+<div class="card" style="margin-bottom:12px">
+<h3>Session Search</h3>
+<div class="row">
+<input id="q" placeholder="Suchbegriff..." value="migration">
+<button onclick="searchSessions()">🔍 Suchen</button>
+</div>
+</div>
+
+<div class="card" style="margin-bottom:12px">
+<h3>Hibernation</h3>
+<div class="row">
+<button onclick="callAPI('/api/engine/hibernate','POST')">💤 Hibernate</button>
+<button onclick="callAPI('/api/engine/wake','POST')">☀️ Wake</button>
+<button onclick="callAPI('/api/skills/registry')">📦 Skill Registry</button>
+<button onclick="callAPI('/api/skills/auto')">🤖 Auto Skills</button>
+</div>
+</div>
+
+<div id="out"></div>
+
+<script>
+const KEY=new URLSearchParams(location.search).get('key')||'';
+const H=KEY?{'Authorization':'Bearer '+KEY,'Content-Type':'application/json'}:{'Content-Type':'application/json'};
+
+async function callAPI(url,method='GET',body){
+  out.textContent='Loading...';
+  try{
+    const r=await fetch(url,{method,headers:H,body:body?JSON.stringify(body):undefined});
+    const d=await r.json();
+    out.textContent=JSON.stringify(d,null,2);
+  }catch(e){out.textContent='Error: '+e.message}
+}
+
+async function runSandbox(){
+  callAPI('/api/sandbox/execute','POST',{code:code.value,language:lang.value,timeout:10000});
+}
+
+async function runSubagents(){
+  callAPI('/api/subagents/spawn','POST',{agents:[
+    {role:'Agent 1',goal:agent1.value},
+    {role:'Agent 2',goal:agent2.value}
+  ]});
+}
+
+async function searchSessions(){
+  callAPI('/api/sessions/search?q='+encodeURIComponent(q.value));
+}
+
+async function loadStatus(){
+  try{
+    const r=await fetch('/api/status',{headers:H});
+    if(!r.ok){document.getElementById('status').innerHTML='<div style="color:#f66">Auth failed ('+r.status+')</div>';return;}
+    const d=await r.json();
+    document.getElementById('status').innerHTML='<div class="val">'+d.name+'</div>Hibernating: '+(d.hibernating?'Yes':'No')+'<br>Model: '+(d.model||'?');
+  }catch(e){document.getElementById('status').textContent='Error: '+e.message}
+  try{
+    const r=await fetch('/api/sessions/current',{headers:H});
+    if(r.ok){const d=await r.json();document.getElementById('session').innerHTML='<div class="val">#'+d.number+'</div>State: '+d.state;}
+    else{document.getElementById('session').innerHTML='<div style="color:#666">No active session</div>';}
+  }catch{document.getElementById('session').textContent='—'}
+}
+loadStatus();setInterval(loadStatus,10000);
+</script></body></html>`);
+    });
+
     // Status
     app.get('/api/status', async (req, res) => {
       try {
@@ -436,6 +551,23 @@ export class SoulAPI {
         res.json(result);
       } catch (err) {
         res.status(400).json({ error: err.message });
+      }
+    });
+
+    // Research Pipeline — multi-source structured research
+    app.post('/api/research', async (req, res) => {
+      try {
+        if (!this.engine.research) return res.status(404).json({ error: 'Research pipeline not available' });
+        const { topic, depth, sources, saveToMemory } = req.body || {};
+        if (!topic) return res.status(400).json({ error: 'Missing required field: topic' });
+        const report = await this.engine.research.research(topic, {
+          depth: depth || 'standard',
+          sources: sources || ['web', 'news', 'technical'],
+          saveToMemory: saveToMemory || false,
+        });
+        res.json(report);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
       }
     });
 
@@ -1041,6 +1173,29 @@ export class SoulAPI {
       } catch (err) {
         res.status(500).json({ error: err.message });
       }
+    });
+
+    // ── Sandbox — Isolated Code Execution ──────────────
+
+    app.post('/api/sandbox/execute', async (req, res) => {
+      const sandbox = this.engine.sandbox;
+      if (!sandbox) return res.status(503).json({ error: 'Sandbox not initialized' });
+
+      const { code, language = 'javascript', timeout = 30000, memoryMB = 256, preferDocker = false } = req.body;
+      if (!code) return res.status(400).json({ error: 'code is required' });
+
+      try {
+        const result = await sandbox.execute({ code, language, timeout, memoryMB, preferDocker });
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.get('/api/sandbox/status', (req, res) => {
+      const sandbox = this.engine.sandbox;
+      if (!sandbox) return res.status(503).json({ error: 'Sandbox not initialized' });
+      res.json(sandbox.getStatus());
     });
   }
 

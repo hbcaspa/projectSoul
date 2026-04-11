@@ -1197,6 +1197,174 @@ loadStatus();setInterval(loadStatus,10000);
       if (!sandbox) return res.status(503).json({ error: 'Sandbox not initialized' });
       res.json(sandbox.getStatus());
     });
+
+    // ── DeepTutor-Inspired: Unified Context, Profile, Capabilities, StreamBus ──
+
+    // UnifiedContext — snapshot of the current context carrier
+    app.get('/api/context', (req, res) => {
+      try {
+        if (!this.engine.unifiedContext) return res.json({ enabled: false });
+        res.json({ enabled: true, ...this.engine.unifiedContext.toJSON() });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // AutoProfile — self-building interaction profile
+    app.get('/api/profile', (req, res) => {
+      try {
+        if (!this.engine.autoProfile) return res.json({ enabled: false });
+        res.json({
+          enabled: true,
+          stats: this.engine.autoProfile.getStats(),
+          profile: this.engine.autoProfile.getProfile(),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Force profile rebuild
+    app.post('/api/profile/rebuild', async (req, res) => {
+      try {
+        if (!this.engine.autoProfile) return res.status(503).json({ error: 'AutoProfile not available' });
+        await this.engine.autoProfile.rebuild();
+        res.json({ ok: true, profile: this.engine.autoProfile.getProfile() });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // CapabilityRegistry — list all registered capabilities
+    app.get('/api/capabilities', (req, res) => {
+      try {
+        if (!this.engine.capabilityRegistry) return res.json({ enabled: false, capabilities: [] });
+        res.json({
+          enabled: true,
+          stats: this.engine.capabilityRegistry.getStats(),
+          capabilities: this.engine.capabilityRegistry.list(),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Route a text to the best capability (dry-run, no execution)
+    app.post('/api/capabilities/route', (req, res) => {
+      try {
+        if (!this.engine.capabilityRegistry) return res.json({ match: null });
+        const { text } = req.body || {};
+        if (!text) return res.status(400).json({ error: 'text required' });
+        const match = this.engine.capabilityRegistry.route(text, this.engine.unifiedContext);
+        res.json({
+          match: match ? {
+            id: match.capability.id,
+            name: match.capability.name,
+            type: match.capability.type,
+            score: match.score,
+          } : null,
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Execute via capability registry (auto-routes to best match)
+    app.post('/api/capabilities/execute', async (req, res) => {
+      try {
+        if (!this.engine.capabilityRegistry) return res.status(503).json({ error: 'Registry not available' });
+        const { text } = req.body || {};
+        if (!text) return res.status(400).json({ error: 'text required' });
+        const result = await this.engine.capabilityRegistry.execute(text, this.engine.unifiedContext);
+        if (!result) return res.status(404).json({ error: 'No matching capability found' });
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // StreamBus — list active streams
+    app.get('/api/streams', (req, res) => {
+      try {
+        if (!this.engine.streamBus) return res.json({ enabled: false });
+        const stats = this.engine.streamBus.getStats();
+        const active = [];
+        for (const [id, stream] of this.engine.streamBus.activeStreams) {
+          active.push({ id, type: stream.type, chunkCount: stream.chunks.length, createdAt: stream.createdAt });
+        }
+        res.json({ enabled: true, stats, activeStreams: active });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // StreamBus — get stream content (replay)
+    app.get('/api/streams/:id', (req, res) => {
+      try {
+        if (!this.engine.streamBus) return res.status(503).json({ error: 'StreamBus not available' });
+        const stream = this.engine.streamBus.getStream(req.params.id);
+        if (!stream) return res.status(404).json({ error: 'Stream not found' });
+        const sinceSeq = parseInt(req.query.since) || 0;
+        const chunks = this.engine.streamBus.getChunksSince(req.params.id, sinceSeq);
+        res.json({ stream: { id: stream.id, type: stream.type, status: stream.status }, chunks });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // StreamBus — SSE stream for a specific streamId (live token streaming)
+    app.get('/api/streams/:id/live', (req, res) => {
+      try {
+        if (!this.engine.streamBus) return res.status(503).json({ error: 'StreamBus not available' });
+        const stream = this.engine.streamBus.getStream(req.params.id);
+        if (!stream) return res.status(404).json({ error: 'Stream not found' });
+
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no',
+        });
+
+        const sinceSeq = parseInt(req.query.since) || 0;
+
+        // Replay missed chunks
+        const missed = this.engine.streamBus.getChunksSince(req.params.id, sinceSeq);
+        for (const chunk of missed) {
+          res.write(`id: ${chunk.seq}\ndata: ${JSON.stringify(chunk)}\n\n`);
+        }
+
+        // Live streaming
+        const onChunk = ({ streamId, chunk }) => {
+          if (streamId !== req.params.id) return;
+          res.write(`id: ${chunk.seq}\ndata: ${JSON.stringify(chunk)}\n\n`);
+        };
+        const onComplete = ({ streamId }) => {
+          if (streamId !== req.params.id) return;
+          res.write(`event: complete\ndata: {}\n\n`);
+          cleanup();
+          res.end();
+        };
+        const onError = ({ streamId, error }) => {
+          if (streamId !== req.params.id) return;
+          res.write(`event: error\ndata: ${JSON.stringify({ error })}\n\n`);
+          cleanup();
+          res.end();
+        };
+        const cleanup = () => {
+          this.engine.streamBus.off('stream.chunk', onChunk);
+          this.engine.streamBus.off('stream.completed', onComplete);
+          this.engine.streamBus.off('stream.error', onError);
+        };
+
+        this.engine.streamBus.on('stream.chunk', onChunk);
+        this.engine.streamBus.on('stream.completed', onComplete);
+        this.engine.streamBus.on('stream.error', onError);
+        req.on('close', cleanup);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
   }
 
   // ── WebSocket ──────────────────────────────────────

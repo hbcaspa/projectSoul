@@ -87,6 +87,10 @@ import { SoulAdapter } from './soul-adapter.js';
 import { SandboxManager } from './sandbox.js';
 import { SubagentManager } from './subagent.js';
 import { ResearchPipeline } from './research-pipeline.js';
+import { UnifiedContext } from './unified-context.js';
+import { AutoProfile } from './auto-profile.js';
+import { CapabilityRegistry } from './capability-registry.js';
+import { StreamBus } from './stream-bus.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -173,6 +177,12 @@ export class SoulEngine {
     this.running = false;
     this.hibernating = false;
     this._hibernateTimer = null;
+
+    // DeepTutor-inspired modules
+    this.unifiedContext = null;   // Single context carrier for all subsystems
+    this.autoProfile = null;     // Self-updating profile from sessions
+    this.capabilityRegistry = null; // Capability routing + registry
+    this.streamBus = new StreamBus(); // Dedicated streaming channel (separate from EventBus)
   }
 
   /** Initialize LLM and context without starting channels */
@@ -1004,6 +1014,103 @@ export class SoulEngine {
     } else {
       console.log('  Cortex:    disabled');
     }
+
+    // ── DeepTutor-Inspired Modules ─────────────────────
+
+    // 1. UnifiedContext — single context carrier for all subsystems
+    this.unifiedContext = new UnifiedContext({
+      sessionId: this.sessionManager?.getCurrentSession()?.id,
+      soulName: this.context.extractName(),
+      language: this.context.language,
+      bus: this.bus,
+    });
+    // Hydrate with current session if available
+    const currentSession = this.sessionManager?.getCurrentSession();
+    if (currentSession) this.unifiedContext.updateSession(currentSession);
+    // Inject identity from parsed seed
+    try {
+      const { parseSeed, extractSoulInfo } = await import('./seed-parser.js');
+      const parsed = parseSeed(this.context.seed);
+      const info = extractSoulInfo(parsed);
+      this.unifiedContext.updateIdentity(info);
+    } catch { /* best-effort */ }
+    console.log(`  Context:   unified (${this.unifiedContext.soulName}, v${this.unifiedContext._version})`);
+
+    // 2. AutoProfile — self-updating profile from sessions
+    this.autoProfile = new AutoProfile({
+      soulPath: this.soulPath,
+      bus: this.bus,
+      llm: this.llm,
+      sessionManager: this.sessionManager,
+    });
+    this.autoProfile.registerListeners();
+    // Inject profile into unified context
+    this.unifiedContext.updateMemory({ profile: this.autoProfile.getProfile() });
+    const profileStats = this.autoProfile.getStats();
+    console.log(`  Profile:   ${profileStats.hasProfile ? `v${profileStats.version}` : 'building'} (${profileStats.traits} traits)`);
+
+    // 3. CapabilityRegistry — dynamic capability routing
+    this.capabilityRegistry = new CapabilityRegistry({ bus: this.bus, llm: this.llm });
+
+    // Register builtin capabilities
+    this.capabilityRegistry.register('chat', {
+      name: 'Chat',
+      description: 'Direct conversation with the soul',
+      type: 'builtin',
+      triggers: ['chat', 'talk', 'speak'],
+      priority: 10,
+      execute: async (text, ctx) => ({ type: 'chat', text }),
+    });
+
+    if (this.research) {
+      this.capabilityRegistry.register('research', {
+        name: 'Deep Research',
+        description: 'Multi-source structured research',
+        type: 'builtin',
+        triggers: ['research', 'investigate', 'forsche', 'recherche'],
+        priority: 5,
+        execute: async (text, ctx) => this.research.research(text),
+      });
+    }
+
+    if (this.sandbox) {
+      this.capabilityRegistry.register('sandbox', {
+        name: 'Code Sandbox',
+        description: 'Execute code in isolated sandbox',
+        type: 'builtin',
+        triggers: ['run', 'execute', 'sandbox', 'code'],
+        priority: 3,
+        execute: async (text, ctx) => this.sandbox.execute({ code: text, language: 'javascript' }),
+      });
+    }
+
+    // Register all recipes as capabilities
+    if (this.recipes) {
+      const recipeCount = this.capabilityRegistry.registerRecipes(this.recipes);
+      console.log(`  Registry:  ${this.capabilityRegistry.capabilities.size} capabilities (${recipeCount} from recipes)`);
+    } else {
+      console.log(`  Registry:  ${this.capabilityRegistry.capabilities.size} capabilities`);
+    }
+
+    // 4. StreamBus — already created in constructor, log status
+    console.log('  StreamBus: active (dedicated streaming channel)');
+
+    // Keep UnifiedContext in sync with session transitions
+    this.bus.on('session.transition', (event) => {
+      if (this.unifiedContext) {
+        this.unifiedContext.updateSession({
+          number: event.sessionNumber,
+          state: event.to,
+        });
+      }
+    });
+
+    // Keep UnifiedContext profile in sync
+    this.bus.on('profile.updated', () => {
+      if (this.unifiedContext && this.autoProfile) {
+        this.unifiedContext.updateMemory({ profile: this.autoProfile.getProfile() });
+      }
+    });
 
     this.running = true;
     console.log('');

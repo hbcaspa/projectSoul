@@ -91,6 +91,12 @@ import { UnifiedContext } from './unified-context.js';
 import { AutoProfile } from './auto-profile.js';
 import { CapabilityRegistry } from './capability-registry.js';
 import { StreamBus } from './stream-bus.js';
+import { ReActLoop } from './react-loop.js';
+import { LifecycleHooks } from './lifecycle-hooks.js';
+import { ApprovalGate } from './approval-gate.js';
+import { EventCoalescer } from './event-coalescer.js';
+import { MessageGateway } from './message-gateway.js';
+import { CheapHeartbeat } from './cheap-heartbeat.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -183,6 +189,14 @@ export class SoulEngine {
     this.autoProfile = null;     // Self-updating profile from sessions
     this.capabilityRegistry = null; // Capability routing + registry
     this.streamBus = new StreamBus(); // Dedicated streaming channel (separate from EventBus)
+
+    // OpenClaw-inspired modules
+    this.reactLoop = null;       // ReAct agent loop (iterative tool use)
+    this.hooks = null;           // Lifecycle hooks (before/after tool calls)
+    this.approvalGate = null;    // Human-in-the-loop approval for risky actions
+    this.coalescer = null;       // Event batching & backpressure
+    this.gateway = null;         // Central message router
+    this.cheapHeartbeat = null;  // Cheap-checks-first heartbeat
   }
 
   /** Initialize LLM and context without starting channels */
@@ -1094,6 +1108,107 @@ export class SoulEngine {
 
     // 4. StreamBus — already created in constructor, log status
     console.log('  StreamBus: active (dedicated streaming channel)');
+
+    // ── OpenClaw-Inspired Modules ───────────────────────
+
+    // 5. LifecycleHooks — interceptors at agent lifecycle points
+    this.hooks = new LifecycleHooks({ bus: this.bus });
+
+    // Register default hooks: logging for all tool calls
+    this.hooks.register('before_tool_call', 'audit-log', {
+      priority: 100,
+      handler: (ctx) => {
+        if (this.bus) {
+          this.bus.safeEmit('hook.tool_call', {
+            source: 'lifecycle-hooks',
+            tool: ctx.tool,
+            iteration: ctx.iteration,
+          });
+        }
+        return {};
+      },
+    });
+    console.log('  Hooks:     active (lifecycle interceptors)');
+
+    // 6. ApprovalGate — human-in-the-loop for risky actions
+    this.approvalGate = new ApprovalGate({
+      bus: this.bus,
+      telegram: this.telegram,
+      timeout: parseInt(process.env.APPROVAL_TIMEOUT || '60000'),
+    });
+    console.log(`  Gate:      active (${this.approvalGate.riskyTools.size} risky tools)`);
+
+    // 7. ReAct Agent Loop — iterative reason+act cycle
+    this.reactLoop = new ReActLoop({
+      llm: this.llm,
+      mcp: this.mcp,
+      bus: this.bus,
+      hooks: this.hooks,
+      gate: this.approvalGate,
+    });
+    console.log('  ReAct:     active (iterative agent loop)');
+
+    // 8. EventCoalescer — batch events & backpressure
+    this.coalescer = new EventCoalescer({ bus: this.bus });
+
+    // Coalesce mood changes (prevent rapid-fire reschedules)
+    this.coalescer.register('mood.changed', async (batch) => {
+      // Only process the latest mood change from the batch
+      const latest = batch[batch.length - 1];
+      if (this.impulse && latest.mood) {
+        console.log(`  [coalescer] Mood batch: ${batch.length} events → processing latest`);
+      }
+    }, { windowMs: 5000, dedup: () => 'mood' });
+
+    // Coalesce memory extraction triggers
+    this.coalescer.register('message.responded', async (batch) => {
+      // Batch memory extraction instead of per-message
+      if (this.memoryExtractor && batch.length > 0) {
+        const combined = batch.map(e => e.text || '').filter(Boolean).join('\n');
+        if (combined.length > 50) {
+          this.memoryExtractor.queueExtraction(combined, 'batched_responses');
+        }
+      }
+    }, { windowMs: 10000, maxBatch: 5 });
+
+    console.log('  Coalescer: active (event batching & backpressure)');
+
+    // 9. MessageGateway — central message router
+    this.gateway = new MessageGateway({ bus: this.bus, engine: this });
+
+    // Register active channels
+    if (this.telegram) {
+      this.gateway.registerChannel('telegram', {
+        send: (text, opts) => this.telegram.send(text, opts),
+        type: 'interactive',
+        active: true,
+      });
+    }
+    if (this.whatsapp) {
+      this.gateway.registerChannel('whatsapp', {
+        send: (text, opts) => this.whatsapp.sendMessage(opts?.chatId || opts?.jid, text),
+        type: 'interactive',
+        active: true,
+      });
+    }
+    this.gateway.registerChannel('api', {
+      send: (text) => text, // API responses are returned directly
+      type: 'interactive',
+      active: true,
+    });
+
+    const gwChannels = this.gateway.channels.size;
+    console.log(`  Gateway:   active (${gwChannels} channel${gwChannels !== 1 ? 's' : ''})`);
+
+    // 10. CheapHeartbeat — two-tier heartbeat (cheap checks first)
+    this.cheapHeartbeat = new CheapHeartbeat({
+      soulPath: this.soulPath,
+      bus: this.bus,
+      mcp: this.mcp,
+      llm: this.llm,
+      heartbeat: this.heartbeat,
+    });
+    console.log(`  CheapHB:   active (${this.cheapHeartbeat.checks.length} pre-checks, LLM only on findings)`);
 
     // Keep UnifiedContext in sync with session transitions
     this.bus.on('session.transition', (event) => {

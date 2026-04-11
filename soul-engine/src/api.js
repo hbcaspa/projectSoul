@@ -1312,6 +1312,133 @@ loadStatus();setInterval(loadStatus,10000);
       }
     });
 
+    // ── OpenClaw-Inspired: ReAct Loop, Hooks, Gate, Gateway, CheapHB ──
+
+    // ReAct Loop — run an iterative agent task
+    app.post('/api/react/run', async (req, res) => {
+      try {
+        if (!this.engine.reactLoop) return res.status(503).json({ error: 'ReAct loop not available' });
+        const { message, maxIterations, timeout } = req.body || {};
+        if (!message) return res.status(400).json({ error: 'message required' });
+
+        const { buildConversationPrompt } = await import('./prompt.js');
+        await this.engine.context.load();
+        const systemPrompt = buildConversationPrompt(this.engine.context);
+
+        const result = await this.engine.reactLoop.run(systemPrompt, [], message, {
+          maxIterations: maxIterations || 10,
+          timeout: timeout || 120000,
+        });
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.get('/api/react/stats', (req, res) => {
+      try {
+        if (!this.engine.reactLoop) return res.json({ enabled: false });
+        res.json({ enabled: true, ...this.engine.reactLoop.getStats() });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Lifecycle Hooks — list and manage
+    app.get('/api/hooks', (req, res) => {
+      try {
+        if (!this.engine.hooks) return res.json({ enabled: false });
+        res.json({ enabled: true, hooks: this.engine.hooks.list(), stats: this.engine.hooks.getStats() });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Approval Gate — stats and risky tool management
+    app.get('/api/gate', (req, res) => {
+      try {
+        if (!this.engine.approvalGate) return res.json({ enabled: false });
+        res.json({
+          enabled: true,
+          stats: this.engine.approvalGate.getStats(),
+          riskyTools: [...this.engine.approvalGate.riskyTools],
+          safeTools: [...this.engine.approvalGate.safeTools].slice(0, 20),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Add/remove risky tools
+    app.post('/api/gate/risky', (req, res) => {
+      try {
+        if (!this.engine.approvalGate) return res.status(503).json({ error: 'Gate not available' });
+        const { tool, action } = req.body || {};
+        if (!tool) return res.status(400).json({ error: 'tool required' });
+        if (action === 'safe') {
+          this.engine.approvalGate.addSafeTool(tool);
+        } else {
+          this.engine.approvalGate.addRiskyTool(tool);
+        }
+        res.json({ ok: true, tool, riskyTools: [...this.engine.approvalGate.riskyTools] });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Event Coalescer — stats
+    app.get('/api/coalescer', (req, res) => {
+      try {
+        if (!this.engine.coalescer) return res.json({ enabled: false });
+        res.json({ enabled: true, ...this.engine.coalescer.getStats() });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Message Gateway — status
+    app.get('/api/gateway', (req, res) => {
+      try {
+        if (!this.engine.gateway) return res.json({ enabled: false });
+        res.json({ enabled: true, ...this.engine.gateway.getStatus() });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Gateway broadcast
+    app.post('/api/gateway/broadcast', async (req, res) => {
+      try {
+        if (!this.engine.gateway) return res.status(503).json({ error: 'Gateway not available' });
+        const { text, channelType } = req.body || {};
+        if (!text) return res.status(400).json({ error: 'text required' });
+        const results = await this.engine.gateway.broadcast(text, { channelType });
+        res.json({ results });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Cheap Heartbeat — run checks or get stats
+    app.get('/api/cheap-heartbeat', (req, res) => {
+      try {
+        if (!this.engine.cheapHeartbeat) return res.json({ enabled: false });
+        res.json({ enabled: true, ...this.engine.cheapHeartbeat.getStats() });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.post('/api/cheap-heartbeat/run', async (req, res) => {
+      try {
+        if (!this.engine.cheapHeartbeat) return res.status(503).json({ error: 'CheapHeartbeat not available' });
+        const result = await this.engine.cheapHeartbeat.runTwoTier();
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     // StreamBus — SSE stream for a specific streamId (live token streaming)
     app.get('/api/streams/:id/live', (req, res) => {
       try {

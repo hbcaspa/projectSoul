@@ -1439,6 +1439,16 @@ loadStatus();setInterval(loadStatus,10000);
       }
     });
 
+    // Paperclip AI — orchestration adapter status
+    app.get('/api/paperclip', (req, res) => {
+      try {
+        if (!this.engine.paperclip) return res.json({ enabled: false });
+        res.json({ enabled: true, ...this.engine.paperclip.getStats() });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     // StreamBus — SSE stream for a specific streamId (live token streaming)
     app.get('/api/streams/:id/live', (req, res) => {
       try {

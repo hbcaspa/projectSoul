@@ -97,6 +97,7 @@ import { ApprovalGate } from './approval-gate.js';
 import { EventCoalescer } from './event-coalescer.js';
 import { MessageGateway } from './message-gateway.js';
 import { CheapHeartbeat } from './cheap-heartbeat.js';
+import { PaperclipAdapter } from './paperclip-adapter.js';
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -197,6 +198,7 @@ export class SoulEngine {
     this.coalescer = null;       // Event batching & backpressure
     this.gateway = null;         // Central message router
     this.cheapHeartbeat = null;  // Cheap-checks-first heartbeat
+    this.paperclip = null;       // Paperclip AI orchestration adapter
   }
 
   /** Initialize LLM and context without starting channels */
@@ -1209,6 +1211,21 @@ export class SoulEngine {
       heartbeat: this.heartbeat,
     });
     console.log(`  CheapHB:   active (${this.cheapHeartbeat.checks.length} pre-checks, LLM only on findings)`);
+
+    // 11. Paperclip AI — agent orchestration platform
+    if (process.env.PAPERCLIP_AGENT_TOKEN) {
+      this.paperclip = new PaperclipAdapter({
+        bus: this.bus,
+        engine: this,
+        reactLoop: this.reactLoop,
+      });
+      const started = await this.paperclip.start();
+      if (started) {
+        console.log(`  Paperclip: connected (heartbeat: ${this.paperclip.heartbeatInterval / 1000}s)`);
+      }
+    } else {
+      console.log('  Paperclip: disabled (set PAPERCLIP_AGENT_TOKEN + PAPERCLIP_URL)');
+    }
 
     // Keep UnifiedContext in sync with session transitions
     this.bus.on('session.transition', (event) => {

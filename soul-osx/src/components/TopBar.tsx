@@ -48,7 +48,7 @@ export default function TopBar() {
         ))}
       </div>
 
-      <div className="ml-auto flex items-center gap-4 text-[12px]">
+      <div className="pointer-events-none ml-auto flex items-center gap-4 text-[12px]">
         <span className="flex items-center gap-1.5 font-medium" style={{ color: c.color }}>
           <span className="breathe h-2 w-2 rounded-full" style={{ background: c.color, boxShadow: `0 0 8px ${c.color}` }} />
           {c.label}

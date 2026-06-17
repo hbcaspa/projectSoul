@@ -1,46 +1,88 @@
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────────────────────
-   soulOSX — Apple-native. Das Terminal ist das Herzstück; der
-   Kortex die lebende Hülle. Echtes macOS-Vibrancy-Material scheint
-   durch; Oberflächen sind zarte, durchscheinende Karten darauf.
-   SF Pro / SF Mono. macOS-Systemfarben. Bewegung subtil, federnd.
+   soulOSX — Apple-native Designsystem (v3).
+   Drei gestaffelte Material-Ebenen statt einer; echtes
+   NSVisualEffect-Vibrancy scheint durch. SF Pro / SF Mono.
+   macOS-Systemfarben. KEINE Glows außer Focus-Ring.
+   Idle steht still — Bewegung kommt aus Aktion (siehe lib/motion.ts).
    ───────────────────────────────────────────────────────────── */
 
 @theme {
-  /* macOS-Systemfarben (Dark) — Akzente sparsam, funktional */
-  --color-indigo: #5e5ce6;
-  --color-violet: #7d7aff;
-  --color-teal: #64d2ff;
-  --color-mint: #66d4cf;
-  --color-green: #30d158;
-  --color-red: #ff453a;
-  --color-orange: #ff9f0a;
-  --color-pink: #ff375f;
+  /* ── System-Akzent (macOS Dark Blue) — Controls, Selection, Focus ── */
+  --color-accent: #0a84ff;
+  --color-selection-bg: rgba(10, 132, 255, 0.85);
+
+  /* ── Status (gefüllte Punkte, KEIN Glow) ── */
+  --color-green: #30d158;   /* online */
+  --color-orange: #ff9f0a;  /* connecting */
+  --color-red: #ff453a;     /* offline / error */
   --color-yellow: #ffd60a;
 
-  /* Label-Hierarchie (Apple) */
-  --color-label: rgba(255, 255, 255, 0.92);
-  --color-label2: rgba(255, 255, 255, 0.55);
-  --color-label3: rgba(255, 255, 255, 0.3);
+  /* ── Label-Hierarchie (Apple, Dark) ── */
+  --color-label: rgba(255, 255, 255, 0.92);   /* primär */
+  --color-label2: rgba(255, 255, 255, 0.55);  /* sekundär */
+  --color-label3: rgba(255, 255, 255, 0.3);   /* tertiär */
+  --color-label4: rgba(255, 255, 255, 0.18);  /* quartär / disabled */
 
-  --font-sans: -apple-system, "SF Pro Text", "SF Pro Display", system-ui, sans-serif;
+  /* ── Apple System Fills (Dark) ── */
+  --fill-1: rgba(255, 255, 255, 0.1);
+  --fill-2: rgba(255, 255, 255, 0.06);
+  --fill-3: rgba(255, 255, 255, 0.04);
+
+  /* ── Kortex-Semantik (Bewusstseinszustände) — entschärft, kein Neon ── */
+  --color-indigo: #5e5ce6;
+  --color-violet: #7d7aff;   /* Wachen */
+  --color-teal: #64d2ff;     /* Träumen */
+  --color-mint: #66d4cf;
+  --color-pink: #ff375f;
+
+  /* ── Fonts ── */
+  --font-sans: -apple-system, "SF Pro", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Menlo", monospace;
 
-  /* Kompatibilitäts-Aliase: bestehende Kortex-/Panel-Komponenten nutzen diese
-     Namen — auf die Apple-Palette gemappt, damit alles nativ-macOS wirkt. */
+  /* ── Typo-Skala (px / line-height / weight / tracking) ── */
+  --t-largetitle: 26px;
+  --t-largetitle-lh: 32px;
+  --t-title2: 17px;
+  --t-title2-lh: 22px;
+  --t-headline: 13px;
+  --t-headline-lh: 16px;
+  --t-body: 13px;
+  --t-body-lh: 16px;
+  --t-callout: 12px;
+  --t-callout-lh: 15px;
+  --t-subhead: 11px;
+  --t-subhead-lh: 14px;
+  --t-footnote: 10px;
+  --t-footnote-lh: 13px;
+  --t-caption: 10px;
+  --t-caption-lh: 13px;
+
+  /* ── Radii (macOS) ── */
+  --r-window: 10px;
+  --r-card: 10px;
+  --r-row: 6px;
+  --r-button: 6px;
+  --r-segment: 7px;
+  --r-pill: 6px;
+  --r-popover: 12px;
+
+  /* ── Kompatibilitäts-Aliase: bestehende Kortex-/Panel-Komponenten nutzen
+       diese Namen. Auf die entschärfte Apple-Palette gemappt, damit nichts
+       bricht — aber Neon ist raus. ── */
   --color-void: #16161a;
   --color-tissue: #1c1c22;
   --color-tissue-2: #222229;
   --color-membrane: rgba(255, 255, 255, 0.1);
-  --color-synapse: #7d7aff;
-  --color-pulse: #ff375f;
-  --color-biolumi: #64d2ff;
+  --color-synapse: #7d7aff;       /* → violet */
+  --color-pulse: #ff453a;          /* → rot, entschärft (war pink #ff375f) */
+  --color-biolumi: #64d2ff;        /* → teal */
   --color-bone: #e9e9ee;
   --color-ash: #98989f;
-  --color-cortex-warm: #ff9f0a;
-  --color-immune: #30d158;
-  --color-fever: #ff453a;
+  --color-cortex-warm: #ff9f0a;    /* → orange */
+  --color-immune: #30d158;         /* → green */
+  --color-fever: #ff453a;          /* → red */
 }
 
 :root {
@@ -55,12 +97,14 @@ body,
 }
 
 body {
-  /* Vibrancy scheint durch; ein hauchzarter Tint gibt Tiefe (und macht den
-     Dev-Browser nicht weiß). Auf macOS liegt das über dem NSVisualEffect-Material. */
-  background: rgba(24, 24, 28, 0.55);
+  /* L0 — Fensterhintergrund. Hauchzarter Tint, der das NSVisualEffect-Material
+     NICHT erstickt (war 0.55 — zu opak). Macht den Dev-Browser nicht weiß. */
+  background: rgba(22, 22, 26, 0.32);
   color: var(--color-label);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--t-body);
+  line-height: var(--t-body-lh);
+  font-optical-sizing: auto;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -68,66 +112,99 @@ body {
   cursor: default;
 }
 
-/* sehr subtiler, ruhiger Farbschimmer — Apple-Wallpaper-dezent */
-#root::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(60% 50% at 20% 0%, rgba(94, 92, 230, 0.1), transparent 60%),
-    radial-gradient(50% 50% at 100% 100%, rgba(100, 210, 255, 0.07), transparent 60%);
+::selection {
+  background: var(--color-selection-bg);
+  color: #fff;
 }
 
-/* Apple-Karte auf Vibrancy: zarte durchscheinende Fläche + Haarlinie + weicher Schatten */
+/* ── Material-Ebenen (3 gestaffelte Transluzenz-Schichten) ──────────── */
+
+/* L1 — Sidebar / Inspector-Flächen: liegen DIREKT auf Vibrancy, KEIN zweiter
+   Blur (Doppel-Blur ist teuer und matschig). */
+.surface-sidebar {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* L2 — erhöhte Karten (Control-Center-Kachel-Look). Lichtsaum kommt aus dem
+   Inset, nicht aus dem Rand. 4-teiliger Inset + Kontakt-Schatten. */
 .card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 0.5px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 0.5px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--r-card);
+  -webkit-backdrop-filter: blur(30px) saturate(150%);
+  backdrop-filter: blur(30px) saturate(150%);
   box-shadow:
-    0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
-    0 8px 24px -12px rgba(0, 0, 0, 0.5);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  backdrop-filter: blur(20px) saturate(180%);
-}
-.card-flat {
-  background: rgba(255, 255, 255, 0.035);
-  border: 0.5px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+    inset 0 0.5px 0 0 rgba(255, 255, 255, 0.12),   /* scharfe obere Lichtkante */
+    inset 0 -0.5px 0 0 rgba(0, 0, 0, 0.18),          /* untere Schattenkante */
+    0 0.5px 1.5px rgba(0, 0, 0, 0.28),               /* enger Kontaktschatten */
+    0 6px 16px -10px rgba(0, 0, 0, 0.45);            /* dezenter Ambient */
 }
 
-/* Alias für bestehende Komponenten — gleicher Apple-Karten-Look */
-.glass {
-  background: rgba(255, 255, 255, 0.05);
+/* L3 — Popover / Sheet (KeyGate, Command-Palette): blickdichter. */
+.material-popover {
+  background: rgba(40, 40, 46, 0.72);
+  -webkit-backdrop-filter: blur(50px) saturate(150%);
+  backdrop-filter: blur(50px) saturate(150%);
   border: 0.5px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  backdrop-filter: blur(20px) saturate(180%);
-  box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  border-radius: var(--r-popover);
+  box-shadow:
+    0 16px 48px -12px rgba(0, 0, 0, 0.6),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.14);
+}
+
+/* Kompat-Aliase auf die neue Karten-Ebene (alte Klassen brechen nicht). */
+.glass,
+.card-flat {
+  background: rgba(255, 255, 255, 0.06);
+  border: 0.5px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--r-card);
+  -webkit-backdrop-filter: blur(30px) saturate(150%);
+  backdrop-filter: blur(30px) saturate(150%);
+  box-shadow:
+    inset 0 0.5px 0 0 rgba(255, 255, 255, 0.12),
+    inset 0 -0.5px 0 0 rgba(0, 0, 0, 0.18),
+    0 0.5px 1.5px rgba(0, 0, 0, 0.28),
+    0 6px 16px -10px rgba(0, 0, 0, 0.45);
 }
 
 .hairline {
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
+/* ── Typo-Hilfsklassen ──────────────────────────────────────────────── */
+
+/* Tabellenziffern — verhindern Springen bei Live-Updates. Auf ALLE Werte. */
+.num {
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+}
+
+/* macOS-Section-Header: SF Pro, klein, KEIN uppercase, KEIN Mono. */
 .label {
   font-family: var(--font-sans);
-  font-weight: 590;
-  letter-spacing: 0.02em;
-  font-size: 11px;
+  font-weight: 510;
+  font-size: var(--t-caption);
+  line-height: var(--t-caption-lh);
+  letter-spacing: 0.05em;
   color: var(--color-label3);
-  text-transform: uppercase;
 }
 
-/* sehr dezenter „Atem" — Apple-ruhig, kein Neon-Puls */
+/* ── Focus-Ring: der EINZIGE erlaubte Glow im ganzen UI ──────────────── */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--color-accent) 50%, transparent);
+}
+
+/* ── Bewegung ───────────────────────────────────────────────────────── */
+/* „Atem" für den lebenden Kern — dezent, opacity-only, vom Energie-Tempo
+   gesteuert (--breath-rate). Idle ruhig. */
 @keyframes breathe {
   0%, 100% { opacity: 0.94; }
   50% { opacity: 1; }
 }
 .breathe { animation: breathe var(--breath-rate, 5s) ease-in-out infinite; }
 
-/* Ladebalken-Shimmer (2026) */
+/* Ladebalken-Shimmer (Lade-State). */
 @keyframes shimmer {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(220%); }
@@ -140,22 +217,27 @@ body {
   animation: shimmer 1.4s ease-in-out infinite;
 }
 
-/* sanftes Auftauchen */
+/* sanftes Auftauchen (CSS-Fallback; bevorzugt motion.ts) */
 @keyframes surface {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .surface { animation: surface 0.45s cubic-bezier(0.32, 0.72, 0, 1) both; }
 
-/* Apple-dünne, überlagernde Scrollbars */
+/* ── Apple-dünne, überlagernde Scrollbars ───────────────────────────── */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
 ::-webkit-scrollbar-track { background: transparent; }
 
-/* xterm — Apple-Terminal-Look */
+/* ── xterm — Apple-Terminal-Look ────────────────────────────────────── */
 .xterm { padding: 12px 14px; height: 100%; }
 .xterm-viewport::-webkit-scrollbar { width: 8px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .breathe, .shimmer::after { animation: none; }
+  .breathe, .shimmer::after, .surface { animation: none; }
 }

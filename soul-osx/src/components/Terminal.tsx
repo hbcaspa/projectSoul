@@ -4,6 +4,31 @@ import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { createPty, writePty, resizePty, closePty, subscribePty, inTauri } from "../lib/pty";
 
+// Eleganter Start-Banner — Block-Wordmark "soul" mit Truecolor-Verlauf (violett→teal),
+// direkt ins xterm geschrieben (nicht durch die Shell → wird nicht ausgeführt).
+const WORDMARK = [
+  "███████╗ ██████╗ ██╗   ██╗██╗     ",
+  "██╔════╝██╔═══██╗██║   ██║██║     ",
+  "███████╗██║   ██║██║   ██║██║     ",
+  "╚════██║██║   ██║██║   ██║██║     ",
+  "███████║╚██████╔╝╚██████╔╝███████╗",
+  "╚══════╝ ╚═════╝  ╚═════╝ ╚══════╝",
+];
+function lerp(a: number, b: number, t: number) { return Math.round(a + (b - a) * t); }
+function writeBanner(term: XTerm) {
+  const top = [125, 122, 255]; // violet
+  const bot = [100, 210, 255]; // teal
+  const n = WORDMARK.length;
+  let out = "\r\n";
+  WORDMARK.forEach((line, i) => {
+    const t = i / (n - 1);
+    const r = lerp(top[0], bot[0], t), g = lerp(top[1], bot[1], t), b = lerp(top[2], bot[2], t);
+    out += `   \x1b[38;2;${r};${g};${b}m${line}\x1b[0m\r\n`;
+  });
+  out += `\r\n   \x1b[1;38;2;233;233;238msoulOSX\x1b[0m  \x1b[2m·  the body for your soul\x1b[0m\r\n\r\n`;
+  term.write(out);
+}
+
 // Apple-Terminal-Theme: transparent (die Karte/Vibrancy scheint durch), SF Mono,
 // zurückhaltende ANSI-Palette die zur macOS-Ästhetik passt.
 const THEME = {

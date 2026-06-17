@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import cytoscape, { type Core, type ElementDefinition } from "cytoscape";
 import { useSoul } from "../lib/store";
+import { useUI } from "../lib/ui";
 import { MODULES, REGIONS } from "../lib/manifest";
 
 // Auflösung der CSS-Var-Farben zu echten Hex-Werten (Cytoscape kann keine var()).
@@ -50,6 +51,13 @@ export default function CortexGraph() {
   const ref = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
   const { recentFires } = useSoul();
+  const { inspect, setView } = useUI();
+  // Aktuelle Callbacks in Ref halten — der cy-Init-Effect läuft nur einmal.
+  const openRef = useRef<(id: string) => void>(() => {});
+  openRef.current = (id: string) => {
+    setView("control"); // Inspector lebt in der Control-Plane
+    inspect(id);
+  };
 
   useEffect(() => {
     if (!ref.current) return;
@@ -126,6 +134,19 @@ export default function CortexGraph() {
     cy.fit(undefined, 40);
     const onResize = () => cy.fit(undefined, 40);
     window.addEventListener("resize", onResize);
+
+    // Modul-Knoten klickbar → Inspector öffnen. Pointer-Cursor beim Hovern.
+    cy.on("tap", "node[kind='module']", (evt) => {
+      const id = evt.target.id();
+      if (id) openRef.current(id);
+    });
+    cy.on("mouseover", "node[kind='module']", () => {
+      if (ref.current) ref.current.style.cursor = "pointer";
+    });
+    cy.on("mouseout", "node[kind='module']", () => {
+      if (ref.current) ref.current.style.cursor = "default";
+    });
+
     return () => {
       window.removeEventListener("resize", onResize);
       cy.destroy();

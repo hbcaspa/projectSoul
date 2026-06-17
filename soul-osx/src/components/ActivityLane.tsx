@@ -5,6 +5,8 @@ import {
   ShieldCheck, Activity as ActIcon, Waves, Moon,
 } from "lucide-react";
 import { useSoul } from "../lib/store";
+import { humanize } from "../lib/explain";
+import { spring, useSpring } from "../lib/motion";
 import type { BusEvent } from "../lib/types";
 
 const ICON: Record<string, typeof Search> = {
@@ -27,13 +29,19 @@ function accent(t = "") {
   if (t.startsWith("capability") || t.startsWith("foundry") || t.startsWith("react")) return "var(--color-violet)";
   return "var(--color-label2)";
 }
-function evLabel(ev: BusEvent): string {
-  const p = ev as Record<string, unknown>;
-  return ((p.label || p.activity || p.description || p.reason || p.type || "") as string).toString();
-}
+
+// Stagger-Container für den Live-Strom: jedes Item fliegt 30ms versetzt ein.
+const listVariants = {
+  show: { transition: { staggerChildren: 0.03 } },
+};
+const itemVariants = {
+  hidden: { opacity: 0, y: -6 },
+  show: { opacity: 1, y: 0, transition: spring.snappy },
+};
 
 export default function ActivityLane() {
   const { active, events, lastEvent } = useSoul();
+  const t = useSpring("snappy");
   const st = active?.status;
   const pulse = st?.pulse;
   const activity = pulse?.activity || pulse?.type;
@@ -52,6 +60,13 @@ export default function ActivityLane() {
   const recent = events.slice(-24).reverse();
   const CurIcon = pickIcon(activity || lastEvent?.type);
 
+  // Aktueller Zustand als deutscher Satz (kein roher Typ).
+  const headline = activity
+    ? humanize({ type: activity, label: pulse?.label } as BusEvent)
+    : working
+      ? "Ich denke nach"
+      : "Ich ruhe";
+
   return (
     <div className="card surface flex min-h-0 flex-col p-3.5">
       <div className="label mb-2.5">Aktivität</div>
@@ -59,17 +74,19 @@ export default function ActivityLane() {
       {/* aktueller Zustand + Ladebalken */}
       <div className="mb-3">
         <div className="flex items-center gap-2.5">
+          {/* Kein Infinity-Scale-Loop mehr. Nur ein sanftes Aufleuchten beim
+              Wechsel; idle steht still. */}
           <motion.div
-            animate={showBar ? { scale: [1, 1.12, 1] } : { scale: 1 }}
-            transition={{ duration: 1.2, repeat: showBar ? Infinity : 0, ease: "easeInOut" }}
-            className="flex h-8 w-8 items-center justify-center rounded-full"
+            animate={{ opacity: showBar ? 1 : 0.7 }}
+            transition={t}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
             style={{ background: "rgba(125,122,255,0.16)", color: "var(--color-violet)" }}
           >
             <CurIcon size={15} />
           </motion.div>
           <div className="min-w-0">
             <div className="truncate text-[13px] font-medium text-label">
-              {activity ? activity : working ? "denkt nach" : "ruht"}
+              {headline}
             </div>
             <div className="truncate text-[11px] text-label2">
               {pulse?.label || (showBar ? "verarbeitet…" : "bereit")}
@@ -88,7 +105,11 @@ export default function ActivityLane() {
 
       {/* Live-Aktivitätsstrom */}
       <div className="label mb-1.5">Soul-Prozesse</div>
-      <div className="-mr-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pr-1">
+      <motion.div
+        variants={listVariants}
+        animate="show"
+        className="-mr-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pr-1"
+      >
         <AnimatePresence initial={false}>
           {recent.length === 0 && (
             <div className="py-6 text-center text-[11px] text-label3">— still —</div>
@@ -99,19 +120,20 @@ export default function ActivityLane() {
             return (
               <motion.div
                 key={(ev.id ?? `x${i}`) + "-" + i}
-                initial={{ opacity: 0, x: 8 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.25 }}
+                variants={itemVariants}
+                initial="hidden"
+                animate="show"
+                exit={{ opacity: 0, transition: t }}
                 className="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-white/5"
+                title={ev.type}
               >
                 <Ic size={12} style={{ color: c, flexShrink: 0 }} />
-                <span className="truncate text-[12px] text-label2">{evLabel(ev)}</span>
+                <span className="truncate text-[12px] text-label2">{humanize(ev)}</span>
               </motion.div>
             );
           })}
         </AnimatePresence>
-      </div>
+      </motion.div>
     </div>
   );
 }

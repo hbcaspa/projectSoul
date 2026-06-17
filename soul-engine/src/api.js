@@ -14,6 +14,7 @@ import { exec } from 'node:child_process';
 import path from 'node:path';
 import { parseSeed, extractSoulInfo } from './seed-parser.js';
 import { attachTerminalService } from './terminal-service.js';
+import { buildRegistry, controlModule } from './module-control.js';
 
 export class SoulAPI {
   constructor(engine, apiChannel, port = 3001) {
@@ -1155,6 +1156,31 @@ loadStatus();setInterval(loadStatus,10000);
       if (!trader) return res.status(404).json({ error: 'Trader not initialized' });
       res.json({ ok: true, message: 'Trader run triggered — result will arrive via Telegram' });
       trader.runDailyTrader().catch(err => console.error(`  [trader] Manual trigger error: ${err.message}`));
+    });
+
+    // ── Module Control Plane ────────────────────────────────────────
+    // GET /api/modules/registry — alle Module mit echtem Laufzeit-Status.
+    app.get('/api/modules/registry', (req, res) => {
+      try {
+        res.json({ modules: buildRegistry(this.engine) });
+      } catch (err) {
+        // fail-safe: nie Crash, sauberer 500
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // POST /api/modules/:id/control  body { action: 'enable'|'disable'|'trigger' }
+    // Schaltet NUR sicher schaltbare Module. Sicherheitskritisch → 403 fail-closed.
+    app.post('/api/modules/:id/control', async (req, res) => {
+      try {
+        const id = req.params.id;
+        const action = (req.body && req.body.action) || '';
+        const result = await controlModule(this.engine, id, action);
+        res.status(result.status).json(result.body);
+      } catch (err) {
+        // letzte Verteidigungslinie — controlModule fängt selbst, aber nie Crash riskieren
+        res.status(500).json({ error: err.message });
+      }
     });
 
     // Subagent spawning — run parallel LLM sub-tasks

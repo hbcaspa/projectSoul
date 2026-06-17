@@ -9,6 +9,8 @@
  * file deletion, financial operations.
  */
 
+import { randomBytes } from 'node:crypto';
+
 const DEFAULT_TIMEOUT = 60000; // 60s to approve
 
 export class ApprovalGate {
@@ -25,17 +27,26 @@ export class ApprovalGate {
       'send_message',           // WhatsApp
       'sparkasse_transfer',
       'sparkasse_confirm_tan',
+      'write_file',             // shell-MCP — arbitrary file write on the host
+      'delete_file',            // shell-MCP — file deletion
+      'pleroma_post',           // publishes to the Soul Hub (outward-facing)
     ]);
 
-    // Tools that require approval only with certain args
+    // Tools that require approval only with certain args.
+    // execute_command is the soul's most powerful primitive — with the autonomous
+    // ReActLoop now in the self-path, the model can issue commands unprompted. The
+    // pattern below errs toward gating: redirects, downloads-piped-to-shell, perms,
+    // package installs, service control, network egress, VCS pushes, privilege
+    // escalation — anything that mutates the host or reaches outward. Benign reads
+    // (ls/cat/grep/echo/pwd/git status) pass through unattended.
     this.conditionalTools = new Map([
       ['execute_command', (args) => {
         const cmd = (args.command || args.cmd || '').toLowerCase();
-        return /rm\s|rmdir|del\s|format|drop\s|delete|shutdown|reboot/.test(cmd);
+        return /(^|[\s;&|])(rm|rmdir|del|format|drop|delete|shutdown|reboot|halt|poweroff|mv|dd|mkfs|truncate|chmod|chown|kill|pkill|killall|sudo|su|ssh|scp|sftp|rsync|crontab|systemctl|service|launchctl|docker|kubectl|git|npm|pnpm|yarn|pip|pip3|brew|apt|apt-get|curl|wget|nc|netcat|telnet)([\s;&|]|$)|>>?|\|\s*(sh|bash|zsh|python|node)|:\(\)\s*\{/.test(cmd);
       }],
     ]);
 
-    // Auto-approved tools (never ask)
+    // Auto-approved tools (never ask) — strictly read-only / non-mutating.
     this.safeTools = new Set([
       'search_nodes', 'open_nodes', 'read_graph',
       'create_entities', 'add_observations', 'create_relations',
@@ -44,6 +55,7 @@ export class ApprovalGate {
       'list_messages', 'list_chats', 'get_chat',
       'search_contacts', 'get_contact_chats', 'get_direct_chat_by_contact',
       'get_last_interaction', 'get_message_context',
+      'read_file', 'list_processes', 'web_search', 'web_fetch',  // shell-MCP read-only
     ]);
 
     // Async pending-approval queue (Sprint 0 completion). The inline requestApproval()
@@ -67,7 +79,13 @@ export class ApprovalGate {
     if (this.safeTools.has(toolName)) return false;
     if (this.riskyTools.has(toolName)) return true;
     if (this.conditionalTools.has(toolName)) return true; // Will check args later
-    return false;
+    // FAIL-CLOSED for unknown tools. Previously `return false`, which was fail-open:
+    // with the autonomous ReActLoop in the self-path, the model could call any tool
+    // NOT explicitly classified (write_file, future MCP tools) with zero approval.
+    // Now unlisted tools require owner approval — over-gating is recoverable (André
+    // sees a prompt and can approve), an ungated write/exec is not. Escape hatch:
+    // APPROVAL_FAIL_OPEN=true reverts to the old permissive default if it over-gates.
+    return process.env.APPROVAL_FAIL_OPEN === 'true' ? false : true;
   }
 
   /**
@@ -200,7 +218,7 @@ export class ApprovalGate {
       const oldest = this.pendingQueue.keys().next().value;
       if (oldest) this.pendingQueue.delete(oldest);
     }
-    const id = Math.random().toString(36).slice(2, 6); // 4-char base36
+    const id = randomBytes(4).toString('hex'); // 8-char crypto hex (36^4≈1.7M → 16^8≈4.3B)
     this.pendingQueue.set(id, { toolName, args, execute, dedupKey, createdAt: Date.now() });
     this.stats.requested++;
 
@@ -224,7 +242,7 @@ export class ApprovalGate {
     // unknown) is rejected by default.
     if (event?.channel !== 'telegram') return;
     const text = (event?.text || '').trim().toLowerCase();
-    const m = text.match(/^(ja|yes|ok|approve|nein|no|deny)\s+([a-z0-9]{4})$/);
+    const m = text.match(/^(ja|yes|ok|approve|nein|no|deny)\s+([a-f0-9]{8})$/);
     if (!m) return;
     this._pruneExpired();
     const entry = this.pendingQueue.get(m[2]);

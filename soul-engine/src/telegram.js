@@ -7,6 +7,9 @@ export class TelegramChannel {
   constructor(soulPath, token, ownerId) {
     this.soulPath = soulPath;
     this.ownerId = String(ownerId);
+    // Token wird für File-Downloads (Voice/Audio) gebraucht — die Telegram
+    // File-API verlangt ihn in der URL (https://api.telegram.org/file/bot<token>/<path>).
+    this.token = token;
     this.bot = new Bot(token);
     this.historyDir = resolve(soulPath, 'conversations', 'telegram');
     this.messageHandler = null;
@@ -76,8 +79,96 @@ export class TelegramChannel {
       }
     });
 
+    // Voice (OGG/Opus) und Audio (mp3/m4a/…) — gemeinsamer Handler.
+    // text bleibt leer; die Engine transkribiert in Phase 2 anhand von args.voice.
+    const handleVoiceLike = async (ctx, media) => {
+      const userId = String(ctx.from.id);
+
+      // Only respond to the soul's human
+      if (userId !== this.ownerId) {
+        return; // silent ignore for strangers
+      }
+
+      const chatId    = String(ctx.chat.id);
+      const messageId = ctx.message.message_id;
+      const userName  = ctx.from.first_name || 'Human';
+
+      if (!this.messageHandler) return;
+
+      try {
+        // 👀 — Acknowledge receipt immediately (non-blocking)
+        this._setReaction(ctx.chat.id, messageId, '👀').catch(() => {});
+
+        // Audio-Bytes herunterladen. Bei JEDEM Fehler: Owner benachrichtigen,
+        // NICHT crashen (kein Fail-Open — wir reichen ohne Buffer nichts weiter,
+        // das wäre eine leere/nutzlose Nachricht an die Engine).
+        const buffer = await this._downloadFile(media.file_id);
+        if (!buffer) {
+          this._setReaction(ctx.chat.id, messageId, '❌').catch(() => {});
+          await this.sendToOwner('Sprachnachricht konnte nicht geladen werden (Download fehlgeschlagen).');
+          return;
+        }
+
+        const mimeType = media.mime_type || 'audio/ogg';
+        const duration = media.duration;
+
+        await ctx.replyWithChatAction('typing');
+        const response = await this.messageHandler({
+          text: undefined, // Engine transkribiert via args.voice
+          chatId,
+          userName,
+          voice: { buffer, mimeType, duration },
+        });
+        if (!response) return;
+
+        // ✅ — Mark as processed (non-blocking)
+        this._setReaction(ctx.chat.id, messageId, '✅').catch(() => {});
+
+        // Telegram max message length is 4096
+        if (response.length > 4000) {
+          for (const chunk of splitText(response, 4000)) {
+            await ctx.reply(chunk, { parse_mode: 'Markdown' }).catch(
+              () => ctx.reply(chunk) // fallback without markdown
+            );
+          }
+        } else {
+          await ctx.reply(response, { parse_mode: 'Markdown' }).catch(
+            () => ctx.reply(response)
+          );
+        }
+      } catch (err) {
+        console.error(`  [telegram] Voice error: ${err.message}`);
+        // ❌ — Mark as failed
+        this._setReaction(ctx.chat.id, messageId, '❌').catch(() => {});
+        await this.sendToOwner(`Sprachnachricht-Verarbeitung fehlgeschlagen: ${err.message}`);
+      }
+    };
+
+    this.bot.on('message:voice', (ctx) => handleVoiceLike(ctx, ctx.message.voice));
+    this.bot.on('message:audio', (ctx) => handleVoiceLike(ctx, ctx.message.audio));
+
     // Start long-polling with retry on 409 conflict
     this._startPolling();
+  }
+
+  // Lädt eine Telegram-Datei (Voice/Audio) als Buffer.
+  // Gibt bei jedem Fehler null zurück (kein Throw) — der Aufrufer degradiert sauber.
+  async _downloadFile(fileId) {
+    try {
+      const file = await this.bot.api.getFile(fileId);
+      if (!file?.file_path) return null;
+      const url = `https://api.telegram.org/file/bot${this.token}/${file.file_path}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.error(`  [telegram] File download HTTP ${res.status}`);
+        return null;
+      }
+      const arrayBuffer = await res.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    } catch (err) {
+      console.error(`  [telegram] File download failed: ${err.message}`);
+      return null;
+    }
   }
 
   async _startPolling(attempt = 0) {

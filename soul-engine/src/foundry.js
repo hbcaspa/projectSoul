@@ -25,19 +25,40 @@
 import { writeFile, mkdir, readFile } from 'node:fs/promises';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import * as skillspector from './skillspector.js';
+import { HIGH_THRESHOLD } from './skillspector.js';
 
 const SKILLS_DIR = process.env.FOUNDRY_SKILLS_DIR || '/opt/soul/skills';
 const REGISTRY_FILE = join(SKILLS_DIR, 'registry.json');
 
+// Sandbox-Test-Limits (bewusst eng — ein Skill-Smoke-Test darf nicht lange laufen
+// und nicht viel Speicher fressen). Werte sind absichtlich konservativ: lieber ein
+// fälschlich abgelehnter Skill als ein durchgerutschter.
+const SANDBOX_TIMEOUT_MS = parseInt(process.env.FOUNDRY_SANDBOX_TIMEOUT_MS || '10000', 10);
+const SANDBOX_MEMORY_MB  = parseInt(process.env.FOUNDRY_SANDBOX_MEMORY_MB  || '128', 10);
+
 export class Foundry {
-  constructor({ bus, telegram, llm, soulPath }) {
-    this.bus      = bus;
-    this.telegram = telegram;
-    this.llm      = llm;
-    this.soulPath = soulPath;
-    this.enabled  = process.env.FOUNDRY_ENABLED === 'true';
-    this._registry = [];
-    this._building = false;
+  /**
+   * @param {object} deps
+   * @param {object}  deps.bus
+   * @param {object}  deps.telegram
+   * @param {object}  deps.llm
+   * @param {string}  deps.soulPath
+   * @param {object} [deps.sandbox]      - SandboxManager (für isolierten Test). FEHLT er,
+   *                                       schlägt der Sandbox-Schritt FAIL-CLOSED fehl.
+   * @param {object} [deps.approvalGate] - ApprovalGate (Human-in-the-Loop). FEHLT er,
+   *                                       wird KEIN Skill live geschaltet (fail-closed).
+   */
+  constructor({ bus, telegram, llm, soulPath, sandbox = null, approvalGate = null }) {
+    this.bus          = bus;
+    this.telegram     = telegram;
+    this.llm          = llm;
+    this.soulPath     = soulPath;
+    this.sandbox      = sandbox;
+    this.approvalGate = approvalGate;
+    this.enabled      = process.env.FOUNDRY_ENABLED === 'true';
+    this._registry    = [];
+    this._building    = false;
   }
 
   async start() {
@@ -91,7 +112,12 @@ export class Foundry {
       const skillPath = join(SKILLS_DIR, `${generated.name}.js`);
       await writeFile(skillPath, reviewed.code);
 
-      // Phase 5: Register
+      // Phase 5: Register — IMMER inaktiv. Ein frisch gebauter Skill darf NIE
+      // automatisch live gehen. Die Aktivierung läuft ausschließlich über
+      // armAndPublish() (SkillSpector → Sandbox → ApprovalGate). Das frühere
+      // FOUNDRY_AUTO_APPROVE-Flag, das hier active:true setzen konnte, war ein
+      // Fail-Open-Loch (selbst-generierter Code ginge ungeprüft scharf) und ist
+      // bewusst entfernt: kein Pfad setzt active=true ausserhalb der Sicherheitskette.
       const skill = {
         id:          `skill_${Date.now()}`,
         name:        generated.name,
@@ -100,8 +126,9 @@ export class Foundry {
         path:        skillPath,
         version:     1,
         created:     new Date().toISOString(),
-        approved:    process.env.FOUNDRY_AUTO_APPROVE === 'true',
-        active:      process.env.FOUNDRY_AUTO_APPROVE === 'true',
+        approved:    false,
+        active:      false,
+        code:        reviewed.code,   // für SkillSpector/Sandbox in armAndPublish
       };
 
       this._registry.push(skill);
@@ -109,17 +136,20 @@ export class Foundry {
 
       // Notify
       if (!silent) {
-        const approveNote = skill.approved
-          ? '_Automatisch aktiviert._'
-          : '_Wartet auf manuelle Aktivierung._';
-
         await this.telegram?.sendToOwner(
-          `🏭 Neuer Skill gebaut!\n\n*${skill.name}*\n${skill.description}\n\nTyp: \`${type}\`\nID: \`${skill.id}\`\n\n${approveNote}`
+          `🏭 Neuer Skill gebaut!\n\n*${skill.name}*\n${skill.description}\n\nTyp: \`${type}\`\nID: \`${skill.id}\`\n\n_Wartet auf Sicherheitskette (Scan → Sandbox → Genehmigung)._`
         );
       }
 
       this.bus?.safeEmit?.('foundry.skill_created', { skill });
       console.log(`  [foundry] Skill created: "${skill.name}" (${type})`);
+
+      // Phase 6: Sicherheitskette anstoßen. armAndPublish ist selbst fail-closed
+      // und prüft FOUNDRY_ENABLED erneut — der gebaute Skill bleibt inaktiv, bis
+      // Scan + Sandbox + ApprovalGate alle bestanden sind.
+      await this.armAndPublish(skill).catch(e =>
+        console.error(`  [foundry] armAndPublish failed: ${e.message}`));
+
       return skill;
 
     } catch (err) {
@@ -134,6 +164,198 @@ export class Foundry {
   getRegistry() { return this._registry; }
 
   getActiveSkills() { return this._registry.filter(s => s.active); }
+
+  // ── Sicherheitskette vor Aktivierung ──────────────────────
+  //
+  // armAndPublish() ist der EINZIGE Pfad, der einen Skill scharf schaltet.
+  // Drei Stufen in fester Reihenfolge, jede FAIL-CLOSED (bei Fehler/Unsicherheit
+  // ABLEHNEN, nie aktivieren):
+  //   a) SkillSpector-Scan  — statische Sicherheitsanalyse des generierten Codes
+  //   b) Sandbox-Test       — isolierte Ausführung (Timeout/Speicherlimit)
+  //   c) ApprovalGate       — Owner muss explizit zustimmen ("ja <id>" via Telegram)
+  //
+  // Erst im Approval-Execute-Callback (nach menschlichem JA) wird active=true.
+  // Solange FOUNDRY_ENABLED != 'true' tut die Methode NICHTS.
+
+  /**
+   * Schaltet einen gebauten Skill durch die Sicherheitskette und – nur bei
+   * Owner-Zustimmung – live. Wirft nie; gibt ein Ergebnis-Objekt zurück.
+   *
+   * @param {object} skill - Registry-Eintrag (muss .code oder .path haben)
+   * @returns {Promise<{armed:boolean, reason?:string, pending?:boolean, id?:string}>}
+   */
+  async armAndPublish(skill) {
+    // Gate 0 — Feature-Flag. Default OFF. Ohne explizites Opt-in passiert NICHTS.
+    if (process.env.FOUNDRY_ENABLED !== 'true') {
+      console.log('  [foundry] Foundry disabled (FOUNDRY_ENABLED != true) — armAndPublish noop');
+      return { armed: false, reason: 'Foundry disabled' };
+    }
+
+    if (!skill || (!skill.code && !skill.path)) {
+      console.warn('  [foundry] armAndPublish: kein Code/Pfad — abgelehnt (fail-closed)');
+      return { armed: false, reason: 'no code/path' };
+    }
+
+    // ── Stufe a) SkillSpector-Scan ──────────────────────────
+    // scan() schreibt den Code in ein temp SKILL.md und ruft die CLI auf. Es wirft
+    // NIE — liefert { available:false } wenn die CLI fehlt. FAIL-CLOSED: ohne
+    // erfolgreichen Scan (available && ok) wird nicht weitergemacht. „Konnte nicht
+    // verifizieren" == „unsicher" == ablehnen.
+    let scanRes;
+    try {
+      scanRes = skill.code
+        ? await skillspector.scan({ code: skill.code })
+        : await skillspector.scan({ path: skill.path });
+    } catch (err) {
+      // scan() soll nie werfen — falls doch, defensiv ablehnen.
+      return this._reject(skill, `SkillSpector-Aufruf fehlgeschlagen: ${err.message}`);
+    }
+
+    if (!scanRes || !scanRes.available || !scanRes.ok) {
+      return this._reject(skill,
+        `SkillSpector nicht verfügbar/kein gültiges Ergebnis (${scanRes?.error || 'unbekannt'}) — kann Sicherheit nicht verifizieren`);
+    }
+
+    // Score über Schwelle ODER kritische Findings → ablehnen.
+    const score = typeof scanRes.risk_score === 'number' ? scanRes.risk_score : 100; // unbekannt = max
+    const critical = Array.isArray(scanRes.findings)
+      ? scanRes.findings.filter(f => /^(critical|high)$/i.test(String(f.severity || '')))
+      : [];
+    if (score >= HIGH_THRESHOLD || critical.length > 0) {
+      return this._reject(skill,
+        `SkillSpector: Risiko-Score ${score} (Schwelle ${HIGH_THRESHOLD}), ${critical.length} kritische Finding(s)`);
+    }
+
+    // ── Stufe b) Sandbox-Test ───────────────────────────────
+    // Isolierte Ausführung. FAIL-CLOSED: fehlt der SandboxManager, kann nicht
+    // getestet werden → ablehnen. exitCode 124 = Timeout/gekillt, !=0 = Laufzeitfehler.
+    if (!this.sandbox || typeof this.sandbox.execute !== 'function') {
+      return this._reject(skill, 'Kein Sandbox-Manager — Skill kann nicht isoliert getestet werden');
+    }
+
+    const testCode = this._buildSandboxHarness(skill);
+    let sandboxRes;
+    try {
+      sandboxRes = await this.sandbox.execute({
+        code:        testCode,
+        language:    'javascript',
+        timeout:     SANDBOX_TIMEOUT_MS,
+        memoryMB:    SANDBOX_MEMORY_MB,
+        // Docker bevorzugen falls vorhanden (echte Netz-/FS-Isolation); SandboxManager
+        // fällt selbst auf den Prozess-Backend zurück, wenn Docker fehlt.
+        preferDocker: true,
+      });
+    } catch (err) {
+      return this._reject(skill, `Sandbox-Ausführung warf: ${err.message}`);
+    }
+
+    if (!sandboxRes || sandboxRes.exitCode !== 0) {
+      const why = sandboxRes?.exitCode === 124
+        ? `Timeout nach ${SANDBOX_TIMEOUT_MS}ms`
+        : `exitCode ${sandboxRes?.exitCode}`;
+      const errTail = String(sandboxRes?.stderr || '').slice(-300);
+      return this._reject(skill, `Sandbox-Test fehlgeschlagen (${why})${errTail ? ': ' + errTail : ''}`);
+    }
+
+    // ── Stufe c) ApprovalGate ───────────────────────────────
+    // FAIL-CLOSED: ohne ApprovalGate kommt kein Skill in den Live-Satz.
+    if (!this.approvalGate || typeof this.approvalGate.enqueueApproval !== 'function') {
+      return this._reject(skill, 'Kein ApprovalGate — Aktivierung ohne Owner-Zustimmung verweigert');
+    }
+
+    // enqueueApproval benachrichtigt den Owner und führt execute() ERST aus, wenn
+    // der Owner per Telegram "ja <id>" antwortet (owner-gefiltert, fail-closed in
+    // approval-gate.js). Der Skill wird also ausschließlich nach echtem menschlichem
+    // JA aktiviert. Wir registrieren 'foundry_publish_skill' als Risk-Tool, damit
+    // requiresApproval() konsistent bleibt, falls anderswo abgefragt.
+    const toolName = 'foundry_publish_skill';
+    if (typeof this.approvalGate.addRiskyTool === 'function') {
+      this.approvalGate.addRiskyTool(toolName);
+    }
+
+    const res = this.approvalGate.enqueueApproval(
+      toolName,
+      { skill: skill.name, id: skill.id, type: skill.type, risk_score: score },
+      async () => this._activateSkill(skill), // läuft NUR nach Owner-JA
+    );
+
+    this.bus?.safeEmit?.('foundry.skill_pending_approval', {
+      skill: skill.name, id: skill.id, risk_score: score, approvalId: res?.id,
+    });
+    console.log(`  [foundry] Skill "${skill.name}" hat Scan+Sandbox bestanden — wartet auf Owner-Genehmigung (${res?.id})`);
+
+    return { armed: false, pending: true, id: res?.id, reason: 'awaiting owner approval' };
+  }
+
+  /**
+   * Aktiviert den Skill im Live-Satz. Wird AUSSCHLIESSLICH vom ApprovalGate-
+   * Execute-Callback aufgerufen, also nach explizitem Owner-JA. Nicht direkt aufrufen.
+   * @private
+   */
+  async _activateSkill(skill) {
+    const entry = this._registry.find(s => s.id === skill.id) || skill;
+    entry.approved   = true;
+    entry.active     = true;
+    entry.activatedAt = new Date().toISOString();
+    await this._saveRegistry();
+    this.bus?.safeEmit?.('foundry.skill_activated', { skill: entry.name, id: entry.id });
+    console.log(`  [foundry] Skill ACTIVATED nach Owner-Genehmigung: "${entry.name}"`);
+    return `Skill ${entry.name} aktiviert`;
+  }
+
+  /**
+   * Einheitliche Ablehnung: loggt, benachrichtigt, emittiert, lässt active=false.
+   * @private
+   */
+  _reject(skill, reason) {
+    // Sicherstellen, dass der Skill NICHT aktiv ist (defensiv).
+    const entry = this._registry.find(s => s.id === skill?.id);
+    if (entry) { entry.approved = false; entry.active = false; }
+    console.warn(`  [foundry] Aktivierung abgelehnt — "${skill?.name}": ${reason}`);
+    this.telegram?.sendToOwner?.(
+      `🛑 Foundry: Skill NICHT aktiviert\n\n*${skill?.name}*\n\nGrund: ${reason}`
+    ).catch(() => {});
+    this.bus?.safeEmit?.('foundry.skill_rejected', { skill: skill?.name, id: skill?.id, reason });
+    return { armed: false, reason };
+  }
+
+  /**
+   * Baut einen minimalen Smoke-Test-Harness um den generierten Skill-Code.
+   * Ziel: lädt/parst der Skill und ist sein Export aufrufbar, ohne dass der
+   * Test scharfe Seiteneffekte braucht. Bewusst KEIN echtes bus/telegram/llm —
+   * der Skill bekommt nur No-Op-Stubs, der Test ist ein Lade-/Signatur-Check.
+   * In der Sandbox gibt es ohnehin kein Netz/keine Engine-Objekte.
+   * @private
+   */
+  _buildSandboxHarness(skill) {
+    // skill.code als String einbetten. JSON.stringify escaped sauber für JS.
+    const codeLiteral = JSON.stringify(skill.code || '');
+    return `
+// Foundry Sandbox-Smoke-Test (auto-generiert, läuft isoliert)
+const SKILL_SOURCE = ${codeLiteral};
+(async () => {
+  try {
+    // Parsen + auswerten in einem Modul-Wrapper. Wirft bei Syntaxfehlern.
+    const wrapped = '(function(module, exports){' + SKILL_SOURCE + '\\n; return module.exports;})';
+    // eslint-disable-next-line no-eval
+    const factory = eval(wrapped);
+    const moduleObj = { exports: {} };
+    const exported = factory(moduleObj, moduleObj.exports);
+    // Akzeptiere: default export, named 'execute', oder bus_handler/cron_task-Objekt.
+    const candidate = exported && (exported.execute || exported.run || exported.handle || exported.default || exported);
+    if (typeof candidate !== 'function' && typeof candidate !== 'object') {
+      console.error('Skill exportiert nichts Aufrufbares');
+      process.exit(2);
+    }
+    console.log('SANDBOX_OK');
+    process.exit(0);
+  } catch (err) {
+    console.error('Skill-Test-Fehler: ' + (err && err.message));
+    process.exit(1);
+  }
+})();
+`;
+  }
 
   // ── Code Generation ───────────────────────────────────────
 
@@ -209,12 +431,15 @@ Antworte nur mit JSON:
 
     const raw = await this.llm.generate('Soul Foundry — Code Reviewer', [], prompt, { maxTokens: 300 });
 
+    // FAIL-CLOSED: a broken/unparseable LLM review must NOT approve a self-built skill.
+    // (This pre-filter sits before SkillSpector+Sandbox+Gate, but defense-in-depth means
+    // every layer denies on uncertainty rather than waving the skill through.)
     try {
       const m = raw.match(/\{[\s\S]*\}/);
-      if (!m) return { approved: true, reason: null }; // Default: approve if parse fails
+      if (!m) return { approved: false, reason: 'LLM-Review nicht parsebar — fail-closed abgelehnt' };
       return JSON.parse(m[0]);
     } catch {
-      return { approved: true, reason: null };
+      return { approved: false, reason: 'LLM-Review-JSON fehlerhaft — fail-closed abgelehnt' };
     }
   }
 

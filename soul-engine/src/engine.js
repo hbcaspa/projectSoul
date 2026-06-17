@@ -99,6 +99,9 @@ import { EventCoalescer } from './event-coalescer.js';
 import { MessageGateway } from './message-gateway.js';
 import { CheapHeartbeat } from './cheap-heartbeat.js';
 import { PaperclipAdapter } from './paperclip-adapter.js';
+// Phase 2 wiring — agentische Selbst-Erweiterung (Stufe 0/2):
+import { transcribeAudio } from './stt.js';                 // Stufe 0: Voice → Text
+import { CapabilityGapDetector } from './capability-gap.js'; // Stufe 2: Lücken-Sensorik
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -200,6 +203,9 @@ export class SoulEngine {
     this.gateway = null;         // Central message router
     this.cheapHeartbeat = null;  // Cheap-checks-first heartbeat
     this.paperclip = null;       // Paperclip AI orchestration adapter
+
+    // Phase 2 wiring — agentische Selbst-Erweiterung
+    this.capabilityGap = null;   // Stufe 2: erkennt Capability-Lücken (NUR Signal, kein exec)
   }
 
   /** Initialize LLM and context without starting channels */
@@ -1171,6 +1177,40 @@ export class SoulEngine {
     });
     console.log('  ReAct:     active (iterative agent loop)');
 
+    // 7b. CapabilityGapDetector (Phase 2, Stufe 2) — reine Sensorik. Inspiziert
+    //     jedes ReActLoop-Ergebnis im Self-Pfad und emittiert bei einer Lücke
+    //     ein 'capability.gap'-Event. Führt SELBST nichts aus (kein Tool, kein
+    //     Code) — die Reaktion darauf (Stufe 3 / Foundry) ist unten gegated.
+    this.capabilityGap = new CapabilityGapDetector({ bus: this.bus, logger: console });
+    console.log('  GapDetect: active (capability-gap sensor → bus only)');
+
+    // capability.gap-Konsument: NUR loggen. Foundry/Auto-Build NUR wenn
+    // FOUNDRY_ENABLED === 'true' (default OFF). Es gibt KEINEN ungegateten
+    // Pfad von einer erkannten Lücke zu Code-/Tool-Ausführung — der Foundry
+    // selbst hat zusätzlich Scan + Sandbox + ApprovalGate (defense in depth).
+    this.bus.on('capability.gap', (d) => {
+      const desc = d?.description || d?.need || 'unbekannte Lücke';
+      if (process.env.FOUNDRY_ENABLED === 'true' && this.foundry) {
+        console.log(`  [capability.gap] ${desc} — Foundry enabled → request (Scan+Sandbox+Gate folgen)`);
+        // build() läuft erst nach Scan/Sandbox/ApprovalGate scharf (armAndPublish, fail-closed).
+        this.bus.emit('foundry.request', { description: desc, type: d?.type || 'tool_function' });
+      } else {
+        console.log(`  [capability.gap] ${desc} — Foundry disabled, kein Auto-Build`);
+      }
+    });
+
+    // 7c. Foundry-Sicherheitskette verdrahten (Phase 2, Stufe 3). Der Foundry
+    //     wird in init() (vor sandbox/approvalGate) konstruiert, daher werden
+    //     die echten Abhängigkeiten hier — wie telegram in start() — am
+    //     Instanz-Feld nachgereicht. Ohne beide lehnt armAndPublish fail-closed
+    //     ab (kein Skill geht live). foundry.start() (Z.~517) registriert nur
+    //     den Listener; armAndPublish läuft erst zur Build-Zeit (lange danach).
+    if (this.foundry) {
+      this.foundry.sandbox      = this.sandbox;       // SandboxManager (init Z.~408)
+      this.foundry.approvalGate = this.approvalGate;  // ApprovalGate  (oben Z.~1157)
+      console.log(`  Foundry:   armAndPublish-Kette verdrahtet (sandbox:${!!this.sandbox} gate:${!!this.approvalGate}, FOUNDRY_ENABLED=${process.env.FOUNDRY_ENABLED === 'true'})`);
+    }
+
     // 8. EventCoalescer — batch events & backpressure
     this.coalescer = new EventCoalescer({ bus: this.bus });
 
@@ -1322,9 +1362,32 @@ export class SoulEngine {
     };
   }
 
-  async handleMessage({ text, chatId, userName, _relayed = false }) {
-    console.log(`  [handleMessage] START: "${text?.substring(0,80)}" from ${userName}`);
+  async handleMessage({ text, chatId, userName, voice, _relayed = false }) {
+    console.log(`  [handleMessage] START: "${text?.substring(0,80)}" from ${userName}${voice ? ' [voice]' : ''}`);
     try {
+    // ── Stufe 0: Voice → Text ────────────────────────────────────────────────
+    // telegram.js reicht bei Sprachnachrichten { text:undefined, voice:{ buffer,
+    // mimeType, duration } } durch. Wir transkribieren hier (NICHT in telegram.js)
+    // via Gemini-STT und verwenden das Ergebnis als ganz normalen Nachrichtentext.
+    // transcribeAudio() wirft nie — bei null degradieren wir sauber mit Owner-Hinweis.
+    // Sicherheit: dieser Pfad führt KEINEN Code/Tool aus, er lädt nur Audio-Bytes
+    // und ruft das STT-LLM; der scharfe Tool-Pfad bleibt unten am ApprovalGate.
+    if (voice && voice.buffer && (text === undefined || text === null || text === '')) {
+      const dur = typeof voice.duration === 'number' ? ` (${voice.duration}s)` : '';
+      console.log(`  [voice] Transkribiere Sprachnachricht${dur}, mime=${voice.mimeType || '?'}`);
+      await writePulse(this.soulPath, 'think', 'Sprachnachricht transkribieren', this.bus);
+      const transcript = await transcribeAudio(voice.buffer, voice.mimeType, {});
+      if (!transcript) {
+        console.log('  [voice] Transkription fehlgeschlagen/leer → sauberer Abbruch');
+        return 'Konnte die Sprachnachricht nicht transkribieren.';
+      }
+      // Owner sieht EINMAL was verstanden wurde (Fehltranskription erkennbar).
+      try { await this.telegram?.sendToOwner(`🎤 Verstanden: "${transcript}"`); } catch { /* best effort */ }
+      // Ab hier verhält sich alles wie der Text-Pfad — chatId/userName sind identisch,
+      // History-Speicherung etc. funktioniert unverändert mit dem transkribierten Text.
+      text = `[Sprachnachricht] ${transcript}`;
+    }
+
     // ── Prefix routing ───────────────────────────────────────────────────────
     const PREFIX = /^@(mac(?:book)?|server|local)[:\s]\s*/i;
     let target = 'all';
@@ -1611,8 +1674,56 @@ export class SoulEngine {
       }
     }
 
-    let response = await this.llm.generate(systemPrompt, history, text, llmOptions) || '';
+    // ── Stufe 1: ReActLoop im Self-Pfad (iterative Tool-Nutzung statt Single-Shot) ──
+    // Wenn die Nachricht echte Tools braucht (needsMCP/needsWhatsApp/Kontakt) UND
+    // MCP-Tools vorhanden sind, läuft der iterative ReAct-Loop. Tool-Ausführung geht
+    // dabei durch GENAU DENSELBEN ApprovalGate-Handler wie der Single-Shot-Pfad —
+    // llmOptions.onToolCall stammt aus _buildLLMOptions() (enqueueApproval, non-blocking),
+    // sodass es nur EINEN Approval-Pfad gibt. Der reine Konversationspfad (keine Tools)
+    // bleibt unverändert Single-Shot. Notausstieg: REACT_SELFPATH_ENABLED=false.
+    const reactSelfPathEnabled = process.env.REACT_SELFPATH_ENABLED !== 'false'; // default an
+    const useReactLoop =
+      reactSelfPathEnabled &&
+      this.reactLoop &&
+      this.mcp?.hasTools() &&
+      !!llmOptions.onToolCall &&
+      (needsMCP || needsWhatsApp || !!contactContext);
+
+    let response = '';
+    let loopResult = null;
+    if (useReactLoop) {
+      try {
+        const maxSteps = parseInt(process.env.REACT_MAX_STEPS || '8'); // <=10 (Adapter-Cap, s. react-loop Header)
+        loopResult = await this.reactLoop.run(systemPrompt, history, text, {
+          maxSteps,
+          maxTokens: llmOptions.max_tokens,
+          timeout: parseInt(process.env.REACT_TIMEOUT_MS || '120000'),
+          // EINZIGER Approval-Pfad: derselbe Handler wie _buildLLMOptions().onToolCall.
+          // Er ruft requiresApproval()->enqueueApproval(name,args,()=>mcp.callTool(...))
+          // und gibt bei riskanten Tools eine [approval_pending:...]-Notiz zurück.
+          onToolCall: llmOptions.onToolCall,
+        });
+        response = loopResult.response || '';
+        if (loopResult.iterations > 0) {
+          console.log(`  [react-self] ${loopResult.iterations} tool-step(s), ${loopResult.toolCalls.length} call(s)`);
+        }
+      } catch (err) {
+        // Fail-safe: bei ReAct-Fehler auf Single-Shot zurückfallen (kein toter Pfad).
+        console.error(`  [react-self] ReActLoop failed (${err.message}) — Fallback auf Single-Shot`);
+        response = await this.llm.generate(systemPrompt, history, text, llmOptions) || '';
+      }
+    } else {
+      response = await this.llm.generate(systemPrompt, history, text, llmOptions) || '';
+    }
     this._trackCost('conversation', systemPrompt, history, text, response);
+
+    // ── Stufe 2: Capability-Gap-Sensorik (NUR Signal) ──────────────────────────
+    // Inspiziert das ReActLoop-Ergebnis. Emittiert bei einer erkannten Lücke ein
+    // 'capability.gap'-Event (oben gehandhabt: nur loggen, Foundry nur FOUNDRY_ENABLED).
+    // inspect() wirft nie und führt nichts aus.
+    if (loopResult && this.capabilityGap) {
+      this.capabilityGap.inspect(loopResult, { userMessage: text, channel: 'telegram', sessionId: chatId });
+    }
 
     // Anti-performance check: detect performative patterns, re-generate once if score > 0.7
     if (this.detector && response) {

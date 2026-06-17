@@ -5,18 +5,55 @@
  * The LLM thinks → calls a tool → gets the result → thinks again →
  * calls another tool → ... until the task is complete.
  *
- * This replaces single-shot LLM calls with an iterative loop that
- * can chain multiple tool calls, handle errors gracefully, and
- * adapt its approach based on intermediate results.
+ * ─────────────────────────────────────────────────────────────────────────
+ * v2 (Stufe 1 — Live-Self-Pfad-Härtung):
+ *
+ * Die alte Implementierung hatte zwei kritische Fehler:
+ *
+ *  1. ROLLEN-/INJECTION-GRENZE GEBROCHEN: Tool-Ergebnisse wurden als
+ *     GEFÄLSCHTE Text-Turns in die History konkateniert
+ *     ({role:'assistant', content:"I'll use X..."} + {role:'user',
+ *     content:"Tool result from X:\n..."}). Das vermischt Tool-Output mit
+ *     echtem User-Text (Prompt-Injection-Oberfläche) und zerstört das
+ *     Prompt-Caching, weil jede Runde die History textuell umbaut.
+ *
+ *  2. TOTER PFAD: Der Loop übergab `returnRaw:true` + `onToolCall:undefined`
+ *     an llm.generate(). KEIN Adapter (anthropic/gemini/openai/ollama)
+ *     kennt `returnRaw` — alle geben einen String zurück. _parseResponse()
+ *     eines Strings ergibt IMMER {type:'text'}, also wurde nie ein Tool-Call
+ *     erkannt: der Loop endete faktisch nach Runde 1.
+ *
+ * Korrektur: Die Tool-Iteration wird an die Adapter delegiert. JEDER Adapter
+ * implementiert bereits NATIVE Tool-Messages über den Callback
+ * `onToolCall(name, args) -> result`:
+ *   - anthropic.js: {role:'assistant', content:[...tool_use]} +
+ *     {role:'user', content:[{type:'tool_result', tool_use_id, content}]}
+ *     (native Messages-API-Form, Prompt-Caching bleibt intakt)
+ *   - gemini.js: native functionCall / functionResponse parts
+ *   - openai.js / ollama.js: native function/tool_calls
+ *
+ * Diese ReActLoop baut den onToolCall-Handler (Hooks → ApprovalGate →
+ * Step-Cap → MCP-Ausführung) und übergibt ihn an den Adapter. Damit bleibt
+ * die Rollen-Grenze sauber UND der ApprovalGate sitzt verbindlich im Pfad.
+ *
+ * GRENZE (ehrlich dokumentiert): Weil die Adapter ihren eigenen internen
+ * Tool-Loop fahren (bis zu 10 Runden pro generate()), kontrolliert diese
+ * Klasse die Runden über einen geteilten Step-Counter (this._stepCap) im
+ * onToolCall-Handler statt über einen äußeren Schleifenzähler. Erreicht der
+ * Counter maxSteps, liefert der Handler eine Stop-Notiz statt das Tool
+ * auszuführen — der Adapter beendet daraufhin mit Text. `iterations` im
+ * Rückgabewert spiegelt deshalb die ANZAHL DER TOOL-SCHRITTE, nicht
+ * LLM-Runden (die Adapter-Runden sind von außen nicht sichtbar).
+ * ─────────────────────────────────────────────────────────────────────────
  */
 
-const MAX_ITERATIONS = 10;
+const MAX_STEPS = 8;          // Default tool-step cap (loop protection)
 const DEFAULT_TIMEOUT = 120000; // 2 min total
 
 export class ReActLoop {
   /**
    * @param {object} opts
-   * @param {object} opts.llm - LLM adapter (Gemini/Anthropic/OpenAI)
+   * @param {object} opts.llm - LLM adapter / ModelFailover (generate w/ onToolCall)
    * @param {object} opts.mcp - MCP client manager (tools)
    * @param {object} opts.bus - Event bus
    * @param {object} opts.hooks - LifecycleHooks instance (optional)
@@ -28,244 +65,228 @@ export class ReActLoop {
     this.bus = bus || null;
     this.hooks = hooks || null;
     this.gate = gate || null;
-    this.stats = { runs: 0, iterations: 0, toolCalls: 0, errors: 0, gateBlocks: 0 };
+    this.stats = { runs: 0, steps: 0, toolCalls: 0, errors: 0, gateBlocks: 0, capHits: 0 };
   }
 
   /**
    * Run the ReAct loop: iterative reasoning + acting until done.
    *
+   * Signature (unchanged for existing callers — api.js, paperclip-adapter.js):
+   *   run(systemPrompt, history, userMessage, options) -> Promise<{
+   *     response, iterations, toolCalls, totalTokens
+   *   }>
+   *
    * @param {string} systemPrompt - System prompt for the LLM
-   * @param {Array} history - Conversation history
-   * @param {string} userMessage - The user's input
+   * @param {Array}  history      - Conversation history [{role, content}]
+   * @param {string} userMessage  - The user's input
    * @param {object} options
-   * @param {number} options.maxIterations - Max tool-call rounds (default 10)
-   * @param {number} options.maxTokens - Token budget per LLM call
-   * @param {number} options.timeout - Total timeout in ms
-   * @param {Function} options.onIteration - Callback per iteration (for streaming)
-   * @param {Function} options.onToolCall - Callback per tool call
+   * @param {number}   options.maxSteps      - Max tool executions (default 8). Loop protection.
+   * @param {number}   options.maxIterations - Back-compat alias for maxSteps.
+   * @param {number}   options.maxTokens     - Token budget per LLM call.
+   * @param {number}   options.timeout       - Total timeout in ms.
+   * @param {Function} options.onToolCall    - OPTIONAL hook to route tool execution
+   *                     through the engine's ApprovalGate. Signature:
+   *                         onToolCall(name, args) -> Promise<result|string>
+   *                     If omitted, tools are executed directly via mcp.callTool().
+   *                     The engine sets this so risky tools go through enqueueApproval().
+   * @param {Function} options.onIteration   - OPTIONAL notification per tool step
+   *                     (kept for back-compat; receives {iteration, type, tools}).
    * @returns {{ response: string, iterations: number, toolCalls: object[], totalTokens: number }}
    */
   async run(systemPrompt, history, userMessage, options = {}) {
-    const maxIter = options.maxIterations || MAX_ITERATIONS;
+    // maxIterations kept as an alias so existing callers don't break.
+    const maxSteps = options.maxSteps || options.maxIterations || MAX_STEPS;
     const timeout = options.timeout || DEFAULT_TIMEOUT;
     const startTime = Date.now();
 
     this.stats.runs++;
 
-    // Build tool definitions from MCP
     const tools = this.mcp?.hasTools() ? this.mcp.getTools() : [];
     const toolCalls = [];
-    let iterations = 0;
-    let totalTokens = 0;
-
-    // Working history: starts with user message, grows with tool results
-    const workingHistory = [...history, { role: 'user', content: userMessage }];
+    let steps = 0;
+    let capHit = false;
 
     if (this.bus) {
       this.bus.safeEmit('react.started', {
         source: 'react-loop',
         toolCount: tools.length,
-        maxIterations: maxIter,
+        maxSteps,
       });
     }
 
-    for (let i = 0; i < maxIter; i++) {
-      iterations++;
-      this.stats.iterations++;
-
-      // Timeout check
+    // ── Tool-execution handler passed to the adapter ──────────────────────
+    // The adapter calls this for every native tool_use / functionCall it
+    // emits. We enforce, IN ORDER: timeout → step-cap → before-hook →
+    // ApprovalGate → execute → after-hook. Everything is FAIL-CLOSED:
+    // any uncertainty returns a non-executing notice, never a silent pass.
+    const executeTool = async (name, args = {}) => {
+      // 1. Timeout guard — never start a tool after the budget is spent.
       if (Date.now() - startTime > timeout) {
-        console.error('  [react] Timeout after', iterations, 'iterations');
-        break;
+        capHit = true;
+        return `[react] Aborted: total timeout (${timeout}ms) reached before "${name}".`;
       }
 
-      // Call LLM with tools
-      let response;
+      // 2. Step cap — loop protection. Once hit, refuse further tools so the
+      //    model is forced to conclude with text.
+      if (steps >= maxSteps) {
+        capHit = true;
+        this.stats.capHits++;
+        return `[react] Step limit (${maxSteps}) reached. No more tools may be called — please conclude with a final answer based on what you have.`;
+      }
+      steps++;
+      this.stats.steps++;
+      this.stats.toolCalls++;
+      const iteration = steps;
+
+      // 3. Lifecycle hook: before_tool_call (may block).
+      if (this.hooks) {
+        const hookResult = await this.hooks.run('before_tool_call', { tool: name, args, iteration });
+        if (hookResult?.blocked) {
+          if (options.onIteration) options.onIteration({ iteration, type: 'tool_blocked', tools: [name] });
+          return `Tool ${name} was blocked by hook: ${hookResult.reason || 'no reason given'}`;
+        }
+      }
+
+      // 4. ApprovalGate routing.
+      //    PREFERRED: the engine passes options.onToolCall — its handler runs
+      //    requiresApproval()->enqueueApproval() and returns either a pending
+      //    notice or the real result. We delegate wholesale so there is exactly
+      //    ONE approval path (engine.js handleMessage), not a divergent copy.
+      //    FALLBACK: if no external handler, we still honour a locally-attached
+      //    gate by DENYING risky tools (fail-closed) — we never auto-run a
+      //    risky tool just because no async-approval transport is wired here.
+      if (options.onToolCall) {
+        let result;
+        try {
+          result = await options.onToolCall(name, args);
+        } catch (err) {
+          this.stats.errors++;
+          console.error(`  [react] onToolCall error: ${name} → ${err.message}`);
+          result = `Error executing ${name}: ${err.message}`;
+        }
+        return this._afterTool(name, args, result, iteration, toolCalls, options);
+      }
+
+      if (this.gate && this.gate.requiresApproval(name)) {
+        // No external approval transport available in this path. requestApproval()
+        // is the synchronous variant; if it is absent we must DENY (fail-closed).
+        if (typeof this.gate.requestApproval === 'function') {
+          let approved = false;
+          try {
+            approved = await this.gate.requestApproval(name, args);
+          } catch (err) {
+            console.error(`  [react] gate.requestApproval threw for ${name}: ${err.message}`);
+            approved = false;
+          }
+          if (!approved) {
+            this.stats.gateBlocks++;
+            if (options.onIteration) options.onIteration({ iteration, type: 'tool_blocked', tools: [name] });
+            return `Tool ${name} was blocked: human approval denied or timed out.`;
+          }
+        } else {
+          this.stats.gateBlocks++;
+          if (options.onIteration) options.onIteration({ iteration, type: 'tool_blocked', tools: [name] });
+          return `Tool ${name} requires approval but no approval transport is wired into this run() path. Denied (fail-closed).`;
+        }
+      }
+
+      // 5. Direct execution (read-only / approved tools only past this point).
+      let result;
       try {
-        response = await this.llm.generate(systemPrompt, workingHistory.slice(0, -1), workingHistory[workingHistory.length - 1].content, {
-          maxTokens: options.maxTokens || 4096,
-          tools: tools.length > 0 ? tools : undefined,
-          onToolCall: undefined, // We handle tool calls ourselves in the loop
-          returnRaw: true,       // Get structured response with tool_calls
-        });
+        console.log(`  [react] Tool: ${name} (step ${iteration})`);
+        result = await this.mcp.callTool(name, args);
+        if (typeof result === 'string' && result.length > 10000) {
+          result = result.substring(0, 10000) + '\n\n[... truncated at 10000 chars]';
+        }
       } catch (err) {
         this.stats.errors++;
-        // On LLM error, try to recover with a simpler prompt
-        console.error(`  [react] LLM error at iteration ${i}: ${err.message}`);
-        if (i === 0) throw err; // First call fails = real error
-        break; // Subsequent fails = return what we have
+        console.error(`  [react] Tool error: ${name} → ${err.message}`);
+        result = `Error executing ${name}: ${err.message}`;
       }
+      return this._afterTool(name, args, result, iteration, toolCalls, options);
+    };
 
-      // Parse response: is it a final text answer or a tool call?
-      const parsed = this._parseResponse(response);
-
-      if (parsed.type === 'text') {
-        // Final answer — loop complete
-        if (options.onIteration) options.onIteration({ iteration: i, type: 'final', text: parsed.text });
-
-        if (this.bus) {
-          this.bus.safeEmit('react.completed', {
-            source: 'react-loop',
-            iterations,
-            toolCalls: toolCalls.length,
-          });
-        }
-
-        return {
-          response: parsed.text,
-          iterations,
-          toolCalls,
-          totalTokens,
-        };
+    // ── Single adapter call. The adapter runs its OWN native tool loop and
+    //    calls executeTool() for each tool, feeding results back as NATIVE
+    //    tool-result messages (no fake text turns). ──────────────────────
+    let response;
+    try {
+      response = await this.llm.generate(systemPrompt, history || [], userMessage, {
+        maxTokens: options.maxTokens || 4096,
+        // Some adapters read max_tokens (snake_case) instead of maxTokens.
+        max_tokens: options.maxTokens || 4096,
+        tools: tools.length > 0 ? tools : undefined,
+        onToolCall: tools.length > 0 ? executeTool : undefined,
+      });
+    } catch (err) {
+      this.stats.errors++;
+      console.error(`  [react] LLM error: ${err.message}`);
+      if (this.bus) {
+        this.bus.safeEmit('react.completed', { source: 'react-loop', steps, toolCalls: toolCalls.length, error: true });
       }
-
-      if (parsed.type === 'tool_calls') {
-        // Execute each tool call
-        for (const call of parsed.calls) {
-          this.stats.toolCalls++;
-
-          // Lifecycle hook: before_tool_call
-          if (this.hooks) {
-            const hookResult = await this.hooks.run('before_tool_call', {
-              tool: call.name,
-              args: call.args,
-              iteration: i,
-            });
-            if (hookResult?.blocked) {
-              workingHistory.push({
-                role: 'tool',
-                content: `Tool ${call.name} was blocked by hook: ${hookResult.reason}`,
-                name: call.name,
-              });
-              continue;
-            }
-          }
-
-          // Approval gate: check if this tool needs human approval
-          if (this.gate && this.gate.requiresApproval(call.name)) {
-            const approved = await this.gate.requestApproval(call.name, call.args);
-            if (!approved) {
-              this.stats.gateBlocks++;
-              workingHistory.push({
-                role: 'tool',
-                content: `Tool ${call.name} was blocked: human approval denied or timed out.`,
-                name: call.name,
-              });
-              if (options.onToolCall) options.onToolCall({ tool: call.name, blocked: true });
-              continue;
-            }
-          }
-
-          // Execute the tool
-          let result;
-          try {
-            if (options.onToolCall) options.onToolCall({ tool: call.name, args: call.args });
-
-            console.log(`  [react] Tool: ${call.name} (iteration ${i})`);
-            result = await this.mcp.callTool(call.name, call.args);
-
-            // Truncate long results
-            if (typeof result === 'string' && result.length > 10000) {
-              result = result.substring(0, 10000) + '\n\n[... truncated at 10000 chars]';
-            }
-          } catch (err) {
-            this.stats.errors++;
-            result = `Error executing ${call.name}: ${err.message}`;
-            console.error(`  [react] Tool error: ${call.name} → ${err.message}`);
-          }
-
-          // Lifecycle hook: after_tool_call
-          if (this.hooks) {
-            const hookResult = await this.hooks.run('after_tool_call', {
-              tool: call.name,
-              args: call.args,
-              result,
-              iteration: i,
-            });
-            if (hookResult?.modifiedResult) result = hookResult.modifiedResult;
-          }
-
-          toolCalls.push({
-            name: call.name,
-            args: call.args,
-            result: typeof result === 'string' ? result.substring(0, 500) : String(result).substring(0, 500),
-            iteration: i,
-          });
-
-          // Feed result back into the working history
-          workingHistory.push({
-            role: 'assistant',
-            content: `I'll use ${call.name} to help with this.`,
-          });
-          workingHistory.push({
-            role: 'user',
-            content: `Tool result from ${call.name}:\n${result}`,
-          });
-        }
-
-        if (options.onIteration) {
-          options.onIteration({
-            iteration: i,
-            type: 'tool_round',
-            tools: parsed.calls.map(c => c.name),
-          });
-        }
-
-        continue; // Next iteration — LLM processes tool results
-      }
-
-      // Unknown response type — treat as final
-      break;
+      throw err;
     }
 
-    // Max iterations reached — extract whatever text we have
-    const lastResponse = workingHistory.filter(m => m.role === 'assistant').pop();
+    // Adapters return a string; normalise defensively in case one returns an object.
+    const text = this._extractText(response);
 
     if (this.bus) {
       this.bus.safeEmit('react.completed', {
         source: 'react-loop',
-        iterations,
+        steps,
         toolCalls: toolCalls.length,
-        maxIterationsReached: true,
+        capHit,
       });
     }
 
     return {
-      response: lastResponse?.content || 'Ich konnte die Aufgabe nicht in den verfuegbaren Schritten abschliessen.',
-      iterations,
+      response: text || 'Ich konnte die Aufgabe nicht in den verfuegbaren Schritten abschliessen.',
+      // `iterations` retained in the return shape for back-compat (paperclip
+      // reads result.iterations). It reflects the number of TOOL STEPS taken;
+      // see the file header for why LLM rounds are not separately observable.
+      iterations: steps,
       toolCalls,
-      totalTokens,
+      totalTokens: 0,
     };
   }
 
   /**
-   * Parse LLM response into text or tool calls.
-   * Handles both structured (function calling) and text-based tool calls.
+   * after_tool_call hook + bookkeeping. Returns the (possibly modified) result
+   * string that gets fed back to the model as a native tool result.
    */
-  _parseResponse(response) {
-    // If response is a string, check for inline tool calls
-    if (typeof response === 'string') {
-      return { type: 'text', text: response };
+  async _afterTool(name, args, result, iteration, toolCalls, options) {
+    if (this.hooks) {
+      const hookResult = await this.hooks.run('after_tool_call', { tool: name, args, result, iteration });
+      if (hookResult?.modifiedResult) result = hookResult.modifiedResult;
     }
 
-    // Structured response from LLM adapter
-    if (response && response.toolCalls && response.toolCalls.length > 0) {
-      return {
-        type: 'tool_calls',
-        calls: response.toolCalls.map(tc => ({
-          name: tc.name || tc.function?.name,
-          args: tc.args || tc.function?.arguments || {},
-        })),
-      };
+    const resultStr = typeof result === 'string' ? result : String(result);
+    toolCalls.push({
+      name,
+      args,
+      result: resultStr.substring(0, 500),
+      iteration,
+    });
+
+    if (options.onIteration) {
+      options.onIteration({ iteration, type: 'tool_step', tools: [name] });
     }
 
-    // Response with text content
-    if (response && (response.text || response.content)) {
-      return { type: 'text', text: response.text || response.content };
-    }
+    // Always hand back a string — adapters wrap it in their native tool-result
+    // message type (Anthropic tool_result.content, Gemini functionResponse, …).
+    return resultStr;
+  }
 
-    // Fallback
-    return { type: 'text', text: String(response) };
+  /**
+   * Normalise an adapter response to text. Adapters return a string; this
+   * stays defensive for any adapter that returns {text}/{content}.
+   */
+  _extractText(response) {
+    if (response == null) return '';
+    if (typeof response === 'string') return response;
+    if (typeof response.text === 'string') return response.text;
+    if (typeof response.content === 'string') return response.content;
+    return String(response);
   }
 
   getStats() {

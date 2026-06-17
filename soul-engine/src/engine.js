@@ -102,6 +102,7 @@ import { PaperclipAdapter } from './paperclip-adapter.js';
 // Phase 2 wiring — agentische Selbst-Erweiterung (Stufe 0/2):
 import { transcribeAudio } from './stt.js';                 // Stufe 0: Voice → Text
 import { CapabilityGapDetector } from './capability-gap.js'; // Stufe 2: Lücken-Sensorik
+import { CapabilityResolver } from './capability-resolver.js'; // Stufe 2.5: "wie krieg ich das hin?" — Meta-Reasoning + Routing (gegated)
 
 export class SoulEngine {
   constructor(soulPath) {
@@ -206,6 +207,7 @@ export class SoulEngine {
 
     // Phase 2 wiring — agentische Selbst-Erweiterung
     this.capabilityGap = null;   // Stufe 2: erkennt Capability-Lücken (NUR Signal, kein exec)
+    this.capabilityResolver = null; // Stufe 2.5: reagiert auf Lücken (reason+route, exec-frei)
   }
 
   /** Initialize LLM and context without starting channels */
@@ -521,6 +523,12 @@ export class SoulEngine {
         if (this.foundry) {
           this.foundry.telegram = this.telegram;
           await this.foundry.start();
+        }
+
+        // CapabilityResolver: telegram nachreichen (war zur init-Zeit null) —
+        // ohne das könnte er den Owner nicht über erkannte Lücken benachrichtigen.
+        if (this.capabilityResolver) {
+          this.capabilityResolver.telegram = this.telegram;
         }
 
         // Start Webhook Server — externe Event-Trigger
@@ -1184,19 +1192,21 @@ export class SoulEngine {
     this.capabilityGap = new CapabilityGapDetector({ bus: this.bus, logger: console });
     console.log('  GapDetect: active (capability-gap sensor → bus only)');
 
-    // capability.gap-Konsument: NUR loggen. Foundry/Auto-Build NUR wenn
-    // FOUNDRY_ENABLED === 'true' (default OFF). Es gibt KEINEN ungegateten
-    // Pfad von einer erkannten Lücke zu Code-/Tool-Ausführung — der Foundry
-    // selbst hat zusätzlich Scan + Sandbox + ApprovalGate (defense in depth).
+    // 7b-2. CapabilityResolver (Stufe 2.5) — der "wie krieg ich das hin?"-Reflex.
+    //   Reagiert auf 'capability.gap': reasoniert (meta), WIE die Lücke zu schließen
+    //   wäre, und ROUTET — Owner-Hinweis auf vorhandene Fähigkeit/Tool, ODER (nur
+    //   FOUNDRY_ENABLED) ein gegateter Foundry-Build (Scan+Sandbox+ApprovalGate),
+    //   ODER Owner-Notify mit konkretem Vorschlag. Führt NICHTS ungegated aus —
+    //   es entsteht KEIN neuer exec-Pfad. telegram wird in start() nachgereicht
+    //   (wie bei foundry), weil es zur init-Zeit noch null ist.
+    this.capabilityResolver = new CapabilityResolver({
+      bus: this.bus, llm: this.llm, registry: this.capabilityRegistry,
+      mcp: this.mcp, telegram: this.telegram, logger: console,
+    });
+    console.log(`  Resolver:  capability.gap → reason+route (${this.capabilityResolver.enabled ? 'enabled' : 'disabled'}, exec-frei; Foundry nur FOUNDRY_ENABLED)`);
     this.bus.on('capability.gap', (d) => {
-      const desc = d?.description || d?.need || 'unbekannte Lücke';
-      if (process.env.FOUNDRY_ENABLED === 'true' && this.foundry) {
-        console.log(`  [capability.gap] ${desc} — Foundry enabled → request (Scan+Sandbox+Gate folgen)`);
-        // build() läuft erst nach Scan/Sandbox/ApprovalGate scharf (armAndPublish, fail-closed).
-        this.bus.emit('foundry.request', { description: desc, type: d?.type || 'tool_function' });
-      } else {
-        console.log(`  [capability.gap] ${desc} — Foundry disabled, kein Auto-Build`);
-      }
+      // fire-and-forget; handleGap wirft nie, .catch nur als Gürtel-und-Hosenträger.
+      try { Promise.resolve(this.capabilityResolver?.handleGap(d)).catch(() => {}); } catch { /* fail-safe */ }
     });
 
     // 7c. Foundry-Sicherheitskette verdrahten (Phase 2, Stufe 3). Der Foundry

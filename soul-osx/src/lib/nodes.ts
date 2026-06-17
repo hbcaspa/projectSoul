@@ -5,9 +5,11 @@ import type { NodeConfig } from "./types";
 
 export const NODES: NodeConfig[] = [
   { id: "mac", label: "macbook", base: "http://localhost:3002", local: true },
-  // alm-Server: über die Domain erreichbar; engine_fetch (Rust/reqwest) umgeht CORS.
-  // base bei Bedarf in den Einstellungen anpassbar (siehe key/base-Storage unten).
-  { id: "alm", label: "server", base: "https://alm-solutions.de", local: false },
+  // alm-Server: alms Engine lauscht nur lokal (Firewall) → NICHT öffentlich exponiert.
+  // Erreichbar über einen lokalen SSH-Tunnel (Mac:3103 → alm-Engine:3002), sicher,
+  // nichts öffentlich. Tunnel-Befehl siehe seele/INFRASTRUKTUR.md / README.
+  // Base per localStorage 'soulosx.base.alm' überschreibbar (getBase), falls der Port wechselt.
+  { id: "alm", label: "server", base: "http://localhost:3103", local: false },
 ];
 
 const keyKey = (nodeId: string) => `soulosx.key.${nodeId}`;

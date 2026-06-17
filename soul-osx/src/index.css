@@ -1,28 +1,46 @@
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────────────────────
-   soulOSX — „DER KORTEX" — Designsystem „Tiefsee-Neuro"
-   Module sind Organe, Events Synapsenfeuer, der Puls ein Herzschlag.
-   Farbe = Funktion. Der Hintergrund ist nie ganz tot — er atmet.
+   soulOSX — Apple-native. Das Terminal ist das Herzstück; der
+   Kortex die lebende Hülle. Echtes macOS-Vibrancy-Material scheint
+   durch; Oberflächen sind zarte, durchscheinende Karten darauf.
+   SF Pro / SF Mono. macOS-Systemfarben. Bewegung subtil, federnd.
    ───────────────────────────────────────────────────────────── */
 
 @theme {
-  --color-void: #0b0a12;
-  --color-tissue: #15131f;
-  --color-tissue-2: #1b1828;
-  --color-membrane: #272336;
-  --color-synapse: #7c5cff;
-  --color-pulse: #ff4d6d;
-  --color-biolumi: #34e5d4;
-  --color-bone: #ede9f5;
-  --color-ash: #8a85a0;
-  --color-cortex-warm: #ffb85c;
-  --color-immune: #5ce08a;
-  --color-fever: #ff6b35;
+  /* macOS-Systemfarben (Dark) — Akzente sparsam, funktional */
+  --color-indigo: #5e5ce6;
+  --color-violet: #7d7aff;
+  --color-teal: #64d2ff;
+  --color-mint: #66d4cf;
+  --color-green: #30d158;
+  --color-red: #ff453a;
+  --color-orange: #ff9f0a;
+  --color-pink: #ff375f;
+  --color-yellow: #ffd60a;
 
+  /* Label-Hierarchie (Apple) */
+  --color-label: rgba(255, 255, 255, 0.92);
+  --color-label2: rgba(255, 255, 255, 0.55);
+  --color-label3: rgba(255, 255, 255, 0.3);
+
+  --font-sans: -apple-system, "SF Pro Text", "SF Pro Display", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Menlo", monospace;
-  --font-sans: -apple-system, system-ui, "Helvetica Neue", sans-serif;
-  --font-voice: "Iowan Old Style", "Palatino", Georgia, serif;
+
+  /* Kompatibilitäts-Aliase: bestehende Kortex-/Panel-Komponenten nutzen diese
+     Namen — auf die Apple-Palette gemappt, damit alles nativ-macOS wirkt. */
+  --color-void: #16161a;
+  --color-tissue: #1c1c22;
+  --color-tissue-2: #222229;
+  --color-membrane: rgba(255, 255, 255, 0.1);
+  --color-synapse: #7d7aff;
+  --color-pulse: #ff375f;
+  --color-biolumi: #64d2ff;
+  --color-bone: #e9e9ee;
+  --color-ash: #98989f;
+  --color-cortex-warm: #ff9f0a;
+  --color-immune: #30d158;
+  --color-fever: #ff453a;
 }
 
 :root {
@@ -37,89 +55,107 @@ body,
 }
 
 body {
-  background: var(--color-void);
-  color: var(--color-bone);
+  /* Vibrancy scheint durch; ein hauchzarter Tint gibt Tiefe (und macht den
+     Dev-Browser nicht weiß). Auf macOS liegt das über dem NSVisualEffect-Material. */
+  background: rgba(24, 24, 28, 0.55);
+  color: var(--color-label);
   font-family: var(--font-sans);
+  font-size: 13px;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   user-select: none;
   cursor: default;
 }
 
-/* lebendiger Hintergrund: extrem langsamer Violett-Nebel */
+/* sehr subtiler, ruhiger Farbschimmer — Apple-Wallpaper-dezent */
 #root::before {
   content: "";
   position: fixed;
-  inset: -20%;
+  inset: 0;
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(40% 35% at 30% 25%, rgba(124, 92, 255, 0.06), transparent 70%),
-    radial-gradient(45% 40% at 75% 70%, rgba(52, 229, 212, 0.04), transparent 70%),
-    radial-gradient(30% 30% at 55% 90%, rgba(255, 77, 109, 0.03), transparent 70%);
-  animation: drift 48s ease-in-out infinite alternate;
+    radial-gradient(60% 50% at 20% 0%, rgba(94, 92, 230, 0.1), transparent 60%),
+    radial-gradient(50% 50% at 100% 100%, rgba(100, 210, 255, 0.07), transparent 60%);
 }
 
-@keyframes drift {
-  0% { transform: translate(0, 0) scale(1); }
-  100% { transform: translate(2%, -2%) scale(1.05); }
+/* Apple-Karte auf Vibrancy: zarte durchscheinende Fläche + Haarlinie + weicher Schatten */
+.card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+    0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+}
+.card-flat {
+  background: rgba(255, 255, 255, 0.035);
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
 }
 
-/* (a) ATEM — globaler, datengekoppelter Puls (Frequenz via --breath-rate) */
-@keyframes breathe {
-  0%, 100% { transform: scale(1); opacity: 0.96; }
-  50% { transform: scale(1.006); opacity: 1; }
-}
-.breathe {
-  animation: breathe var(--breath-rate, 4.5s) ease-in-out infinite;
-}
-
-/* (b) FEUERN — Synapsenblitz / Herzschlag-Druckwelle */
-@keyframes flash {
-  0% { opacity: 0; transform: scale(0.6); }
-  20% { opacity: 1; }
-  100% { opacity: 0; transform: scale(2.4); }
-}
-@keyframes heartwave {
-  0% { opacity: 0.55; transform: scale(0.2); }
-  100% { opacity: 0; transform: scale(3.2); }
-}
-
-/* sanftes Auftauchen von Panels */
-@keyframes surface {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.surface { animation: surface 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
-
+/* Alias für bestehende Komponenten — gleicher Apple-Karten-Look */
 .glass {
-  background: linear-gradient(160deg, rgba(27, 24, 40, 0.72), rgba(21, 19, 31, 0.72));
-  border: 1px solid var(--color-membrane);
-  border-radius: 14px;
-  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.05);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+}
+
+.hairline {
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .label {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
+  font-weight: 590;
+  letter-spacing: 0.02em;
+  font-size: 11px;
+  color: var(--color-label3);
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 10px;
-  color: var(--color-ash);
 }
 
-.voice {
-  font-family: var(--font-voice);
-  font-style: italic;
+/* sehr dezenter „Atem" — Apple-ruhig, kein Neon-Puls */
+@keyframes breathe {
+  0%, 100% { opacity: 0.94; }
+  50% { opacity: 1; }
+}
+.breathe { animation: breathe var(--breath-rate, 5s) ease-in-out infinite; }
+
+/* Ladebalken-Shimmer (2026) */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(220%); }
+}
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent);
+  animation: shimmer 1.4s ease-in-out infinite;
 }
 
-/* Glow-Helfer */
-.glow-synapse { box-shadow: 0 0 18px -2px rgba(124, 92, 255, 0.55); }
-.glow-pulse { box-shadow: 0 0 18px -2px rgba(255, 77, 109, 0.55); }
+/* sanftes Auftauchen */
+@keyframes surface {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.surface { animation: surface 0.45s cubic-bezier(0.32, 0.72, 0, 1) both; }
 
+/* Apple-dünne, überlagernde Scrollbars */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: var(--color-membrane); border-radius: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-track { background: transparent; }
 
+/* xterm — Apple-Terminal-Look */
+.xterm { padding: 12px 14px; height: 100%; }
+.xterm-viewport::-webkit-scrollbar { width: 8px; }
+
 @media (prefers-reduced-motion: reduce) {
-  .breathe, #root::before { animation: none; }
+  .breathe, .shimmer::after { animation: none; }
 }

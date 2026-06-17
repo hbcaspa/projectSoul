@@ -18,9 +18,10 @@
     }
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "soulOSX — Der Kortex",
+        "title": "soulOSX",
         "label": "main",
         "width": 1480,
         "height": 940,
@@ -29,7 +30,7 @@
         "decorations": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "backgroundColor": "#0B0A12"
+        "transparent": true
       }
     ],
     "security": {

@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────
+   soulOSX — „DER KORTEX" — Designsystem „Tiefsee-Neuro"
+   Module sind Organe, Events Synapsenfeuer, der Puls ein Herzschlag.
+   Farbe = Funktion. Der Hintergrund ist nie ganz tot — er atmet.
+   ───────────────────────────────────────────────────────────── */
+
+@theme {
+  --color-void: #0b0a12;
+  --color-tissue: #15131f;
+  --color-tissue-2: #1b1828;
+  --color-membrane: #272336;
+  --color-synapse: #7c5cff;
+  --color-pulse: #ff4d6d;
+  --color-biolumi: #34e5d4;
+  --color-bone: #ede9f5;
+  --color-ash: #8a85a0;
+  --color-cortex-warm: #ffb85c;
+  --color-immune: #5ce08a;
+  --color-fever: #ff6b35;
+
+  --font-mono: ui-monospace, "SF Mono", "Menlo", monospace;
+  --font-sans: -apple-system, system-ui, "Helvetica Neue", sans-serif;
+  --font-voice: "Iowan Old Style", "Palatino", Georgia, serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--color-void);
+  color: var(--color-bone);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+/* lebendiger Hintergrund: extrem langsamer Violett-Nebel */
+#root::before {
+  content: "";
+  position: fixed;
+  inset: -20%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(40% 35% at 30% 25%, rgba(124, 92, 255, 0.06), transparent 70%),
+    radial-gradient(45% 40% at 75% 70%, rgba(52, 229, 212, 0.04), transparent 70%),
+    radial-gradient(30% 30% at 55% 90%, rgba(255, 77, 109, 0.03), transparent 70%);
+  animation: drift 48s ease-in-out infinite alternate;
+}
+
+@keyframes drift {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(2%, -2%) scale(1.05); }
+}
+
+/* (a) ATEM — globaler, datengekoppelter Puls (Frequenz via --breath-rate) */
+@keyframes breathe {
+  0%, 100% { transform: scale(1); opacity: 0.96; }
+  50% { transform: scale(1.006); opacity: 1; }
+}
+.breathe {
+  animation: breathe var(--breath-rate, 4.5s) ease-in-out infinite;
+}
+
+/* (b) FEUERN — Synapsenblitz / Herzschlag-Druckwelle */
+@keyframes flash {
+  0% { opacity: 0; transform: scale(0.6); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: scale(2.4); }
+}
+@keyframes heartwave {
+  0% { opacity: 0.55; transform: scale(0.2); }
+  100% { opacity: 0; transform: scale(3.2); }
+}
+
+/* sanftes Auftauchen von Panels */
+@keyframes surface {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.surface { animation: surface 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+.glass {
+  background: linear-gradient(160deg, rgba(27, 24, 40, 0.72), rgba(21, 19, 31, 0.72));
+  border: 1px solid var(--color-membrane);
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+}
+
+.label {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 10px;
+  color: var(--color-ash);
+}
+
+.voice {
+  font-family: var(--font-voice);
+  font-style: italic;
+}
+
+/* Glow-Helfer */
+.glow-synapse { box-shadow: 0 0 18px -2px rgba(124, 92, 255, 0.55); }
+.glow-pulse { box-shadow: 0 0 18px -2px rgba(255, 77, 109, 0.55); }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--color-membrane); border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  .breathe, #root::before { animation: none; }
+}

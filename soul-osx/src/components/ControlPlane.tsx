@@ -148,7 +148,7 @@ export default function ControlPlane() {
           ) : grouped.length === 0 ? (
             <Empty title="Keine Treffer" text="Suche oder Filter anpassen." />
           ) : (
-            <div className="flex flex-col gap-6">
+            <div className="mx-auto flex w-full max-w-[720px] flex-col gap-6">
               {grouped.map((g) => (
                 <section key={g.region.id}>
                   <div className="mb-2 flex items-center gap-2 px-1">

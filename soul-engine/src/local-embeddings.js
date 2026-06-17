@@ -84,8 +84,11 @@ export class LocalEmbeddings {
         body: JSON.stringify({
           model: this.model,
           prompt: text.substring(0, 8000), // Stay within model's context
+          keep_alive: process.env.OLLAMA_KEEP_ALIVE || '30m', // Modell geladen halten → kein Cold-Start
         }),
-        signal: AbortSignal.timeout(10000),
+        // Cold-Start von nomic-embed-text dauert ~11s; 10s war zu knapp (erster Embed
+        // nach Idle lief in Timeout → semantische Suche fiel still aus). 30s deckt das ab.
+        signal: AbortSignal.timeout(parseInt(process.env.OLLAMA_EMBED_TIMEOUT_MS || '30000', 10)),
       });
 
       if (!resp.ok) return null;

@@ -45,6 +45,19 @@ export class ApprovalGate {
       'search_contacts', 'get_contact_chats', 'get_direct_chat_by_contact',
       'get_last_interaction', 'get_message_context',
     ]);
+
+    // Async pending-approval queue (Sprint 0 completion). The inline requestApproval()
+    // path below DEADLOCKS under grammy's sequential long-polling — the "ja" reply can't
+    // be processed while handleMessage is blocked awaiting it. This non-blocking queue
+    // avoids that: onToolCall enqueues + returns immediately, and a persistent listener
+    // runs the call when the owner replies "ja <id>". Fail-closed: execution requires an
+    // exact, unexpired id match from the owner — a bug fails to execute, never spuriously.
+    this.pendingQueue = new Map(); // id -> { toolName, args, execute, createdAt }
+    this.pendingTTL = parseInt(process.env.APPROVAL_PENDING_TTL || '600000'); // 10 min
+    this.maxPending = 10;
+    if (this.bus) {
+      this.bus.on('message.received', (event) => this._handleApprovalReply(event));
+    }
   }
 
   /**
@@ -95,16 +108,18 @@ export class ApprovalGate {
       });
     }
 
-    // If no Telegram, auto-approve with warning
+    // If no Telegram, DENY (fail-closed). Previously auto-approved, which was a
+    // fail-open hole: a headless node with no notification channel would silently
+    // run risky tools (mail/transfer) unattended. Safer to refuse than to act blind.
     if (!this.telegram) {
-      console.warn(`  [gate] No notification channel — auto-approving ${toolName}`);
-      this.stats.approved++;
-      return true;
+      console.warn(`  [gate] No notification channel — DENYING ${toolName} (fail-closed)`);
+      this.stats.denied++;
+      return false;
     }
 
-    // Send notification
+    // Send notification (sendToOwner — TelegramChannel has no generic send())
     try {
-      await this.telegram.send(message, { parse_mode: 'Markdown' });
+      await this.telegram.sendToOwner(message);
     } catch (err) {
       console.error(`  [gate] Failed to send approval request: ${err.message}`);
       // Can't notify → block for safety
@@ -154,6 +169,89 @@ export class ApprovalGate {
         setTimeout(() => this.bus.removeListener('message.received', handler), this.timeout + 1000);
       }
     });
+  }
+
+  /**
+   * Non-blocking approval request (avoids the grammy sequential-polling deadlock).
+   * Enqueues the call + notifies the owner; the call executes only when the owner
+   * replies "ja <id>". Returns { pending:true, id } or, for conditional tools whose
+   * args are safe, { pending:false, autoApproved:true } so the caller runs it inline.
+   *
+   * @param {string} toolName
+   * @param {object} args
+   * @param {Function} execute - async () => result, run on approval
+   */
+  enqueueApproval(toolName, args = {}, execute) {
+    // Conditional tools with safe args need no human (e.g. execute_command "ls").
+    if (this.conditionalTools.has(toolName)) {
+      const checker = this.conditionalTools.get(toolName);
+      if (!checker(args)) return { pending: false, autoApproved: true };
+    }
+    this._pruneExpired();
+    // Dedup: if an identical call is already pending, reuse its id — avoids spamming
+    // the owner (and silently evicting a legit pending) when the autonomous loop
+    // re-issues the same tool+args repeatedly.
+    const dedupKey = `${toolName}::${JSON.stringify(args)}`;
+    for (const [eid, e] of this.pendingQueue) {
+      if (e.dedupKey === dedupKey) return { pending: true, id: eid };
+    }
+    // Bound the queue — drop the oldest entry if full.
+    if (this.pendingQueue.size >= this.maxPending) {
+      const oldest = this.pendingQueue.keys().next().value;
+      if (oldest) this.pendingQueue.delete(oldest);
+    }
+    const id = Math.random().toString(36).slice(2, 6); // 4-char base36
+    this.pendingQueue.set(id, { toolName, args, execute, dedupKey, createdAt: Date.now() });
+    this.stats.requested++;
+
+    const argsPreview = Object.entries(args)
+      .map(([k, v]) => `  ${k}: ${String(v).substring(0, 100)}`)
+      .join('\n');
+    const message = `🔒 Genehmigung erforderlich\n\nTool: ${toolName}\n${argsPreview ? `${argsPreview}\n` : ''}\n` +
+      `Bestätigen:  ja ${id}\nAblehnen:    nein ${id}\n(läuft ab in ${Math.round(this.pendingTTL / 60000)} Min)`;
+    this.telegram?.sendToOwner?.(message).catch(() => {});
+    this.bus?.safeEmit?.('gate.approval_requested', { source: 'approval-gate', approvalId: id, tool: toolName });
+    return { pending: true, id };
+  }
+
+  /** Owner-reply handler for the pending queue. Parses "ja <id>" / "nein <id>". */
+  async _handleApprovalReply(event) {
+    // CRITICAL fail-closed guard: message.received is engine-wide. It also fires for
+    // the UNAUTHENTICATED WhatsApp webhook (engine.js:1854) and cross-device relay —
+    // a stranger could otherwise reply "ja <id>" and approve a sparkasse_transfer.
+    // Only the owner's authenticated interactive channel (Telegram, owner-filtered in
+    // telegram.js) may grant approvals. Everything else (whatsapp/claude-code/relay/
+    // unknown) is rejected by default.
+    if (event?.channel !== 'telegram') return;
+    const text = (event?.text || '').trim().toLowerCase();
+    const m = text.match(/^(ja|yes|ok|approve|nein|no|deny)\s+([a-z0-9]{4})$/);
+    if (!m) return;
+    this._pruneExpired();
+    const entry = this.pendingQueue.get(m[2]);
+    if (!entry) return; // unknown / expired id → ignore (fail-closed)
+    this.pendingQueue.delete(m[2]);
+    const approve = /^(ja|yes|ok|approve)$/.test(m[1]);
+    if (!approve) {
+      this.stats.denied++;
+      this.telegram?.sendToOwner?.(`🚫 Abgelehnt: ${entry.toolName}`).catch(() => {});
+      this.bus?.safeEmit?.('gate.denied', { source: 'approval-gate', tool: entry.toolName, id: m[2] });
+      return;
+    }
+    this.stats.approved++;
+    try {
+      const result = await entry.execute();
+      this.telegram?.sendToOwner?.(`✅ Ausgeführt: ${entry.toolName}\n${String(result ?? '').substring(0, 500)}`).catch(() => {});
+      this.bus?.safeEmit?.('gate.approved', { source: 'approval-gate', tool: entry.toolName, id: m[2] });
+    } catch (err) {
+      this.telegram?.sendToOwner?.(`❌ Fehler bei ${entry.toolName}: ${err.message}`).catch(() => {});
+    }
+  }
+
+  _pruneExpired() {
+    const now = Date.now();
+    for (const [id, e] of this.pendingQueue) {
+      if (now - e.createdAt > this.pendingTTL) this.pendingQueue.delete(id);
+    }
   }
 
   /**

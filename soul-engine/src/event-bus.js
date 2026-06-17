@@ -23,6 +23,10 @@ const SKIP_CROSS_PROCESS = new Set(['pulse.written', 'impulse.tick']);
 export class SoulEventBus extends EventEmitter {
   constructor(options = {}) {
     super();
+    // ~7 persistent 'message.received' listeners at startup (allostatic-field,
+    // approval-gate, auto-profile, cortex, memory-extractor, rluf, theory-of-mind)
+    // plus transient ones from requestApproval() approach the default limit of 10.
+    this.setMaxListeners(50);
     this.debug = options.debug ?? (process.env.SOUL_BUS_DEBUG === 'true');
     this.soulPath = options.soulPath;
     this.eventLog = [];

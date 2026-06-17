@@ -13,6 +13,7 @@ import { existsSync, readFileSync, mkdirSync, watchFile, unwatchFile } from 'nod
 import { exec } from 'node:child_process';
 import path from 'node:path';
 import { parseSeed, extractSoulInfo } from './seed-parser.js';
+import { attachTerminalService } from './terminal-service.js';
 
 export class SoulAPI {
   constructor(engine, apiChannel, port = 3001) {
@@ -21,7 +22,7 @@ export class SoulAPI {
     this.port = port;
     this.app = express();
     this.server = createServer(this.app);
-    this.wss = new WebSocketServer({ server: this.server, path: '/ws' });
+    this.wss = new WebSocketServer({ noServer: true });
     this.clients = new Set();
     this.pulsePath = path.resolve(engine.soulPath, '.soul-pulse');
     this.bus = engine.bus;
@@ -32,12 +33,26 @@ export class SoulAPI {
     this.app.use(express.text({ type: 'text/plain', limit: '50kb' }));
 
     // Auth middleware for /api routes
+    // Akzeptiert entweder Bearer-Header oder ?key=... Query (fuer EventSource + WebSocket)
     this.app.use('/api', (req, res, next) => {
-      const key = (req.headers.authorization || '').replace('Bearer ', '');
+      const headerKey = (req.headers.authorization || '').replace('Bearer ', '');
+      const queryKey = (req.query && typeof req.query.key === 'string') ? req.query.key : '';
+      const key = headerKey || queryKey;
       if (key !== process.env.API_KEY) {
         return res.status(401).json({ error: 'Unauthorized' });
       }
       next();
+    });
+
+    // WebSocket Upgrade Routing: /ws → chat wss, /ws/terminal/:id → terminal-service
+    this.server.on('upgrade', (req, socket, head) => {
+      const pathname = (req.url || '').split('?')[0];
+      if (pathname === '/ws') {
+        this.wss.handleUpgrade(req, socket, head, (ws) => {
+          this.wss.emit('connection', ws, req);
+        });
+      }
+      // sonst: terminal-service hat einen eigenen 'upgrade' Listener, der greift hier
     });
 
     // CORS for local development
@@ -54,6 +69,7 @@ export class SoulAPI {
     this.setupWebSocket();
     this.watchPulse();
     this.setupBusBroadcast();
+    attachTerminalService(this);
   }
 
   // ── WhatsApp Webhook (no auth — internal only) ───

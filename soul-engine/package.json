@@ -21,11 +21,12 @@
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
     "@modelcontextprotocol/sdk": "^1.26.0",
-    "better-sqlite3": "^12.6.2",
+    "better-sqlite3": "^12.9.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.0",
     "grammy": "^1.31.0",
     "node-cron": "^3.0.3",
+    "node-pty": "^1.1.0",
     "ws": "^8.16.0",
     "yaml": "^2.8.3",
     "zod": "^3.25.76"

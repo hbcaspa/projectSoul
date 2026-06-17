@@ -53,21 +53,39 @@ export class RecipeEngine {
     for (const dir of this.recipeDirs) {
       if (!existsSync(dir)) continue;
 
+      // Hermes/Anthropic-Standard: SKILL.md mit YAML-Frontmatter + Markdown-Body wird
+      // genauso behandelt wie eine .yaml-Recipe. So lassen sich Skills aus dem
+      // agentskills.io-Ökosystem direkt via `git clone` reinziehen.
       const files = readdirSync(dir, { recursive: true })
-        .filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+        .filter(f =>
+          f.endsWith('.yaml') ||
+          f.endsWith('.yml') ||
+          f === 'SKILL.md' ||
+          f.endsWith('/SKILL.md') ||
+          f.endsWith('\\SKILL.md')
+        );
 
       for (const file of files) {
         try {
           const fullPath = resolve(dir, file);
           const content = readFileSync(fullPath, 'utf8');
-          const recipe = parseYaml(content);
+          let recipe;
+          if (file.endsWith('SKILL.md')) {
+            recipe = this._parseSkillMd(content);
+            if (!recipe) {
+              console.warn(`[Recipes] Skipping ${file}: no valid frontmatter`);
+              continue;
+            }
+          } else {
+            recipe = parseYaml(content);
+          }
 
           if (!recipe || !recipe.title) {
             console.warn(`[Recipes] Skipping ${file}: no title`);
             continue;
           }
 
-          const id = recipe.trigger || basename(file, '.yaml').replace('.yml', '');
+          const id = recipe.trigger || basename(file, '.yaml').replace(/\.(yml|md)$/, '');
           recipe._path = fullPath;
           recipe._id = id;
 
@@ -87,6 +105,41 @@ export class RecipeEngine {
 
     console.log(`  Recipes:   ${this.recipes.size} loaded`);
     return this;
+  }
+
+  /**
+   * Parse a SKILL.md (Hermes/agentskills.io-Standard):
+   *   ---
+   *   name: my-skill
+   *   description: ...
+   *   version: "1.0"
+   *   ---
+   *   <Markdown-Body wird zu instructions>
+   * Mapping: name → trigger, description → description, Body → instructions.
+   */
+  _parseSkillMd(content) {
+    const m = content.match(/^---\s*\n([\s\S]+?)\n---\s*\n([\s\S]*)$/);
+    if (!m) return null;
+    let fm;
+    try { fm = parseYaml(m[1]); } catch { return null; }
+    if (!fm || typeof fm !== 'object') return null;
+    const body = (m[2] || '').trim();
+    return {
+      version: fm.version || '1.0',
+      title: fm.title || fm.name || 'Untitled Skill',
+      description: fm.description || '',
+      trigger: fm.trigger || fm.name || null,
+      instructions: body || fm.instructions || '',
+      prompt: fm.prompt || '',
+      author: fm.author,
+      homepage: fm.homepage,
+      tags: fm.tags,
+      license: fm.license,
+      min_engine: fm.min_engine,
+      settings: fm.settings,
+      auto_generated: fm.auto_generated,
+      _source: 'skill-md',
+    };
   }
 
   /**

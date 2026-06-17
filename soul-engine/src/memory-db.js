@@ -79,7 +79,40 @@ export class MemoryDB {
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         UNIQUE(from_entity, to_entity, relation_type)
       );
+
+      -- Hermes-Style FTS5 für Cross-Session-Recall auf memories.
+      -- Content-table-Mode: FTS5 indexiert nur Rowids, der eigentliche Content
+      -- bleibt in memories — wir halten das via Trigger sync.
+      CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+        content,
+        tags,
+        content='memories',
+        content_rowid='id',
+        tokenize='unicode61 remove_diacritics 2'
+      );
+
+      CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+        INSERT INTO memories_fts(rowid, content, tags) VALUES (new.id, new.content, new.tags);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+        INSERT INTO memories_fts(memories_fts, rowid, content, tags) VALUES ('delete', old.id, old.content, old.tags);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+        INSERT INTO memories_fts(memories_fts, rowid, content, tags) VALUES ('delete', old.id, old.content, old.tags);
+        INSERT INTO memories_fts(rowid, content, tags) VALUES (new.id, new.content, new.tags);
+      END;
     `);
+
+    // Backfill FTS5 für bestehende Memories (idempotent: rebuild macht REINSERT).
+    try {
+      const ftsCount = this.db.prepare('SELECT COUNT(*) AS c FROM memories_fts').get().c;
+      const memCount = this.db.prepare('SELECT COUNT(*) AS c FROM memories').get().c;
+      if (memCount > 0 && ftsCount < memCount) {
+        this.db.exec(`INSERT INTO memories_fts(memories_fts) VALUES('rebuild');`);
+      }
+    } catch {}
   }
 
   _createIndexes() {
@@ -145,6 +178,37 @@ export class MemoryDB {
     params.push(limit, offset);
 
     return this.db.prepare(sql).all(...params).map(this._parseMemoryRow);
+  }
+
+  /**
+   * Hermes-Style FTS5 cross-session recall. O(log n) statt O(n).
+   * Query syntax: FTS5 MATCH expressions (z.B. "aalm AND pizza", '"exact phrase"').
+   * Bei einfachen Wörtern: wird automatisch in Prefix-Search umgewandelt.
+   */
+  searchFTS(query, { limit = 10, type, minConfidence = 0 } = {}) {
+    if (!query || !query.trim()) return [];
+    // Sanitize: einfache Wörter → Prefix-Match, sonst raw lassen für FTS5-Power-User
+    let q = query.trim();
+    if (!/[":\-*()]/.test(q)) {
+      q = q.split(/\s+/).map(w => `${w}*`).join(' ');
+    }
+    let sql = `
+      SELECT m.*, bm25(memories_fts) AS rank
+      FROM memories m
+      JOIN memories_fts ON memories_fts.rowid = m.id
+      WHERE memories_fts MATCH ?
+    `;
+    const params = [q];
+    if (type) { sql += ' AND m.type = ?'; params.push(type); }
+    if (minConfidence > 0) { sql += ' AND m.confidence >= ?'; params.push(minConfidence); }
+    sql += ' ORDER BY rank LIMIT ?';
+    params.push(limit);
+    try {
+      return this.db.prepare(sql).all(...params).map(this._parseMemoryRow);
+    } catch (err) {
+      console.error('[memory-db] searchFTS failed:', err.message);
+      return [];
+    }
   }
 
   searchSemantic(queryEmbedding, { limit = 10, minSimilarity = 0.3 } = {}) {

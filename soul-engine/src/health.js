@@ -61,13 +61,16 @@ function checkChainSync(soulPath) {
     const status = JSON.parse(raw);
 
     if (status.error) return critical(`Chain error: ${status.error}`);
-    if (!status.lastSync) return warning('Chain configured but never synced');
+    if (status.active === false) return critical('Chain inactive');
+    // Felder korrigiert: .soul-chain-status nutzt lastUpdate + peers[] (nicht lastSync/peers-Zahl).
+    if (!status.lastUpdate) return warning('Chain configured but never synced');
 
-    const lastSync = new Date(status.lastSync);
-    const ageHours = (Date.now() - lastSync.getTime()) / 3600000;
+    const peers = status.peers?.length || 0;
+    const ageMin = (Date.now() - new Date(status.lastUpdate).getTime()) / 60000;
 
-    if (ageHours > 24) return warning(`Last sync ${Math.floor(ageHours)}h ago`);
-    return healthy(`Synced ${Math.floor(ageHours)}h ago, ${status.peers || 0} peers`);
+    if (ageMin > 10) return critical(`Chain status stale (${Math.floor(ageMin)}min) — process likely dead`);
+    if (status.health === 'offline' || peers === 0) return warning(`Chain online but no peers (health=${status.health})`);
+    return healthy(`Chain ${status.health}, ${peers} peer(s), ${status.totalSynced ?? 0} synced`);
   } catch {
     return warning('Chain status unreadable');
   }

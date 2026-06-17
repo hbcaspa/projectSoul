@@ -11,6 +11,7 @@ import { OllamaAdapter } from './ollama.js';
 import { MCPClientManager } from './mcp-client.js';
 import { TelegramChannel } from './telegram.js';
 import { HeartbeatScheduler } from './heartbeat.js';
+import { ChainHealthMonitor } from './chain-health-monitor.js';
 import { ImpulseScheduler } from './impulse.js';
 import { MemoryWriter } from './memory.js';
 import { writePulse } from './pulse.js';
@@ -457,7 +458,7 @@ export class SoulEngine {
         this.telegram.onMessage(async (msg) => {
           // Let AwarenessCore observe every incoming message
           this.bus?.safeEmit?.('telegram.message.received', { text: msg.text, from: msg.userName });
-          this.handleMessage(msg);
+          return await this.handleMessage(msg);
         });
         await this.telegram.start();
         console.log('  Telegram:  connected (primary — polling)');
@@ -581,6 +582,17 @@ export class SoulEngine {
     );
     this.protocolRefresh.start();
     console.log(`  Protocol:  ${protocolCron} (context refresh)`);
+
+    // ChainHealthMonitor — alarmiert bei still degradierter Infra (Chain offline /
+    // Peer weg / Prozess tot). Läuft auf ALLEN Nodes (nicht server-gated), weil der
+    // Mac↔alm-Sync seit ~April lautlos tot war. Telegram-Alert via sendToOwner.
+    this.chainHealth = new ChainHealthMonitor({
+      soulPath: this.soulPath,
+      telegram: this.telegram,
+      bus: this.bus,
+      nodeName: this.nodeName,
+    });
+    this.chainHealth.start();
 
     // Semantic router — learned data → soul files
     this.router = new SemanticRouter(this.soulPath, this.context.language, { bus: this.bus });
@@ -1007,8 +1019,17 @@ export class SoulEngine {
       const ollamaAvail = await this.localEmbeddings.isAvailable();
       if (ollamaAvail) {
         console.log(`  LocalEmbed: active (${this.localEmbeddings.model}, ${this.localEmbeddings.getDimensions()}d)`);
+        // M1: use local Ollama embeddings as THE memory embedder — private (no data
+        // leaves the machine) and dimension-conformant with DB/HNSW (768d). Re-point
+        // BOTH the query side (attention) and the store side (memoryExtractor) to the
+        // same instance so cosine comparisons stay consistent.
+        this.embeddings = this.localEmbeddings;
+        if (this.attention) this.attention.embeddings = this.localEmbeddings;
+        if (this.memoryExtractor) this.memoryExtractor.embeddings = this.localEmbeddings;
       } else {
-        console.log('  LocalEmbed: Ollama not available (using Gemini fallback)');
+        console.log('  LocalEmbed: Ollama not available — memory stored without embeddings (FTS5 only)');
+        // Intentional: do NOT fall back to API embeddings (privacy) or to a
+        // dimension-mismatched vector. memoryExtractor.embeddings stays null.
       }
     }
 
@@ -1181,7 +1202,7 @@ export class SoulEngine {
     // Register active channels
     if (this.telegram) {
       this.gateway.registerChannel('telegram', {
-        send: (text, opts) => this.telegram.send(text, opts),
+        send: (text) => this.telegram.sendToOwner(text),
         type: 'interactive',
         active: true,
       });
@@ -1274,6 +1295,21 @@ export class SoulEngine {
       max_tokens,
       tools: this.mcp.getTools(),
       onToolCall: async (name, args) => {
+        // Human-in-the-loop gate for risky/destructive tools (Sprint 0 / A1).
+        // requiresApproval() covers riskyTools (gmail_send_email, send_message,
+        // sparkasse_*) and conditionalTools (execute_command w/ rm/drop/shutdown).
+        // Safe/read-only tools pass straight through. Without this the autonomous
+        // (Gemini-primary) LLM could send mail / messages / transfers unattended.
+        // Non-blocking pending queue (avoids grammy's sequential-polling deadlock):
+        // the call is enqueued and only runs once André replies "ja <id>".
+        if (this.approvalGate && this.approvalGate.requiresApproval(name)) {
+          const gate = this.approvalGate.enqueueApproval(name, args, () => this.mcp.callTool(name, args));
+          if (gate.pending) {
+            console.log(`  [gate] PENDING approval: ${name} (id=${gate.id})`);
+            return `[approval_pending: "${name}" wurde an André zur Bestätigung geschickt (ja ${gate.id}). Die Aktion läuft erst nach seinem "ja" aus — sag ihm, dass du auf seine Freigabe wartest.]`;
+          }
+          // gate.autoApproved (conditional tool with safe args) → fall through and run.
+        }
         console.log(`  [mcp] Executing: ${name}`);
         await writePulse(this.soulPath, 'code', `MCP: ${name}`, this.bus);
         const result = await this.mcp.callTool(name, args);
@@ -1287,6 +1323,8 @@ export class SoulEngine {
   }
 
   async handleMessage({ text, chatId, userName, _relayed = false }) {
+    console.log(`  [handleMessage] START: "${text?.substring(0,80)}" from ${userName}`);
+    try {
     // ── Prefix routing ───────────────────────────────────────────────────────
     const PREFIX = /^@(mac(?:book)?|server|local)[:\s]\s*/i;
     let target = 'all';
@@ -1319,6 +1357,10 @@ export class SoulEngine {
     if (/^[!$] /.test(text)) {
       const cmd = text.slice(2).trim();
       const nodeLabel = this.nodeName === 'server' ? '☁️ server' : `💻 ${this.nodeName}`;
+      // NOTE: This path is owner-only (telegram.js filters non-owner) and the command
+      // is typed by André in real time — a human is already in the loop, so no second
+      // ApprovalGate is wired here (it would also deadlock under grammy's sequential
+      // polling). The autonomous tool path is gated separately in _buildLLMOptions.
       const result = await new Promise(resolve => {
         exec(cmd, { timeout: 15000, maxBuffer: 1024 * 32 }, (err, stdout, stderr) => {
           const out = (stdout || '').trim();
@@ -1712,7 +1754,13 @@ export class SoulEngine {
     }
 
     await writePulse(this.soulPath, 'relate', `Responded to ${userName}`, this.bus);
+    console.log(`  [handleMessage] DONE: response ${cleanResponse ? cleanResponse.length + ' chars' : 'EMPTY'}`);
     return cleanResponse;
+    } catch (err) {
+      console.error(`  [handleMessage] FATAL ERROR: ${err.message}`);
+      console.error(`  [handleMessage] Stack: ${err.stack?.split('\n').slice(0,3).join(' | ')}`);
+      return `Fehler: ${err.message}`;
+    }
   }
 
   /**
@@ -2131,6 +2179,7 @@ export class SoulEngine {
     if (this.impulse) await this.impulse.stop();
     if (this.heartbeat) this.heartbeat.stop();
     if (this.protocolRefresh) this.protocolRefresh.stop();
+    if (this.chainHealth) this.chainHealth.stop();
     if (this.api) await this.api.stop();
     if (this.telegram) await this.telegram.stop();
     if (this.mcp) await this.mcp.shutdown();

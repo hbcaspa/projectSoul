@@ -20,9 +20,16 @@
 
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
+import { join } from 'path';
 import cron from 'node-cron';
+import { scanTargets, DEFAULT_TARGETS, HIGH_THRESHOLD } from './skillspector.js';
 
-const TASKS_FILE = '/opt/soul/connections/dynamic-tasks.json';
+// Persistenz-Pfad: aus SOUL_PATH ableiten (Mac-native = /Users/aalm/Projects/soul,
+// per soul-stack-start.sh gesetzt), per SOUL_TASKS_FILE überschreibbar, /opt/soul nur
+// Container-Fallback. (Vorher hart /opt/soul → existierte auf dem Mac nicht, Tasks
+// persistierten still nicht und überlebten keinen Neustart.)
+const TASKS_FILE = process.env.SOUL_TASKS_FILE
+  || join(process.env.SOUL_PATH || '/opt/soul', 'connections', 'dynamic-tasks.json');
 
 export class DynamicScheduler {
   constructor({ bus, telegram, llm, soulPath }) {
@@ -64,7 +71,7 @@ export class DynamicScheduler {
     if (!name || !cronExpr || !type) throw new Error('name, cron, type required');
     if (!cron.validate(cronExpr)) throw new Error(`Invalid cron expression: "${cronExpr}"`);
 
-    const KNOWN_TYPES = ['rss_check', 'web_fetch', 'reminder', 'llm_reflect'];
+    const KNOWN_TYPES = ['rss_check', 'web_fetch', 'reminder', 'llm_reflect', 'skill_scan'];
     if (!KNOWN_TYPES.includes(type)) throw new Error(`Unknown task type: ${type}`);
 
     const task = {
@@ -160,6 +167,7 @@ export class DynamicScheduler {
         case 'web_fetch':    await this._runWebFetch(task);    break;
         case 'reminder':     await this._runReminder(task);    break;
         case 'llm_reflect':  await this._runLlmReflect(task);  break;
+        case 'skill_scan':   await this._runSkillScan(task);   break;
       }
       await this._save();
       this.bus?.safeEmit?.('scheduler.task_ran', { id: task.id, name: task.name, type: task.type });
@@ -275,6 +283,45 @@ export class DynamicScheduler {
     if (!result || !notify) return;
 
     await this.telegram?.sendToOwner(`${prefix} ${result}`);
+  }
+
+  // ── Skill Security Scan ───────────────────────────────────
+  // Scannt skills/ + .mcp.json mit SkillSpector, meldet bei hohem Risk-Score
+  // oder geänderten Findings. Findings nur als Score/Pfad/Regelnamen (KEINE
+  // Roh-Snippets — .mcp.json enthält Klartext-Tokens). Plain-Text (kein Markdown).
+  async _runSkillScan(task) {
+    const { targets = DEFAULT_TARGETS, threshold = HIGH_THRESHOLD, notify = true, root } = task.config || {};
+    const { maxScore, results } = await scanTargets(targets, root);
+
+    // CLI nicht installiert → einmalig melden, dann still (kein Spam pro Lauf).
+    const unavailable = results.find(r => r.available === false);
+    if (unavailable) {
+      if (notify && !task._warnedUnavailable) {
+        task._warnedUnavailable = true;
+        await this.telegram?.sendToOwner(`SkillSpector nicht installiert/erreichbar (${unavailable.error}). Skill-Scan uebersprungen.`);
+      }
+      return;
+    }
+    task._warnedUnavailable = false;
+
+    // Dedupe: nur melden, wenn sich Score/Findings ggue. dem letzten Lauf geaendert haben.
+    const fingerprint = JSON.stringify(results.map(r => [r.target, r.risk_score, (r.findings || []).length]));
+    const changed = fingerprint !== task._lastFingerprint;
+    task._lastFingerprint = fingerprint;
+
+    this.bus?.safeEmit?.('skillspector.scan_completed', { source: 'scheduler', maxScore });
+
+    const high = maxScore >= threshold;
+    if (!notify) return;
+    if (!high && !changed) return; // ruhig, wenn nichts Neues und kein Risiko
+
+    const lines = results
+      .filter(r => (r.findings || []).length > 0)
+      .map(r => `- ${r.target}: Risk ${r.risk_score} (${r.findings.length} Funde)`);
+    await this.telegram?.sendToOwner(
+      `${high ? '⚠️' : '✅'} Skill-Security-Scan\n\nMax Risk: ${maxScore}${high ? ' (HOCH!)' : ''}\n` +
+      (lines.length ? lines.join('\n') : 'Keine Funde.')
+    );
   }
 
   // ── Persistence ───────────────────────────────────────────

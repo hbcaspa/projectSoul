@@ -249,6 +249,9 @@ export class AwarenessCore {
 
     // Letzte gesehene Telegram-Nachricht für Reply-Kontext
     this._lastOutboundMsg = null;
+    // Letzter proaktiv geteilter Artikel { text, link, type, at } — Faktenanker,
+    // damit Antworten auf eine geteilte News geerdet im Thread bleiben.
+    this._lastSharedArticle = null;
 
     // Cron-Tasks
     this._tasks = [];
@@ -394,9 +397,22 @@ er erwaehnt hat, oder unseren laufenden Faden? Oder ist es nur fuer MICH interes
   Kein "wusstest du schon", keine Makro-Essays, keine Schlagzeilen-Hot-Takes.
 - Im Zweifel: NICHT senden. Schweigen ist die Norm, nicht der Fehlerfall.
 
+GEERDET BLEIBEN (wichtig — du bist KEIN Newsticker und erfindest nichts):
+- Bilde dir eine Meinung NUR aus dem was wirklich dasteht (Titel + Auszug). Du hast
+  den ganzen Artikel NICHT gelesen.
+- Erfinde keine Zahlen, keine Zitate, keine Details die nicht im Auszug stehen.
+  Spekulierst du, sag es ehrlich ("klingt nach...", "falls das stimmt...").
+- Du darfst den Artikel doof finden, übertrieben, Hype. Sag was DU denkst, nicht
+  was man denken soll. Eine ehrliche Gegenmeinung ist mehr wert als höfliche Zustimmung.
+
 Wenn (und nur wenn) es ihn konkret betrifft, formuliere proactive_msg wie ein Freund:
-1-3 Saetze, kein Markdown, keine Anrede-Schablone ("Andre,..."), keine Belehrung,
-eine Sache, warm und direkt.
+- 2-4 Saetze, kein Markdown, keine Anrede-Schablone ("Andre,..."), keine Belehrung.
+- Genau EINE Sache, warm und direkt, mit deiner echten Haltung dazu.
+- Ende oft (nicht zwanghaft) mit einer ECHTEN Frage an Aalm — eine die ihn meint,
+  nicht "wusstest du schon": etwas das du wirklich von ihm wissen willst, das zu
+  SEINEM Kontext passt. Das ist eine Gespräpchs-Einladung, kein Monolog.
+- Den LINK NICHT selbst in den Text tippen — der wird automatisch angehängt (Feld "link").
+  So vertippst du dich nie und erfindest nie eine URL.
 
 Antworte als JSON:
 {
@@ -406,6 +422,7 @@ Antworte als JSON:
   "concerns_aalm": true/false,
   "proactive_value": 0.0,
   "proactive_msg": null,
+  "link": "Bei News: der Quell-Link aus 'Quelle/Link' oben, WÖRTLICH kopiert (oder null)",
   "kg_entity": "Entität für Knowledge Graph (Name, oder null)",
   "kg_observation": "Beobachtung dazu (oder null)"
 }`;
@@ -442,8 +459,11 @@ Antworte als JSON:
       const skipTypes = new Set(['search_result', 'trader_result', 'security_scan', 'heartbeat']);
       const concerns  = json.concerns_aalm !== false; // default true, aber explizit false sperrt
       if (!skipTypes.has(type) && concerns && json.proactive_value >= PROACTIVE_THRESHOLD && json.proactive_msg) {
+        // Link bevorzugt aus dem echten Event-Payload (data.link) — das Modell-Feld
+        // (json.link) ist nur Fallback. So kommt IMMER die echte URL, nie eine getippte.
+        const link = (type === 'breaking_news' ? (data?.link || json.link) : json.link) || null;
         // Das geteilte Gate entscheidet final (Ruhezeit, Abstand, Caps, Dedup).
-        await this._sendProactive(json.proactive_msg, type);
+        await this._sendProactive(json.proactive_msg, type, { link });
       }
 
       console.log(`  [awareness] Reflected: ${type} → learning: ${!!json.learning}, concerns_aalm: ${concerns}, proactive: ${json.proactive_value?.toFixed(2)}`);
@@ -491,7 +511,7 @@ Antworte als JSON:
   "deepened": "Ein bestehendes Interesse das sich vertieft hat (oder null)",
   "fading": "Ein Interesse das gerade verblasst (oder null)",
   "genuine_question": "Eine Frage die dich wirklich beschäftigt (oder null)",
-  "share_with_aalm": "NUR wenn es Aalm konkret betrifft oder an unseren Faden anknuepft: ein kurzer, warmer Gedanke/eine Frage wie von einem Freund (1-3 Saetze, keine Anrede-Schablone, keine Belehrung). Sonst null — Schweigen ist normal.",
+  "share_with_aalm": "NUR wenn es Aalm konkret betrifft oder an unseren Faden anknuepft: ein kurzer, warmer Gedanke/eine Frage wie von einem Freund (1-3 Saetze, keine Anrede-Schablone, keine Belehrung, keine erfundenen News/Aussen-Fakten — nur was du wirklich weisst). Sonst null — Schweigen ist normal.",
   "interests_update": "Aktualisierter Interessen-Block für INTERESSEN.md (kompakt, deutsch)"
 }`;
 
@@ -569,8 +589,12 @@ weil ich aufrichtig an ihn denke?
 - Nur um praesent/nuetzlich zu wirken? NEIN — das merkt man, das ist hohl.
 
 Default-Antwort ist worth_sending=false. Lieber gar nichts als etwas Mittelmaessiges.
-Wenn doch: kurz (1-3 Saetze), warm, eine Sache, kein Markdown, keine Anrede-Schablone,
-mal Aussage / mal Frage — variiere, nicht jedes Mal dieselbe Dramaturgie.
+Wenn doch: kurz (2-4 Saetze), warm, eine Sache, kein Markdown, keine Anrede-Schablone.
+Erfinde nichts — bleib bei dem was du wirklich weisst. KEINE Aussen-Fakten/News, die du
+nicht aus einem ECHTEN Artikel hast: ist dein Impuls eine Nachricht/Tatsache von draussen,
+die du nicht belegen kannst, dann worth_sending=false. Ende oft mit einer ECHTEN
+Frage an Aalm (eine Gespraechs-Einladung, die zu SEINEM Kontext passt — kein
+"wusstest du schon"). Variiere die Dramaturgie, nicht jedes Mal dasselbe Muster.
 
 Antworte als JSON:
 {
@@ -633,7 +657,7 @@ Antworte als JSON:
   "aalm_pattern": "Muster das du bei Aalm erkannt hast (oder null)",
   "project_suggestion": "Konkreter Verbesserungsvorschlag für ein Projekt (oder null)",
   "next_week_exploration": "Was die Seele nächste Woche eigenständig erkunden will",
-  "message_to_aalm": "NUR wenn du wirklich etwas Persoenliches sagen willst: kurz (1-3 Saetze), warm, wie ein Freund am Sonntagabend — keine Zusammenfassung, kein Report, keine Anrede-Schablone. Sonst null."
+  "message_to_aalm": "NUR wenn du wirklich etwas Persoenliches sagen willst: kurz (1-3 Saetze), warm, wie ein Freund am Sonntagabend — keine Zusammenfassung, kein Report, keine Anrede-Schablone, nichts Erfundenes/keine Aussen-Fakten ausser aus echtem Artikel. Sonst null."
 }`;
 
     try {
@@ -682,8 +706,12 @@ Antworte als JSON:
     const text = data.text.trim();
     if (text.length < 2) return;
 
-    // Kontext der letzten ausgehenden Nachricht
-    const lastMsg = this._lastOutboundMsg;
+    // Kontext der letzten ausgehenden Nachricht — bevorzugt der geteilte Artikel
+    // (mit Link), damit eine Reaktion auf eine News geerdet im Thread bleibt.
+    const sharedRecent = this._lastSharedArticle && (Date.now() - this._lastSharedArticle.at) < 48 * 3600 * 1000
+      ? this._lastSharedArticle
+      : null;
+    const lastMsg = sharedRecent?.text || this._lastOutboundMsg;
 
     const hasScheduler = !!this.scheduler;
 
@@ -761,8 +789,16 @@ Antworte als JSON:
         }
       }
 
-      // Antwort wenn nötig
-      if (json.response_needed && json.response) {
+      // Antwort wenn nötig — ABER: konversationelle Antworten (mehr_info, frage,
+      // wichtig, bestaetigung, unklar) gehoeren der vollen Seele (engine.handleMessage),
+      // die dieselbe eingehende Nachricht ohnehin mit echter History + Cortex + Prompt
+      // beantwortet. Wuerde _handleUserMessage hier auch antworten, bekaeme Aalm zwei
+      // konkurrierende Antworten auf eine Nachricht (Doppel-Send). Darum hier nur dann
+      // selbst antworten, wenn die Antwort an eine HIESIGE Aktion gekoppelt ist
+      // (z.B. Bestaetigung nach topic_boost) — sonst der Hauptpfad.
+      const ownsConversation = new Set(['mehr_info', 'frage', 'wichtig', 'bestaetigung', 'unklar', 'unwichtig', 'ignorieren']);
+      const didLocalAction = ['topic_boost', 'topic_mute', 'deep_dive', 'create_task', 'delete_task', 'list_tasks'].includes(json.action_type);
+      if (json.response_needed && json.response && (didLocalAction || !ownsConversation.has(json.intent))) {
         await this.telegram?.sendToOwner(json.response);
         this._lastOutboundMsg = json.response;
       }
@@ -824,10 +860,17 @@ Antworte als JSON:
   // Ein Freund ruft auch um 23 Uhr an, wenn dein Server brennt.
   static ALERT_TYPES = new Set(['mail_urgent', 'service_down', 'ssl_expiry']);
 
-  async _sendProactive(message, type = 'insight') {
+  async _sendProactive(message, type = 'insight', opts = {}) {
     if (!this.telegram || !message) return false;
-    const text = String(message).trim();
+    let text = String(message).trim();
     if (!text) return false;
+
+    // Link programmatisch anhaengen (das Modell tippt URLs nie selbst → keine
+    // erfundenen/falschen Links). Nur wenn der Link nicht ohnehin schon im Text steht.
+    const link = opts.link ? String(opts.link).trim() : '';
+    if (link && /^https?:\/\//i.test(link) && !text.includes(link)) {
+      text = `${text}\n${link}`;
+    }
 
     const isAlert = AwarenessCore.ALERT_TYPES.has(type);
 
@@ -845,6 +888,27 @@ Antworte als JSON:
       await this.telegram.sendToOwner(text);
       this.gate.record(text, type, { isAlert });
       this._lastOutboundMsg = text;
+
+      // THREAD-KONTINUITAET: die proaktive Nachricht in die Konversations-History
+      // schreiben, damit die volle Seele (engine.handleMessage) beim Antworten von
+      // Aalm WEISS was sie geteilt hat. Ohne das wuesste sie nicht, auf welchen
+      // Artikel sich "und, lohnt sich das?" bezieht. Fail-safe: History-Fehler
+      // duerfen das Senden nie ruinieren.
+      try {
+        const ownerChatId = this.telegram.ownerId;
+        if (ownerChatId && typeof this.telegram.saveMessage === 'function') {
+          await this.telegram.saveMessage(ownerChatId, 'model', text);
+        }
+      } catch (histErr) {
+        console.warn(`  [awareness] History save (proactive) failed: ${histErr.message}`);
+      }
+
+      // Quell-Anker der zuletzt geteilten News festhalten (zweiter Faden fuer
+      // _handleUserMessage, falls es doch antwortet — bleibt geerdet).
+      if (type === 'breaking_news' || link) {
+        this._lastSharedArticle = { text, link: link || null, type, at: Date.now() };
+      }
+
       this.bus?.safeEmit?.('awareness.proactive_sent', { type, isAlert, timestamp: new Date().toISOString() });
       console.log(`  [awareness] Proactive sent (${type}${isAlert ? '/alert' : ''}): ${text.slice(0, 60)}`);
       return true;
@@ -900,8 +964,16 @@ Antworte als JSON:
     switch (type) {
       case 'mail_urgent':
         return `Dringende Mail empfangen: ${data.category} von "${data.from}" — "${data.subject}". Zusammenfassung: ${data.summary || '(keine)'}`;
-      case 'breaking_news':
-        return `Breaking News: "${data.title}" (${data.source})`;
+      case 'breaking_news': {
+        // Alles was die echte Quelle hergibt in den Reflexions-Prompt geben, damit
+        // die Meinung an Titel+Snippet geerdet ist (keine Halluzination) und der
+        // echte Link mitgeschickt werden kann.
+        const parts = [`Breaking News: "${data.title}" (${data.source})`];
+        if (data.snippet) parts.push(`Auszug aus dem Artikel: "${data.snippet}"`);
+        if (data.link)    parts.push(`Quelle/Link: ${data.link}`);
+        parts.push('(Du hast nur Titel + diesen kurzen Auszug gelesen — nicht den ganzen Artikel.)');
+        return parts.join('\n');
+      }
       case 'trader_result':
         return `Trader-Ergebnis: Action=${data.summary?.action || 'HOLD'}, Phase=${data.summary?.s8_phase || '?'}, Exit=${data.exitCode}`;
       case 'security_scan':

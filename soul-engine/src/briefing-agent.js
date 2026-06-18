@@ -185,9 +185,21 @@ export class BriefingAgent {
       const id = (item.link || item.title).replace(/[^a-zA-Z0-9]/g, '').slice(0, 60);
       this._sentToday.add(id);
 
+      // Echte Quelle durchreichen: Titel + Quelle + LINK + kurzer Snippet/Kernfakt.
+      // Damit kann die Seele (AwarenessCore) eine geerdete Meinung bilden und den
+      // echten Artikel verlinken statt abstrakt zu philosophieren oder zu halluzinieren.
+      // _parseRSS liefert link+desc bereits — bis hier ging beides verloren.
+      const snippet = String(item.desc || '')
+        .replace(/<[^>]+>/g, ' ')       // evtl. Rest-HTML raus
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 280);                  // genug Fakten-Anker, ohne den Prompt zu fluten
+
       this.bus?.safeEmit?.('briefing.breaking', {
         title:     item.title,
         source:    item.source,
+        link:      item.link || null,    // wird NIE vom Modell getippt → kein URL-Halluzinieren
+        snippet:   snippet || null,      // einziger Faktengrund für die Meinung
         timestamp: new Date().toISOString(),
       });
 
@@ -262,7 +274,7 @@ Maximal 3 Artikel. Strenger Filter — lieber zu wenig als zu viel.`;
       const title = this._extractTag(block, 'title');
       const desc  = this._extractTag(block, 'description') || this._extractTag(block, 'summary');
       const link  = this._extractTag(block, 'link');
-      if (title) items.push({ title, desc: desc?.slice(0, 200) || '', source, tags, link });
+      if (title) items.push({ title, desc: desc?.slice(0, 450) || '', source, tags, link });
     }
     return items;
   }

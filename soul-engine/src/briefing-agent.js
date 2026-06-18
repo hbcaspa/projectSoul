@@ -175,14 +175,15 @@ export class BriefingAgent {
     const urgent = await this._scoreUrgency(fresh, interests);
     if (!urgent.length) return;
 
-    // Send each breaking item individually
+    // KEIN roher Breaking-Ticker mehr an Telegram (ein Freund forwardet keine
+    // Schlagzeilen alle 2h, schon gar nicht nachts). Wir füttern nur das interne
+    // 'briefing.breaking'-Event — die Seele (AwarenessCore, Pfad D) entscheidet
+    // GEGATET (Ruhezeiten + Budget + Relevanz "betrifft das Aaln konkret?" + warmer
+    // Ton), ob sie sich von sich aus dazu meldet. So bleibt Weltwahrnehmung erhalten,
+    // ohne Nacht-Spam/Doppel-Send.
     for (const item of urgent) {
       const id = (item.link || item.title).replace(/[^a-zA-Z0-9]/g, '').slice(0, 60);
       this._sentToday.add(id);
-
-      const msg = `📡 Breaking: ${item.title}\n[${item.source}]${item.link ? '\n' + item.link : ''}`;
-      await this.telegram?.sendToOwner(msg);
-      await new Promise(r => setTimeout(r, 400));
 
       this.bus?.safeEmit?.('briefing.breaking', {
         title:     item.title,
@@ -190,7 +191,7 @@ export class BriefingAgent {
         timestamp: new Date().toISOString(),
       });
 
-      console.log(`  [briefing] Breaking news sent: ${item.title.slice(0, 60)}`);
+      console.log(`  [briefing] Breaking erfasst (nur intern, kein Ticker): ${item.title.slice(0, 60)}`);
     }
   }
 

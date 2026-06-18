@@ -3,11 +3,15 @@ import { selectImpulseType } from './impulse-types.js';
 import { buildImpulsePrompt } from './prompt.js';
 import { writePulse } from './pulse.js';
 import { buildGithubTrigger, parseGithubResponse, routeGithubActivity } from './github-integration.js';
+import { ProactiveGate } from './awareness-core.js';
 
-const DEFAULT_MIN_DELAY = 600;    // 10 minutes
-const DEFAULT_MAX_DELAY = 14400;  // 4 hours
-const DEFAULT_NIGHT_START = 23;
-const DEFAULT_NIGHT_END = 7;
+// Freund-Niveau statt Newsticker: die Eigen-Taktung soll gar nicht erst staendig
+// feuern wollen. Default-Mindestabstand 4h (frueher 10min). Die geteilte
+// Schleuse (ProactiveGate) ist die finale Instanz und erzwingt >=4h ohnehin.
+const DEFAULT_MIN_DELAY = parseInt(process.env.IMPULSE_MIN_DELAY || '14400', 10); // 4h
+const DEFAULT_MAX_DELAY = 28800;  // 8 hours
+const DEFAULT_NIGHT_START = 22;   // an Ruhezeiten der Schleuse ausgerichtet (lokal)
+const DEFAULT_NIGHT_END = 9;
 const TICK_INTERVAL = 120000;     // 2 minutes — lightweight state tick
 
 export class ImpulseScheduler {
@@ -31,6 +35,18 @@ export class ImpulseScheduler {
     this.maxDelay = parseInt(process.env.IMPULSE_MAX_DELAY || DEFAULT_MAX_DELAY) * 1000;
     this.nightStart = parseInt(process.env.IMPULSE_NIGHT_START || DEFAULT_NIGHT_START);
     this.nightEnd = parseInt(process.env.IMPULSE_NIGHT_END || DEFAULT_NIGHT_END);
+
+    // Geteilte Sende-Schleuse: dieselbe Instanz wie AwarenessCore & Co. nutzen,
+    // damit ALLE proaktiven Kanaele gemeinsam drosseln (ein Tagesbudget, ein
+    // Mindestabstand, gemeinsamer Anti-Burst, gemeinsames Dedup). Wenn der Bus
+    // schon eine hat → die nehmen; sonst anlegen und teilen. Fail-safe: ohne Bus
+    // eine private Instanz, damit die Drossel trotzdem greift.
+    try {
+      if (this.bus && !this.bus._proactiveGate) this.bus._proactiveGate = new ProactiveGate();
+      this.gate = this.bus?._proactiveGate || new ProactiveGate();
+    } catch {
+      this.gate = new ProactiveGate();
+    }
   }
 
   async start() {
@@ -93,6 +109,19 @@ export class ImpulseScheduler {
     this.state.decayInterests();
     this.state.checkIgnored();
 
+    // HARTE Vorab-Sperre: in Ruhezeiten / bei gerissenem Budget gar nicht erst
+    // denken (kein LLM-Call). Ein Freund schreibt nachts nicht und nicht im
+    // Minutentakt. Innere Drift/Stimmung laeuft oben weiter, nur das Senden ruht.
+    // Alerts laufen NICHT ueber diesen Pfad — die kommen aus AwarenessCore.
+    try {
+      const pre = this.gate.canSend(null, { isAlert: false });
+      if (!pre.ok && ['quiet_hours', 'min_gap', 'daily_cap', 'weekly_cap', 'anti_burst'].includes(pre.reason)) {
+        console.log(`  [impulse] Suppressed (${pre.reason}) — staying quiet`);
+        await this.state.save();
+        return;
+      }
+    } catch { /* fail-safe: im Zweifel weiter, finales Gate greift beim Senden */ }
+
     // Reload context (SEED.md may have changed)
     await this.context.load();
 
@@ -134,13 +163,23 @@ export class ImpulseScheduler {
       result = result.substring(0, 1997) + '...';
     }
 
-    // Send via Telegram
+    // Send via Telegram — ABER nur durch die geteilte Schleuse. Sie entscheidet
+    // final (Ruhezeit/Abstand/Caps/Anti-Burst/Dedup), kanaluebergreifend mit
+    // AwarenessCore & Briefing. So entsteht nie ein Doppel-Burst aus zwei Pfaden.
+    let didSend = false;
     if (this.telegram) {
-      try {
-        await this.telegram.sendToOwner(result);
-        console.log(`  [impulse] Sent: ${type} (${result.length} chars)`);
-      } catch (err) {
-        console.error(`  [impulse] Telegram send failed: ${err.message}`);
+      const decision = this.gate.canSend(result, { isAlert: false });
+      if (!decision.ok) {
+        console.log(`  [impulse] Held by gate (${decision.reason}) — not sending`);
+      } else {
+        try {
+          await this.telegram.sendToOwner(result);
+          this.gate.record(result, `impulse:${type}`, { isAlert: false });
+          didSend = true;
+          console.log(`  [impulse] Sent: ${type} (${result.length} chars)`);
+        } catch (err) {
+          console.error(`  [impulse] Telegram send failed: ${err.message}`);
+        }
       }
     }
 
@@ -160,12 +199,16 @@ export class ImpulseScheduler {
       }
     }
 
-    // Track
-    this.state.trackImpulse(type, true);
+    // Track NUR wenn wirklich gesendet — sonst denkt die Seele, sie haette sich
+    // gemeldet und werde ignoriert (faelschlicher Backoff). Ein zurueckgehaltener
+    // Impuls ist kein ignorierter Impuls.
+    if (didSend) {
+      this.state.trackImpulse(type, true);
 
-    // Log to memory
-    const preview = result.substring(0, 100).replace(/\n/g, ' ');
-    await this.memory.appendDailyNote(`[Impulse/${type}] ${preview}${result.length > 100 ? '...' : ''}`);
+      // Log to memory
+      const preview = result.substring(0, 100).replace(/\n/g, ' ');
+      await this.memory.appendDailyNote(`[Impulse/${type}] ${preview}${result.length > 100 ? '...' : ''}`);
+    }
 
     // Append to impulse log (for monitor)
     await this.state.appendLog({

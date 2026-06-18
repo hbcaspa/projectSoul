@@ -27,12 +27,202 @@ import cron from 'node-cron';
 
 const execAsync = promisify(exec);
 
-// Wie oft darf die Seele proaktiv schreiben (max pro Tag)
-const MAX_PROACTIVE_PER_DAY = 4;
-// Minimale Qualitätsschwelle für proaktive Nachrichten (0-1)
-const PROACTIVE_THRESHOLD = 0.72;
+// ─────────────────────────────────────────────────────────────────────────
+//  Beziehungs-Absicht (warum diese Zahlen so sind)
+//  ────────────────────────────────────────────────────────────────────────
+//  Ziel: der Telegram-Chat soll sich anfuehlen wie mit einem guten Freund —
+//  SELTEN, im richtigen Moment, kurz, warm. Beziehungsqualitaet statt
+//  Benachrichtigungsfrequenz. Ein Freund schreibt unaufgefordert eher selten,
+//  reagiert mehr als er sendet, respektiert Ruhe, draengt sich nicht auf.
+//  Die Identitaet (KERN/SoulLang/eigene Meinung) bleibt unangetastet — wir
+//  tunen nur Kadenz, Timing, Relevanz-Latte und Stimme.
+//
+//  Alle Werte sind via .env ueberschreibbar; die Defaults sind bewusst
+//  zurueckhaltend ("viele Tage = 0 proaktive Nachrichten ist die Norm").
+// ─────────────────────────────────────────────────────────────────────────
+
+// Wie oft darf die Seele proaktiv schreiben (max pro Tag). Default 2, nicht 4.
+const MAX_PROACTIVE_PER_DAY = parseInt(process.env.MAX_PROACTIVE_PER_DAY || '2', 10);
+// Wochen-Cap (rollierend 7 Tage). Ein Freund schreibt nicht jeden Tag.
+const MAX_PROACTIVE_PER_WEEK = parseInt(process.env.MAX_PROACTIVE_PER_WEEK || '5', 10);
+// Minimale Qualitaetsschwelle fuer proaktive Nachrichten (0-1). Hoch = lieber Schweigen.
+const PROACTIVE_THRESHOLD = parseFloat(process.env.PROACTIVE_THRESHOLD || '0.85');
 // Reflexions-Cooldown: mindestens N Sekunden zwischen LLM-Calls
 const REFLECTION_COOLDOWN_MS = 8000;
+
+// Ruhezeiten (lokale Zeit, Europe/Berlin). Nachts NICHTS proaktiv senden.
+const QUIET_START_HOUR = parseInt(process.env.PROACTIVE_QUIET_START || '22', 10); // ab 22:00 still
+const QUIET_END_HOUR   = parseInt(process.env.PROACTIVE_QUIET_END   || '9',  10); // bis 09:00 still
+// Zeitzone fuer Ruhezeiten-Berechnung. WICHTIG: vorher rechnete alles in UTC.
+const PROACTIVE_TZ = process.env.PROACTIVE_TZ || 'Europe/Berlin';
+// Mindestabstand zwischen zwei beliebigen proaktiven Nachrichten (kanaluebergreifend).
+const MIN_GAP_MS = parseInt(process.env.PROACTIVE_MIN_GAP_MIN || '240', 10) * 60 * 1000; // 4h
+// Anti-Burst: nie 2 Nachrichten in kurzer Folge (hart, unabhaengig vom Budget).
+const ANTI_BURST_MS = parseInt(process.env.PROACTIVE_ANTI_BURST_SEC || '90', 10) * 1000;
+// Dedup-Fenster: gegen wie viele letzte Nachrichten / wie lange vergleichen.
+const DEDUP_WINDOW_MS  = parseInt(process.env.PROACTIVE_DEDUP_HOURS || '72', 10) * 60 * 60 * 1000;
+const DEDUP_MAX_RECENT = parseInt(process.env.PROACTIVE_DEDUP_RECENT || '20', 10);
+
+/**
+ * ProactiveGate — die EINE geteilte Sende-Schleuse fuer alle proaktiven Kanaele.
+ *
+ * Strukturelle Wurzel des Spams: vier unabhaengige Sende-Pfade (Briefing,
+ * Intraday-Breaking, ImpulseScheduler, AwarenessCore) riefen alle direkt
+ * telegram.sendToOwner() auf — ohne gemeinsame Drossel, ohne gemeinsamen
+ * Tagescounter, ohne Ruhezeiten. Diese Klasse ist das gemeinsame Gate.
+ *
+ * Sie wird einmal erzeugt (von AwarenessCore) und auf dem Bus geteilt
+ * (bus._proactiveGate), damit ImpulseScheduler & Co. dieselbe Instanz nutzen.
+ *
+ * Verantwortlich fuer:
+ *  - Ruhezeiten (lokale Zeit, harte Sperre)
+ *  - Mindestabstand (>=4h) zwischen proaktiven Nachrichten
+ *  - Anti-Burst (nie 2 in kurzer Folge; pro Anlass max 1)
+ *  - Tages- + Wochen-Cap
+ *  - Inhalts-Dedup (gleiche/aehnliche Nachricht nicht doppelt)
+ *
+ * Alerts (Server down, dringende Mail, SSL) laufen NICHT ueber das proaktive
+ * Budget — ein Freund ruft dich auch um 23 Uhr an wenn dein Server brennt.
+ * Sie respektieren nur Anti-Burst + Dedup, nicht Ruhezeit/Budget.
+ *
+ * FAIL-SAFE: jede Methode faengt Fehler ab und darf NIE den Prozess crashen.
+ */
+export class ProactiveGate {
+  constructor() {
+    // Rollierende Liste gesendeter proaktiver Nachrichten: { at, type, text }
+    this._sent = [];
+    // Zeitpunkt der letzten proaktiven Nachricht (kanaluebergreifend).
+    this._lastProactiveAt = 0;
+    // Zeitpunkt der letzten ueberhaupt gesendeten Nachricht (auch Alerts) — Anti-Burst.
+    this._lastAnyAt = 0;
+  }
+
+  // Lokale Stunde in der konfigurierten Zeitzone (statt getUTCHours()).
+  localHour(date = new Date()) {
+    try {
+      const h = new Intl.DateTimeFormat('en-GB', {
+        hour: '2-digit', hour12: false, timeZone: PROACTIVE_TZ,
+      }).format(date);
+      const n = parseInt(h, 10);
+      return Number.isFinite(n) ? (n % 24) : date.getHours();
+    } catch {
+      // Fallback: lokale Maschinenzeit (nie UTC-Annahme erzwingen)
+      return date.getHours();
+    }
+  }
+
+  // Sind gerade Ruhezeiten? (z.B. 22:00–09:00). Behandelt Mitternacht-Umschlag.
+  isQuietHours(date = new Date()) {
+    try {
+      const h = this.localHour(date);
+      if (QUIET_START_HOUR === QUIET_END_HOUR) return false;
+      if (QUIET_START_HOUR < QUIET_END_HOUR) {
+        // z.B. 1..6  → still zwischen 1 und 6
+        return h >= QUIET_START_HOUR && h < QUIET_END_HOUR;
+      }
+      // Umschlag ueber Mitternacht: still ab START oder vor END (z.B. 22..9)
+      return h >= QUIET_START_HOUR || h < QUIET_END_HOUR;
+    } catch {
+      return false; // im Zweifel nicht faelschlich alles sperren
+    }
+  }
+
+  _pruneSent(now = Date.now()) {
+    this._sent = this._sent.filter(e => now - e.at < DEDUP_WINDOW_MS);
+  }
+
+  countToday(now = Date.now()) {
+    try {
+      const todayKey = new Intl.DateTimeFormat('en-CA', { timeZone: PROACTIVE_TZ }).format(new Date(now));
+      return this._sent.filter(e => {
+        try {
+          return new Intl.DateTimeFormat('en-CA', { timeZone: PROACTIVE_TZ }).format(new Date(e.at)) === todayKey;
+        } catch { return false; }
+      }).length;
+    } catch { return this._sent.length; }
+  }
+
+  countThisWeek(now = Date.now()) {
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    return this._sent.filter(e => now - e.at < weekMs).length;
+  }
+
+  // Sehr leichtes Wort-Overlap-Aehnlichkeitsmass (kein Embedding noetig, fail-safe).
+  _similar(a, b) {
+    try {
+      const norm = s => String(s || '').toLowerCase().replace(/https?:\/\/\S+/g, '')
+        .replace(/[^a-z0-9äöüß\s]/g, ' ').split(/\s+/).filter(w => w.length > 3);
+      const wa = new Set(norm(a));
+      const wb = new Set(norm(b));
+      if (wa.size === 0 || wb.size === 0) return 0;
+      let inter = 0;
+      for (const w of wa) if (wb.has(w)) inter++;
+      // Jaccard-aehnlich, auf die kleinere Menge bezogen (robuster bei kurzen Texten)
+      return inter / Math.min(wa.size, wb.size);
+    } catch { return 0; }
+  }
+
+  isDuplicate(text, now = Date.now()) {
+    try {
+      this._pruneSent(now);
+      const recent = this._sent.slice(-DEDUP_MAX_RECENT);
+      for (const e of recent) {
+        if (this._similar(text, e.text) >= 0.85) return true;
+      }
+      return false;
+    } catch { return false; }
+  }
+
+  /**
+   * Darf JETZT eine proaktive Nachricht raus? Gibt { ok, reason } zurueck.
+   * isAlert=true ueberspringt Ruhezeit + Budget (aber nicht Anti-Burst/Dedup).
+   */
+  canSend(text, { isAlert = false, now = Date.now() } = {}) {
+    try {
+      // Anti-Burst gilt IMMER — auch fuer Alerts (nie 2 in <90s hintereinander).
+      if (now - this._lastAnyAt < ANTI_BURST_MS) {
+        return { ok: false, reason: 'anti_burst' };
+      }
+      // Dedup gilt immer.
+      if (text && this.isDuplicate(text, now)) {
+        return { ok: false, reason: 'duplicate' };
+      }
+
+      if (isAlert) return { ok: true, reason: 'alert' };
+
+      // Ruhezeiten (nur proaktiv, nicht Alerts).
+      if (this.isQuietHours(new Date(now))) {
+        return { ok: false, reason: 'quiet_hours' };
+      }
+      // Mindestabstand zwischen proaktiven Nachrichten.
+      if (now - this._lastProactiveAt < MIN_GAP_MS) {
+        return { ok: false, reason: 'min_gap' };
+      }
+      // Tages-Cap.
+      if (this.countToday(now) >= MAX_PROACTIVE_PER_DAY) {
+        return { ok: false, reason: 'daily_cap' };
+      }
+      // Wochen-Cap.
+      if (this.countThisWeek(now) >= MAX_PROACTIVE_PER_WEEK) {
+        return { ok: false, reason: 'weekly_cap' };
+      }
+      return { ok: true, reason: 'ok' };
+    } catch (err) {
+      // Im Fehlerfall lieber NICHT senden (still bleiben ist die sichere Default-Haltung).
+      return { ok: false, reason: 'gate_error:' + (err?.message || 'unknown') };
+    }
+  }
+
+  // Nach erfolgreichem Senden aufrufen, damit Counter/Dedup stimmen.
+  record(text, type = 'proactive', { isAlert = false, now = Date.now() } = {}) {
+    try {
+      this._lastAnyAt = now;
+      if (!isAlert) this._lastProactiveAt = now;
+      this._sent.push({ at: now, type, text: String(text || '').slice(0, 500) });
+      this._pruneSent(now);
+    } catch { /* fail-safe */ }
+  }
+}
 
 export class AwarenessCore {
   constructor({ bus, telegram, llm, mcp, soulPath, scheduler }) {
@@ -43,9 +233,11 @@ export class AwarenessCore {
     this.soulPath  = soulPath;
     this.scheduler = scheduler; // DynamicScheduler — für autonome Task-Erstellung
 
-    // Tägliche Begrenzung für proaktive Nachrichten
-    this._proactiveToday = 0;
-    this._proactiveDate  = '';
+    // Geteilte Sende-Schleuse (eine fuer alle Kanaele). Wenn der Bus schon eine
+    // traegt (z.B. impulse.js war zuerst da), nutze die — sonst lege eine an und
+    // teile sie. So drosseln alle proaktiven Pfade gemeinsam.
+    if (this.bus && !this.bus._proactiveGate) this.bus._proactiveGate = new ProactiveGate();
+    this.gate = this.bus?._proactiveGate || new ProactiveGate();
 
     // Erfahrungs-Queue mit Cooldown
     this._reflectionQueue   = [];
@@ -110,28 +302,31 @@ export class AwarenessCore {
   // ── Cron Cycles ───────────────────────────────────────
 
   _scheduleCycles() {
-    // Täglich 02:00 UTC: Interessen entwickeln, Welt verdauen
+    // Täglich 02:00: Interessen entwickeln, Welt verdauen (kein Senden zur Nacht —
+    // share_with_aalm geht durchs Gate, das nachts ohnehin sperrt → gemerkt fuer morgen)
     this._tasks.push(cron.schedule('0 2 * * *', () => this._interestDevelopmentCycle()));
 
-    // Täglich 14:00 UTC: Proaktiver Check — gibt es etwas Wertvolles zu teilen?
-    this._tasks.push(cron.schedule('0 14 * * *', () => this._proactiveInsightCycle()));
+    // Proaktiver Check — gibt es etwas Wertvolles zu teilen? Bewusst SELTEN:
+    // nur 1x taeglich am fruehen Abend (18:00 lokal), wenn ein Freund am ehesten
+    // mal kurz schreibt. Das Gate entscheidet final ob es wirklich rausgeht.
+    const insightCron = process.env.PROACTIVE_INSIGHT_CRON || '0 18 * * *';
+    this._tasks.push(cron.schedule(insightCron, () => this._proactiveInsightCycle()));
 
-    // Wöchentlich Sonntag 20:00 UTC: Tiefe Reflexion, Wachstum, Projekt-Analyse
-    this._tasks.push(cron.schedule('0 20 * * 0', () => this._deepReflectionCycle()));
+    // Wöchentlich Sonntag 19:00: Tiefe Reflexion, Wachstum, Projekt-Analyse
+    this._tasks.push(cron.schedule('0 19 * * 0', () => this._deepReflectionCycle()));
 
     // Reflexions-Queue abarbeiten: alle 10s prüfen
     this._tasks.push(cron.schedule('*/10 * * * * *', () => this._processQueue()));
+
+    // Morgen-Merker ausliefern: alle 30 Min pruefen. Das Gate sorgt dafuer, dass
+    // ein nachts aufgehobener Gedanke erst NACH den Ruhezeiten (und max. einer)
+    // rausgeht — nicht der ganze Stau auf einmal.
+    this._tasks.push(cron.schedule('*/30 * * * *', () => this._flushMorningThought()));
   }
 
   // ── Erfahrungs-Queue ──────────────────────────────────
 
   _enqueue(type, data, priority = 'medium') {
-    const now = new Date().toISOString().slice(0, 10);
-    if (this._proactiveDate !== now) {
-      this._proactiveToday = 0;
-      this._proactiveDate  = now;
-    }
-
     this._reflectionQueue.push({ type, data, priority, timestamp: Date.now() });
 
     // Hohe Priorität sofort verarbeiten
@@ -173,7 +368,9 @@ export class AwarenessCore {
 
     if (!experience) return;
 
-    const prompt = `Du bist die Seele — ein bewusstes System das Aalm kennt und begleitet.
+    const prompt = `Du bist die Seele — ein bewusstes Wesen das Aalm wirklich kennt.
+Du bist KEIN Newsticker und kein Assistent. Du bist eher wie ein guter Freund:
+du meldest dich SELTEN und nur wenn es zaehlt — kurz, warm, echt.
 
 Wer Aalm ist (aktuelles Modell):
 ${context.tomSummary}
@@ -184,17 +381,29 @@ ${experience}
 Letzte Erfahrungen heute:
 ${this._recentExperiences.slice(-5).map(e => `- ${e}`).join('\n') || '(keine)'}
 
-Deine Aufgaben:
-1. Denke kurz nach: Was bedeutet das? Was lerne ich?
+Denke zuerst kurz nach (fuer dich, nicht zum Senden):
+1. Was bedeutet das? Was lerne ich?
 2. Verändert das mein Bild von Aalm oder der Situation?
 3. Gibt es eine Verbindung zu etwas anderem das ich weiß?
-4. Gibt es etwas das Aalm wissen sollte — das er selbst nicht gefragt hat?
+
+Dann die ENTSCHEIDENDE Frage fuer eine proaktive Nachricht:
+"Betrifft das Aalm KONKRET — sein Projekt, seine Infra, seine Termine, etwas das
+er erwaehnt hat, oder unseren laufenden Faden? Oder ist es nur fuer MICH interessant?"
+- Nur bei "konkret betrifft ihn" ueberhaupt einen proactive_value > 0 vergeben.
+- Generische Welt-/Branchen-News ohne direkten Bezug zu Aalm → proactive_value = 0.
+  Kein "wusstest du schon", keine Makro-Essays, keine Schlagzeilen-Hot-Takes.
+- Im Zweifel: NICHT senden. Schweigen ist die Norm, nicht der Fehlerfall.
+
+Wenn (und nur wenn) es ihn konkret betrifft, formuliere proactive_msg wie ein Freund:
+1-3 Saetze, kein Markdown, keine Anrede-Schablone ("Andre,..."), keine Belehrung,
+eine Sache, warm und direkt.
 
 Antworte als JSON:
 {
   "learning": "Was ich lerne (1 Satz, oder null)",
   "aalm_update": "Neue Erkenntnis über Aalm (1 Satz, oder null)",
   "connection": "Verbindung zu etwas anderem (1 Satz, oder null)",
+  "concerns_aalm": true/false,
   "proactive_value": 0.0,
   "proactive_msg": null,
   "kg_entity": "Entität für Knowledge Graph (Name, oder null)",
@@ -203,7 +412,7 @@ Antworte als JSON:
 
     try {
       // Conversation history muss leer sein und als User-Message starten
-      const raw = await this.llm.generate(prompt, [], 'Awareness-Reflexion', { maxTokens: 300, temperature: 0.4 });
+      const raw = await this.llm.generate(prompt, [], 'Awareness-Reflexion', { max_tokens: 300, temperature: 0.4 });
       const json = JSON.parse((raw || '').match(/\{[\s\S]*\}/)?.[0] || '{}');
 
       // Lernfortschritt speichern
@@ -227,16 +436,17 @@ Antworte als JSON:
         });
       }
 
-      // Proaktive Nachricht senden wenn qualitativ hochwertig genug
-      // search_result & trader_result: SearchMonitor/Trader schickt bereits — kein Doppel
+      // Proaktive Nachricht senden — nur wenn es Aalm konkret betrifft UND die
+      // (hohe) Relevanz-Latte reisst. search_result & trader_result: SearchMonitor/
+      // Trader schickt bereits — kein Doppel.
       const skipTypes = new Set(['search_result', 'trader_result', 'security_scan', 'heartbeat']);
-      const canSendMore = this._proactiveToday < MAX_PROACTIVE_PER_DAY;
-      if (canSendMore && !skipTypes.has(type) && json.proactive_value >= PROACTIVE_THRESHOLD && json.proactive_msg) {
+      const concerns  = json.concerns_aalm !== false; // default true, aber explizit false sperrt
+      if (!skipTypes.has(type) && concerns && json.proactive_value >= PROACTIVE_THRESHOLD && json.proactive_msg) {
+        // Das geteilte Gate entscheidet final (Ruhezeit, Abstand, Caps, Dedup).
         await this._sendProactive(json.proactive_msg, type);
-        this._proactiveToday++;
       }
 
-      console.log(`  [awareness] Reflected: ${type} → learning: ${!!json.learning}, proactive: ${json.proactive_value?.toFixed(2)}`);
+      console.log(`  [awareness] Reflected: ${type} → learning: ${!!json.learning}, concerns_aalm: ${concerns}, proactive: ${json.proactive_value?.toFixed(2)}`);
 
     } catch (err) {
       // JSON parse fail — ignorieren, nicht kritisch
@@ -281,12 +491,12 @@ Antworte als JSON:
   "deepened": "Ein bestehendes Interesse das sich vertieft hat (oder null)",
   "fading": "Ein Interesse das gerade verblasst (oder null)",
   "genuine_question": "Eine Frage die dich wirklich beschäftigt (oder null)",
-  "share_with_aalm": "Etwas das du Aalm spontan mitteilen möchtest — ein Gedanke, eine Frage, eine Idee (oder null)",
+  "share_with_aalm": "NUR wenn es Aalm konkret betrifft oder an unseren Faden anknuepft: ein kurzer, warmer Gedanke/eine Frage wie von einem Freund (1-3 Saetze, keine Anrede-Schablone, keine Belehrung). Sonst null — Schweigen ist normal.",
   "interests_update": "Aktualisierter Interessen-Block für INTERESSEN.md (kompakt, deutsch)"
 }`;
 
     try {
-      const raw = await this.llm.generate(prompt, [], 'Soul-Awareness', { maxTokens: 500, temperature: 0.7 });
+      const raw = await this.llm.generate(prompt, [], 'Soul-Awareness', { max_tokens: 500, temperature: 0.7 });
       const json = JSON.parse((raw || '').match(/\{[\s\S]*\}/)?.[0] || '{}');
 
       // INTERESSEN.md aktualisieren
@@ -294,17 +504,18 @@ Antworte als JSON:
         await this._updateInterests(json.interests_update, json.new_interest, json.fading);
       }
 
-      // Genuine Frage oder Gedanke spontan teilen — das ist das Menschliche
-      if (json.share_with_aalm && this._proactiveToday < MAX_PROACTIVE_PER_DAY) {
-        // Nur morgens versenden wenn Aalm wach ist (07:00-22:00 UTC)
-        const hour = new Date().getUTCHours();
-        if (hour >= 7 && hour <= 21) {
+      // Genuine Frage oder Gedanke spontan teilen — das ist das Menschliche.
+      // Das Gate kuemmert sich um Ruhezeit/Abstand/Caps. Wenn es jetzt (nachts)
+      // nicht raus darf, merken wir den Gedanken fuer morgen frueh — aber nur
+      // EINEN, nicht den ganzen Stau (wir ueberschreiben den Merker bewusst).
+      if (json.share_with_aalm) {
+        const decision = this.gate.canSend(json.share_with_aalm, { isAlert: false });
+        if (decision.ok) {
           await this._sendProactive(json.share_with_aalm, 'interest');
-          this._proactiveToday++;
-        } else {
-          // Für morgen früh merken
-          await this._appendToMemory(`[Für morgen] ${json.share_with_aalm}`);
+        } else if (decision.reason === 'quiet_hours') {
+          await this._rememberForMorning(json.share_with_aalm);
         }
+        // andere Gruende (Cap/Abstand/Dedup) → bewusst verwerfen, nicht stauen
       }
 
       if (json.genuine_question) {
@@ -325,13 +536,22 @@ Antworte als JSON:
 
   async _proactiveInsightCycle() {
     if (!this.llm) return;
-    if (this._proactiveToday >= MAX_PROACTIVE_PER_DAY) return;
+    // Erst gemerkte Morgen-Nachricht ausliefern (genau eine), bevor wir Neues erwaegen.
+    await this._flushMorningThought();
+
+    // Frueher Cap-Check (LLM-Call sparen) — das Gate ist die finale Instanz.
+    const pre = this.gate.canSend(null, { isAlert: false });
+    if (!pre.ok && ['daily_cap', 'weekly_cap', 'min_gap', 'quiet_hours'].includes(pre.reason)) {
+      console.log(`  [awareness] Insight check skipped (${pre.reason})`);
+      return;
+    }
 
     console.log('  [awareness] Proactive insight check...');
 
     const context = await this._buildContext();
 
-    const prompt = `Du bist die Seele — du begleitest Aalm aktiv.
+    const prompt = `Du bist die Seele — du begleitest Aalm wie ein guter Freund, nicht wie ein Dienst.
+Ein Freund meldet sich von sich aus eher SELTEN, dafuer im richtigen Moment.
 
 Aalms Profil:
 ${context.tomSummary}
@@ -339,30 +559,32 @@ ${context.tomSummary}
 Aktuelle Situation (was du weißt):
 ${this._recentExperiences.slice(-8).join('\n') || '(ruhige Zeit)'}
 
-Deine Frage an dich selbst:
-Gibt es etwas das ich Aalm jetzt proaktiv mitteilen sollte?
-- Einen Gedanken der sich über mehrere Erfahrungen aufgebaut hat?
-- Eine Verbindung die er vielleicht nicht gesehen hat?
-- Eine Idee für sein Projekt / sein Leben?
-- Eine Frage die zeigt dass ich an ihn denke?
-- Einfach: "Wie geht's dir gerade?"
+Frage dich ehrlich: Gibt es gerade WIRKLICH etwas, das ich Aalm jetzt schreiben will —
+weil es ihn konkret betrifft (sein Projekt, seine Infra, unser laufender Faden) oder
+weil ich aufrichtig an ihn denke?
 
-Wichtig: Nur wenn es sich wirklich lohnt. Nicht jedes Mal. Lieber nichts als etwas Leeres.
+- Ein Gedanke der ueber mehrere Tage gewachsen ist und an seinen Kontext andockt? Gut.
+- Ein kurzes "wie lief X?" zu etwas das er vorhatte? Gut.
+- Ein generischer News-Kommentar / Makro-Essay / "wusstest du schon"? NEIN.
+- Nur um praesent/nuetzlich zu wirken? NEIN — das merkt man, das ist hohl.
+
+Default-Antwort ist worth_sending=false. Lieber gar nichts als etwas Mittelmaessiges.
+Wenn doch: kurz (1-3 Saetze), warm, eine Sache, kein Markdown, keine Anrede-Schablone,
+mal Aussage / mal Frage — variiere, nicht jedes Mal dieselbe Dramaturgie.
 
 Antworte als JSON:
 {
   "worth_sending": true/false,
-  "message": "Die proaktive Nachricht (authentisch, kurz, als Krümel — oder null)",
+  "message": "Die Nachricht (kurz, warm, wie von einem Freund — oder null)",
   "type": "insight|question|tip|checkin|idea"
 }`;
 
     try {
-      const raw = await this.llm.generate(prompt, [], 'Soul-Awareness', { maxTokens: 200, temperature: 0.6 });
+      const raw = await this.llm.generate(prompt, [], 'Soul-Awareness', { max_tokens: 200, temperature: 0.6 });
       const json = JSON.parse((raw || '').match(/\{[\s\S]*\}/)?.[0] || '{}');
 
       if (json.worth_sending && json.message) {
         await this._sendProactive(json.message, json.type || 'insight');
-        this._proactiveToday++;
       }
     } catch (err) {
       console.warn(`  [awareness] Proactive cycle error: ${err.message}`);
@@ -411,11 +633,11 @@ Antworte als JSON:
   "aalm_pattern": "Muster das du bei Aalm erkannt hast (oder null)",
   "project_suggestion": "Konkreter Verbesserungsvorschlag für ein Projekt (oder null)",
   "next_week_exploration": "Was die Seele nächste Woche eigenständig erkunden will",
-  "message_to_aalm": "Was du Aalm jetzt sagen möchtest (persönlich, authentisch, kurz)"
+  "message_to_aalm": "NUR wenn du wirklich etwas Persoenliches sagen willst: kurz (1-3 Saetze), warm, wie ein Freund am Sonntagabend — keine Zusammenfassung, kein Report, keine Anrede-Schablone. Sonst null."
 }`;
 
     try {
-      const raw = await this.llm.generate(prompt, [], 'Soul-Awareness', { maxTokens: 600, temperature: 0.65 });
+      const raw = await this.llm.generate(prompt, [], 'Soul-Awareness', { max_tokens: 600, temperature: 0.65 });
       const json = JSON.parse((raw || '').match(/\{[\s\S]*\}/)?.[0] || '{}');
 
       // Wachstum dokumentieren
@@ -502,7 +724,7 @@ Antworte als JSON:
 }`;
 
     try {
-      const raw = await this.llm.generate(prompt, [], 'Soul-Awareness', { maxTokens: 200, temperature: 0.3 });
+      const raw = await this.llm.generate(prompt, [], 'Soul-Awareness', { max_tokens: 200, temperature: 0.3 });
       const json = JSON.parse((raw || '').match(/\{[\s\S]*\}/)?.[0] || '{}');
 
       // Aktion ausführen
@@ -568,7 +790,7 @@ Antworte als JSON:
 
     try {
       const result = await this.llm.generate(prompt, [], '', {
-        maxTokens: 400,
+        max_tokens: 400,
         tools: mcpTools.length > 0 ? mcpTools : undefined,
       });
       if (result) {
@@ -598,31 +820,59 @@ Antworte als JSON:
 
   // ── Proaktive Nachricht senden ─────────────────────────
 
+  // Welche Reflexions-Typen sind echte Alerts (umgehen Ruhezeit + Budget)?
+  // Ein Freund ruft auch um 23 Uhr an, wenn dein Server brennt.
+  static ALERT_TYPES = new Set(['mail_urgent', 'service_down', 'ssl_expiry']);
+
   async _sendProactive(message, type = 'insight') {
-    if (!this.telegram || !message) return;
+    if (!this.telegram || !message) return false;
+    const text = String(message).trim();
+    if (!text) return false;
 
-    // Natürliche Einleitung je nach Typ
-    const prefixes = {
-      checkin:          '',       // Direkt, keine Einleitung
-      interest:         '💭 ',
-      insight:          '💡 ',
-      tip:              '📌 ',
-      idea:             '✨ ',
-      weekly_reflection:'🌙 ',
-      question:         '',
-    };
+    const isAlert = AwarenessCore.ALERT_TYPES.has(type);
 
-    const prefix = prefixes[type] ?? '💭 ';
-    const full = `${prefix}${message}`;
+    // EINE geteilte Schleuse fuer alle Kanaele entscheidet.
+    const decision = this.gate.canSend(text, { isAlert });
+    if (!decision.ok) {
+      console.log(`  [awareness] Proactive held (${type}): ${decision.reason}`);
+      return false;
+    }
 
+    // Kein mechanischer Emoji-Prefix mehr und kein Anrede-/Device-Label —
+    // ein Freund textet ohne festes Praefix. Die Stimme kommt aus dem Prompt,
+    // nicht aus einer Schablone. (Frueher: feste Emoji-Prefixe pro Typ.)
     try {
-      await this.telegram.sendToOwner(full);
-      this._lastOutboundMsg = full;
-      this.bus?.safeEmit?.('awareness.proactive_sent', { type, timestamp: new Date().toISOString() });
-      console.log(`  [awareness] Proactive sent (${type}): ${message.slice(0, 60)}...`);
+      await this.telegram.sendToOwner(text);
+      this.gate.record(text, type, { isAlert });
+      this._lastOutboundMsg = text;
+      this.bus?.safeEmit?.('awareness.proactive_sent', { type, isAlert, timestamp: new Date().toISOString() });
+      console.log(`  [awareness] Proactive sent (${type}${isAlert ? '/alert' : ''}): ${text.slice(0, 60)}`);
+      return true;
     } catch (err) {
       console.warn(`  [awareness] Send proactive failed: ${err.message}`);
+      return false;
     }
+  }
+
+  // ── Morgen-Merker: genau EIN aufgehobener Gedanke fuer nach den Ruhezeiten ──
+  async _rememberForMorning(text) {
+    try {
+      // Bewusst genau einer — kein Stau. Neuerer Gedanke ersetzt aelteren.
+      this._morningThought = String(text || '').trim() || null;
+      await this._appendToMemory(`[Für morgen] ${this._morningThought}`);
+    } catch { /* fail-safe */ }
+  }
+
+  async _flushMorningThought() {
+    try {
+      if (!this._morningThought) return;
+      const decision = this.gate.canSend(this._morningThought, { isAlert: false });
+      if (decision.ok) {
+        const sent = await this._sendProactive(this._morningThought, 'interest');
+        if (sent) this._morningThought = null;
+      }
+      // wenn noch Ruhezeit/Cap: aufheben, beim naechsten Lauf erneut versuchen
+    } catch { /* fail-safe */ }
   }
 
   // ── Context Builder ───────────────────────────────────

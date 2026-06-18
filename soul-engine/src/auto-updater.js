@@ -159,9 +159,14 @@ export class AutoUpdater {
       if (hasUpdate) {
         console.log(`  [updater] Update available: ${current} → ${latest.version} (${this.channel})`);
 
-        await this.telegram?.sendToOwner?.(
-          `🔄 Update verfügbar!\n\nAktuell: \`${current}\`\nNeu: \`${latest.version}\`\nKanal: ${this.channel}\n\n${latest.notes?.substring(0, 200) || ''}\n\n${this.autoInstall ? '_Wird automatisch installiert..._' : '_Manuell: engine.updater.install()_'}`
-        );
+        // Ein passives "Update verfügbar" ist Ops-Info, kein Freund-Chat-Thema —
+        // nur loggen + Bus-Event. Telegram NUR, wenn wirklich etwas passiert
+        // (Auto-Install läuft); sonst kann Aalm damit ohnehin nichts anfangen.
+        if (this.autoInstall) {
+          await this.telegram?.sendToOwner?.(
+            `🔄 Update ${current} → \`${latest.version}\` wird installiert…`
+          );
+        }
 
         this.bus?.safeEmit?.('update.available', { current, latest: latest.version });
 

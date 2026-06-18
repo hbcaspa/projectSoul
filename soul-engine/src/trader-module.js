@@ -51,8 +51,10 @@ export class TraderModule {
       try {
         await this.runDailyTrader();
       } catch (err) {
+        // Nur loggen — Trader-Fehler sind Ops-Rauschen, gehören nicht in Aalms
+        // persönlichen Chat ("was soll ich damit"). Echte Trade-Ergebnisse melden
+        // sich weiterhin (gegatet) über die Awareness-/Freund-Stimme.
         console.error(`  [trader] Cron error: ${err.message}`);
-        this._notify(`❌ Trader Fehler: ${err.message}`);
       }
     });
 
@@ -112,7 +114,9 @@ export class TraderModule {
     if (summary) {
       await this._notifyOnSummary(summary);
     } else if (exitCode !== 0) {
-      await this._notify(`⚠️ *Trader* — Fehler beim täglichen Run (exit ${exitCode})`);
+      // Fehlgeschlagener Run → NUR loggen, kein Telegram (sonst Fehler-Spam,
+      // besonders bei häufigem Cron). Aalm will damit nichts anfangen müssen.
+      console.warn(`  [trader] Run fehlgeschlagen (exit ${exitCode}) — nur geloggt, kein Telegram.`);
     } else {
       // Try to parse signal from output directly
       await this._notifyOnOutput(stdout);

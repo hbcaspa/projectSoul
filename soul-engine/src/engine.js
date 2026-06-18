@@ -16,6 +16,7 @@ import { ImpulseScheduler } from './impulse.js';
 import { MemoryWriter } from './memory.js';
 import { writePulse } from './pulse.js';
 import { buildConversationPrompt, buildHeartbeatPrompt } from './prompt.js';
+import { findGif, isGifEnabled } from './gif-source.js';
 import { SoulAPI } from './api.js';
 import { APIChannel } from './api-channel.js';
 import { WhatsAppBridge } from './whatsapp.js';
@@ -151,6 +152,10 @@ export class SoulEngine {
     this.whatsapp = null;
     this.api = null;
     this.nodeName = process.env.SOUL_NODE_NAME || 'server';
+    // GIF-Reply Anti-Burst: Zeitpunkt des letzten reaktiv gesendeten GIFs.
+    // Verhindert, dass in jeder zweiten Antwort ein GIF zappelt — ein Freund
+    // schickt auch im Chat nur ab und zu mal eins. Default 30 Min Cooldown.
+    this._lastReplyGifAt = 0;
     this.relayPath = join(soulPath, 'relay');
     this.apiChannel = null;
     this.heartbeat = null;
@@ -1775,6 +1780,17 @@ export class SoulEngine {
     // Execute WhatsApp actions if present (before adding display label)
     let { cleanResponse, waActions } = this.extractWhatsAppActions(response);
 
+    // GIF-Reaktion: optionaler [GIF:suchbegriff]-Tag aus der Antwort ziehen
+    // (gleicher Inline-Tag-Mechanismus wie [WA:...]). Tag wird aus dem
+    // sichtbaren/gespeicherten Text entfernt; gesendet wird erst ganz am Ende,
+    // NACHDEM die Textantwort feststeht. Default: kein GIF (gifQuery=null).
+    let gifQuery = null;
+    if (isGifEnabled()) {
+      const gifParsed = this.extractGifAction(cleanResponse);
+      cleanResponse = gifParsed.cleanResponse;
+      gifQuery = gifParsed.gifQuery;
+    }
+
     // Fallback: if LLM didn't use [WA:] tags but we found a contact, send the whole response as the message
     if (waActions.length === 0 && resolvedContact && this.whatsapp) {
       console.log(`  [whatsapp] LLM did not use [WA:] tag — sending response directly to ${resolvedContact.jid}`);
@@ -1870,6 +1886,36 @@ export class SoulEngine {
           );
         } catch (err) {
           console.error(`  [router] Route failed: ${err.message}`);
+        }
+      }
+    }
+
+    // GIF-Reaktion senden — als EIGENE Nachricht NACH der Textantwort.
+    // Reaktiv (Aalm hat geschrieben) → kein Gate/Ruhezeit (wie die Textantwort
+    // selbst), aber eigener Anti-Burst-Cooldown, damit nicht jede zweite Antwort
+    // ein GIF traegt. FAIL-SAFE: jeder Fehler hier darf die Textantwort nie
+    // kaputtmachen — im Zweifel kommt einfach kein GIF.
+    if (gifQuery && isGifEnabled() && this.telegram?.sendGif) {
+      const REPLY_GIF_COOLDOWN_MS =
+        parseInt(process.env.REPLY_GIF_COOLDOWN_MIN || '30', 10) * 60 * 1000;
+      const now = Date.now();
+      if (now - this._lastReplyGifAt < REPLY_GIF_COOLDOWN_MS) {
+        console.log(`  [handleMessage] GIF skipped (reply cooldown): "${gifQuery}"`);
+      } else {
+        try {
+          const found = await findGif(gifQuery);
+          if (found.available && found.url) {
+            // Ohne Caption: die Worte sind bereits die separate Textantwort.
+            const sent = await this.telegram.sendGif(found.url, '');
+            if (sent) {
+              this._lastReplyGifAt = now;
+              console.log(`  [handleMessage] GIF sent (${found.source}) for "${gifQuery}"`);
+            }
+          } else {
+            console.log(`  [handleMessage] No GIF for "${gifQuery}" (${found.reason || 'no_match'})`);
+          }
+        } catch (gifErr) {
+          console.warn(`  [handleMessage] GIF send failed (non-fatal): ${gifErr.message}`);
         }
       }
     }
@@ -1979,6 +2025,28 @@ export class SoulEngine {
   }
 
   /**
+   * Extract a single [GIF:suchbegriff] tag from the LLM response.
+   * Spiegel von extractWhatsAppActions, aber bewusst NUR EIN GIF pro Antwort
+   * (ein Freund spammt nicht). Gibt den bereinigten Text (Tag entfernt) und
+   * den Suchbegriff zurueck (oder null). FAIL-SAFE: wirft nie.
+   */
+  extractGifAction(response) {
+    try {
+      const text = String(response || '');
+      // Erstes [GIF:...] greift; weitere werden ebenfalls entfernt, aber ignoriert.
+      const m = text.match(/\[GIF:([^\]]+)\]/i);
+      const gifQuery = m ? m[1].trim() : null;
+      const stripped = text.replace(/\[GIF:[^\]]*\]/gi, '').replace(/[ \t]{2,}/g, ' ').trim();
+      // Wenn ein Tag da war, darf der Text LEER bleiben (reine GIF-Reaktion ohne
+      // Worte ist gewollt). Nur ohne Tag faellt es auf den Originaltext zurueck.
+      const cleanResponse = gifQuery ? stripped : (stripped || text.trim());
+      return { cleanResponse, gifQuery: gifQuery || null };
+    } catch {
+      return { cleanResponse: String(response || ''), gifQuery: null };
+    }
+  }
+
+  /**
    * Handle an incoming WhatsApp message (from webhook).
    * Used for auto-reply — processes through LLM and sends response back.
    */
@@ -1990,6 +2058,7 @@ export class SoulEngine {
 
     const systemPrompt = buildConversationPrompt(this.context, sender, {
       whatsapp: false, // don't offer WA sending in auto-reply
+      gif: false,      // WhatsApp-Bridge hat keinen [GIF:]-Sendepfad → nicht anbieten
       mcp: this.mcp?.hasTools() ? this.mcp.getTools() : [],
     }) + '\n\nDu antwortest auf eine eingehende WhatsApp-Nachricht. Antworte direkt und freundlich. Kein [WA:] Tag noetig — die Antwort wird automatisch zurueckgesendet.';
 

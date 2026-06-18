@@ -291,6 +291,36 @@ export class TelegramChannel {
     }
   }
 
+  // Send an animated GIF/meme to the owner via sendAnimation.
+  // Accepts a URL (to .gif OR .mp4 — Telegram plays both as a silent looping
+  // animation), a file_id, or a Buffer. caption is optional.
+  // FAIL-SAFE: on any error (dead URL, too large, network) falls back to
+  // sending the caption as plain text — never throws, never blocks the send.
+  // Returns true if the animation was sent, false if it fell back / failed.
+  async sendGif(gifUrl, caption = '') {
+    if (!gifUrl) {
+      // Nothing to send as animation — degrade to caption text if present.
+      if (caption) await this.sendToOwner(String(caption).substring(0, 4096));
+      return false;
+    }
+    const opts = {};
+    if (caption) {
+      opts.caption = String(caption).substring(0, 1024);
+      opts.parse_mode = 'HTML';
+    }
+    try {
+      await this.bot.api.sendAnimation(this.ownerId, gifUrl, opts);
+      return true;
+    } catch (err) {
+      console.warn(`  [telegram] sendAnimation failed (${err.message}), falling back to text`);
+      // Fallback: the caption (the soul's words) still reaches Aalm as text.
+      if (caption) {
+        try { await this.sendToOwner(String(caption).substring(0, 4096)); } catch { /* best effort */ }
+      }
+      return false;
+    }
+  }
+
   // Send text with inline keyboard buttons
   async sendWithButtons(text, buttons) {
     try {

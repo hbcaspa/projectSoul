@@ -24,6 +24,7 @@ import { join, resolve } from 'path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import cron from 'node-cron';
+import { findGif, isGifEnabled } from './gif-source.js';
 
 const execAsync = promisify(exec);
 
@@ -861,21 +862,44 @@ Antworte als JSON:
   static ALERT_TYPES = new Set(['mail_urgent', 'service_down', 'ssl_expiry']);
 
   async _sendProactive(message, type = 'insight', opts = {}) {
-    if (!this.telegram || !message) return false;
-    let text = String(message).trim();
-    if (!text) return false;
+    if (!this.telegram) return false;
+    let text = String(message || '').trim();
+
+    // opts.gif: optionaler GIF-Wunsch. Entweder eine fertige URL (http...) oder
+    // ein Suchbegriff/Stimmung, den gif-source aufloest. Ein GIF zaehlt wie eine
+    // Nachricht — es geht durch DASSELBE Gate und wird DORT gezaehlt. Default:
+    // kein GIF. Alles fail-safe: kein Treffer/Fehler → einfach kein GIF.
+    let gifUrl = null;
+    if (opts.gif && isGifEnabled()) {
+      try {
+        const g = String(opts.gif).trim();
+        if (/^https?:\/\//i.test(g)) {
+          gifUrl = g;
+        } else {
+          const found = await findGif(g);
+          if (found.available) gifUrl = found.url;
+        }
+      } catch { gifUrl = null; }
+    }
+
+    // Ein GIF darf ALLEIN stehen (Reaktion ohne Worte). Aber irgendetwas muss
+    // raus — weder Text noch GIF → nichts zu senden.
+    if (!text && !gifUrl) return false;
 
     // Link programmatisch anhaengen (das Modell tippt URLs nie selbst → keine
     // erfundenen/falschen Links). Nur wenn der Link nicht ohnehin schon im Text steht.
     const link = opts.link ? String(opts.link).trim() : '';
-    if (link && /^https?:\/\//i.test(link) && !text.includes(link)) {
+    if (text && link && /^https?:\/\//i.test(link) && !text.includes(link)) {
       text = `${text}\n${link}`;
     }
 
     const isAlert = AwarenessCore.ALERT_TYPES.has(type);
 
-    // EINE geteilte Schleuse fuer alle Kanaele entscheidet.
-    const decision = this.gate.canSend(text, { isAlert });
+    // EINE geteilte Schleuse fuer alle Kanaele entscheidet. Fuer die Dedup-Pruefung
+    // einen nicht-leeren Marker nutzen, falls nur ein GIF (ohne Text) raus soll —
+    // sonst wuerde ein leerer Text die Dedup-Logik umgehen.
+    const gateText = text || `[gif:${gifUrl || type}]`;
+    const decision = this.gate.canSend(gateText, { isAlert });
     if (!decision.ok) {
       console.log(`  [awareness] Proactive held (${type}): ${decision.reason}`);
       return false;
@@ -885,9 +909,15 @@ Antworte als JSON:
     // ein Freund textet ohne festes Praefix. Die Stimme kommt aus dem Prompt,
     // nicht aus einer Schablone. (Frueher: feste Emoji-Prefixe pro Typ.)
     try {
-      await this.telegram.sendToOwner(text);
-      this.gate.record(text, type, { isAlert });
-      this._lastOutboundMsg = text;
+      if (gifUrl) {
+        // GIF (optional mit Text als Caption). Faellt intern auf Text zurueck,
+        // falls die URL tot/zu gross ist — der Send schlaegt nie hart fehl.
+        await this.telegram.sendGif(gifUrl, text);
+      } else {
+        await this.telegram.sendToOwner(text);
+      }
+      this.gate.record(gateText, type, { isAlert });
+      this._lastOutboundMsg = text || gateText;
 
       // THREAD-KONTINUITAET: die proaktive Nachricht in die Konversations-History
       // schreiben, damit die volle Seele (engine.handleMessage) beim Antworten von
@@ -897,7 +927,10 @@ Antworte als JSON:
       try {
         const ownerChatId = this.telegram.ownerId;
         if (ownerChatId && typeof this.telegram.saveMessage === 'function') {
-          await this.telegram.saveMessage(ownerChatId, 'model', text);
+          // Bei reinem GIF (kein Text) einen lesbaren Marker in die History
+          // schreiben, damit die volle Seele weiss, dass sie ein GIF geschickt hat.
+          const historyText = text || (gifUrl ? '[GIF gesendet]' : '');
+          if (historyText) await this.telegram.saveMessage(ownerChatId, 'model', historyText);
         }
       } catch (histErr) {
         console.warn(`  [awareness] History save (proactive) failed: ${histErr.message}`);
@@ -909,8 +942,8 @@ Antworte als JSON:
         this._lastSharedArticle = { text, link: link || null, type, at: Date.now() };
       }
 
-      this.bus?.safeEmit?.('awareness.proactive_sent', { type, isAlert, timestamp: new Date().toISOString() });
-      console.log(`  [awareness] Proactive sent (${type}${isAlert ? '/alert' : ''}): ${text.slice(0, 60)}`);
+      this.bus?.safeEmit?.('awareness.proactive_sent', { type, isAlert, gif: !!gifUrl, timestamp: new Date().toISOString() });
+      console.log(`  [awareness] Proactive sent (${type}${isAlert ? '/alert' : ''}${gifUrl ? '/gif' : ''}): ${(text || gateText).slice(0, 60)}`);
       return true;
     } catch (err) {
       console.warn(`  [awareness] Send proactive failed: ${err.message}`);
